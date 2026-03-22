@@ -1,0 +1,31 @@
+set dotenv-load
+
+[private]
+default :
+    @just help
+
+help:
+    @just --list
+
+dev:
+    uv run fastapi dev
+
+fix-all:
+    uv run ruff check . --fix && uv run ruff format .
+
+tests:
+    uv run pytest -n auto -qq --show-capture=no --color=no
+
+tests-cov:
+    uv run pytest -n auto --cov=src
+
+inspector server:
+    npx @modelcontextprotocol/inspector --config ./mcp.json --server {{server}}
+
+typecheck:
+    uv run pyrefly check --summarize-errors
+
+check-all:
+    just typecheck
+    just tests
+    just fix-all
