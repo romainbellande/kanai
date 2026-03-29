@@ -78,15 +78,17 @@ async def test_get_returns_requested_model_type(redis_service: RedisService) -> 
 async def test_put_overwrites_value_and_applies_ttl(
     redis_service: RedisService,
 ) -> None:
-    user = RedisUser(id="user-1", name="Alice", enabled=True)
+    original_user = RedisUser(id="user-1", name="Alice", enabled=True)
+    overwritten_user = RedisUser(id="user-1", name="Bob", enabled=False)
 
-    await redis_service.put("users:user-1", user, ttl_seconds=30)
+    await redis_service.create("users:user-1", original_user)
+    await redis_service.put("users:user-1", overwritten_user, ttl_seconds=30)
 
     loaded = await redis_service.get("users:user-1", RedisUser)
     client = await redis_service._get_client()
     ttl = await client.ttl("users:user-1")
 
-    assert loaded == user
+    assert loaded == overwritten_user
     assert 0 < ttl <= 30
 
 
