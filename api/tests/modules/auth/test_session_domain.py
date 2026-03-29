@@ -19,6 +19,11 @@ def test_token_fingerprint_rejects_empty_token() -> None:
         TokenFingerprint.from_token("")
 
 
+def test_token_fingerprint_rejects_whitespace_only_token() -> None:
+    with pytest.raises(ValueError, match="Bearer token cannot be empty"):
+        TokenFingerprint.from_token("   ")
+
+
 def test_session_is_expired_for_past_timestamp() -> None:
     session = Session(
         subject="user-1",
