@@ -6,7 +6,6 @@ from typing import cast
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
-from app.exceptions import RedisConnectionException
 from app.modules.auth.application.authenticate_request import AuthenticateRequest
 from app.modules.auth.application.dto import AuthenticatedContext
 from app.modules.auth.domain.session import Session
@@ -36,7 +35,7 @@ class StubAuthenticateRequest:
 class FailingSessionRepository:
     async def get(self, fingerprint: TokenFingerprint) -> None:
         del fingerprint
-        raise RedisConnectionException("Redis unavailable")
+        raise AuthenticationServiceException("Authentication service unavailable")
 
     async def save(
         self,

@@ -159,6 +159,28 @@ async def test_patch_merges_top_level_fields(redis_service: RedisService) -> Non
 
 
 @pytest.mark.asyncio
+async def test_patch_preserves_existing_ttl(redis_service: RedisService) -> None:
+    await redis_service.put(
+        "users:user-1",
+        RedisUser(id="user-1", name="Alice", enabled=True),
+        ttl_seconds=30,
+    )
+
+    client = await redis_service._get_client()
+    initial_ttl = await client.ttl("users:user-1")
+
+    await redis_service.patch(
+        "users:user-1",
+        RedisUserPatch(name="Bob"),
+        RedisUser,
+    )
+
+    ttl = await client.ttl("users:user-1")
+
+    assert 0 < ttl <= initial_ttl
+
+
+@pytest.mark.asyncio
 async def test_patch_fails_for_missing_key(redis_service: RedisService) -> None:
     with pytest.raises(RedisKeyNotFoundException):
         await redis_service.patch(

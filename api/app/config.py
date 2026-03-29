@@ -11,8 +11,11 @@ class Environment(StrEnum):
     STA = "staging"
     PROD = "prod"
 
+
 class AuthSettings(BaseModel):
     discovery_endpoint: str
+    audience: str
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(

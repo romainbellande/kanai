@@ -23,7 +23,8 @@ customLogger.init()
 authenticate_request = AuthenticateRequest(
     repository=RedisSessionRepository(redis_service),
     token_verifier=JoserfcTokenVerifier(
-        OidcMetadataProvider(settings.auth.discovery_endpoint)
+        OidcMetadataProvider(settings.auth.discovery_endpoint),
+        expected_audience=settings.auth.audience,
     ),
 )
 

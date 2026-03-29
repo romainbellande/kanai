@@ -168,7 +168,13 @@ class RedisService:
         client = await self._get_client()
 
         try:
-            await client.set(key, json.dumps(self._model_to_json_object(validated)))
+            ttl_seconds = await client.ttl(key)
+            await client.set(
+                key,
+                json.dumps(self._model_to_json_object(validated)),
+                ex=ttl_seconds if ttl_seconds > 0 else None,
+                keepttl=ttl_seconds <= 0,
+            )
         except RedisError as exc:
             message = f"Failed to update Redis data for key '{key}'"
             raise RedisConnectionException(message, exc) from exc

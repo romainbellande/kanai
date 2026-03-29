@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.exceptions import RedisServiceException
+from app.modules.auth.domain.exceptions import AuthenticationServiceException
 from app.modules.auth.domain.repositories import SessionRepository
 from app.modules.auth.domain.session import Session
 from app.modules.auth.domain.value_objects import TokenFingerprint
@@ -14,7 +16,13 @@ class RedisSessionRepository(SessionRepository):
         return f"auth:sessions:{fingerprint.value}"
 
     async def get(self, fingerprint: TokenFingerprint) -> Session | None:
-        return await self._redis_service.get(self._key(fingerprint), Session)
+        try:
+            return await self._redis_service.get(self._key(fingerprint), Session)
+        except RedisServiceException as error:
+            raise AuthenticationServiceException(
+                "Authentication service unavailable",
+                original_error=error,
+            ) from error
 
     async def save(
         self,
@@ -22,11 +30,23 @@ class RedisSessionRepository(SessionRepository):
         session: Session,
         ttl_seconds: int,
     ) -> Session:
-        return await self._redis_service.put(
-            self._key(fingerprint),
-            session,
-            ttl_seconds=ttl_seconds,
-        )
+        try:
+            return await self._redis_service.put(
+                self._key(fingerprint),
+                session,
+                ttl_seconds=ttl_seconds,
+            )
+        except RedisServiceException as error:
+            raise AuthenticationServiceException(
+                "Authentication service unavailable",
+                original_error=error,
+            ) from error
 
     async def delete(self, fingerprint: TokenFingerprint) -> bool:
-        return await self._redis_service.delete(self._key(fingerprint))
+        try:
+            return await self._redis_service.delete(self._key(fingerprint))
+        except RedisServiceException as error:
+            raise AuthenticationServiceException(
+                "Authentication service unavailable",
+                original_error=error,
+            ) from error

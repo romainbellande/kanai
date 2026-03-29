@@ -1,11 +1,14 @@
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
+from typing import cast
 
 import pytest
 import pytest_asyncio
 from fakeredis.aioredis import FakeRedis
 
 import app.services.redis_service as redis_service_module
+from app.exceptions import RedisConnectionException
+from app.modules.auth.domain.exceptions import AuthenticationServiceException
 from app.modules.auth.domain.session import Session
 from app.modules.auth.infrastructure.redis_session_repository import (
     RedisSessionRepository,
@@ -106,3 +109,23 @@ async def test_delete_returns_false_for_missing_session(
     deleted = await session_repository.delete(TokenFingerprint("missing"))
 
     assert deleted is False
+
+
+class FailingRedisService:
+    async def get(self, key: str, model_type: type[Session]) -> Session | None:
+        raise RedisConnectionException(f"Failed to read Redis data for key '{key}'")
+
+
+@pytest.mark.asyncio
+async def test_get_maps_redis_failure_to_authentication_service_exception() -> None:
+    session_repository = RedisSessionRepository(
+        cast(RedisService, FailingRedisService())
+    )
+
+    with pytest.raises(
+        AuthenticationServiceException,
+        match="Authentication service unavailable",
+    ) as exc_info:
+        await session_repository.get(TokenFingerprint("fingerprint-1"))
+
+    assert isinstance(exc_info.value.original_error, RedisConnectionException)
