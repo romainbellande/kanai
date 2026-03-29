@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 from cachetools import TTLCache
 import httpx
 
@@ -19,11 +21,11 @@ class OidcMetadataProvider:
     async def get_discovery_document(self) -> dict[str, object]:
         cached_document = self._discovery_cache.get(self.discovery_endpoint)
         if cached_document is not None:
-            return cached_document
+            return deepcopy(cached_document)
 
         discovery_document = await self._fetch_json(self.discovery_endpoint)
-        self._discovery_cache[self.discovery_endpoint] = discovery_document
-        return discovery_document
+        self._discovery_cache[self.discovery_endpoint] = deepcopy(discovery_document)
+        return deepcopy(discovery_document)
 
     async def get_jwks(self) -> dict[str, object]:
         discovery_document = await self.get_discovery_document()
@@ -36,14 +38,14 @@ class OidcMetadataProvider:
 
         cached_jwks = self._jwks_cache.get(jwks_uri)
         if cached_jwks is not None:
-            return cached_jwks
+            return deepcopy(cached_jwks)
 
         jwks = await self._fetch_json(jwks_uri)
         if not isinstance(jwks.get("keys"), list):
             raise AuthenticationServiceException("Malformed JWKS payload")
 
-        self._jwks_cache[jwks_uri] = jwks
-        return jwks
+        self._jwks_cache[jwks_uri] = deepcopy(jwks)
+        return deepcopy(jwks)
 
     async def _fetch_json(self, url: str) -> dict[str, object]:
         try:
