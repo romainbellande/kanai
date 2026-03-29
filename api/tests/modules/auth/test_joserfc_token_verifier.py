@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from typing import cast
 
 import pytest
 from joserfc.errors import JoseError
@@ -38,7 +39,7 @@ async def test_verify_returns_authenticated_context(
     validated_claims: dict[str, object] = {}
 
     class FakeJWTClaimsRegistry:
-        def __init__(self, **kwargs: object) -> None:
+        def __init__(self, **kwargs: dict[str, object]) -> None:
             assert kwargs == {
                 "exp": {"essential": True},
                 "iss": {"essential": True, "value": "https://issuer.test"},
@@ -117,8 +118,8 @@ async def test_verify_rejects_wrong_issuer(monkeypatch: pytest.MonkeyPatch) -> N
     )
 
     class FakeJWTClaimsRegistry:
-        def __init__(self, **kwargs: object) -> None:
-            self.expected_issuer = kwargs["iss"]["value"]
+        def __init__(self, **kwargs: dict[str, object]) -> None:
+            self.expected_issuer = cast(str, kwargs["iss"]["value"])
 
         def validate(self, claims: dict[str, object]) -> None:
             if claims["iss"] != self.expected_issuer:
@@ -159,7 +160,7 @@ async def test_verify_rejects_wrong_audience_when_expected_audience_configured(
     )
 
     class FakeJWTClaimsRegistry:
-        def __init__(self, **kwargs: object) -> None:
+        def __init__(self, **kwargs: dict[str, object]) -> None:
             assert kwargs["aud"] == {"essential": True, "value": "kanai-api"}
 
         def validate(self, claims: dict[str, object]) -> None:
@@ -197,7 +198,7 @@ async def test_verify_maps_malformed_decoded_claims_to_invalid_token_exception(
     )
 
     class FakeJWTClaimsRegistry:
-        def __init__(self, **kwargs: object) -> None:
+        def __init__(self, **kwargs: dict[str, object]) -> None:
             del kwargs
 
         def validate(self, claims: dict[str, object]) -> None:

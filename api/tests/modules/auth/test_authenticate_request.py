@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, tzinfo
 
 import pytest
 
@@ -50,10 +50,9 @@ class FixedDateTime(datetime):
     current: datetime
 
     @classmethod
-    def now(cls, tz: object = None) -> datetime:
-        if tz is None:
-            return cls.current.replace(tzinfo=None)
-        return cls.current.astimezone(tz)
+    def now(cls, tz: tzinfo | None = None) -> "FixedDateTime":
+        current = cls.current if tz is None else cls.current.astimezone(tz)
+        return cls.fromtimestamp(current.timestamp(), tz=current.tzinfo)
 
 
 def build_session(*, expires_at: datetime) -> Session:

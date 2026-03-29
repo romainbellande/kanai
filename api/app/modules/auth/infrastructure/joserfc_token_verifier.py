@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any, Protocol, cast
 
 from joserfc import jwt
 from joserfc.errors import JoseError
@@ -10,13 +11,18 @@ from app.modules.auth.application.dto import AuthenticatedContext
 from app.modules.auth.domain.exceptions import AuthenticationServiceException
 from app.modules.auth.domain.exceptions import InvalidTokenException
 from app.modules.auth.domain.session import Session
-from app.modules.auth.infrastructure.oidc_metadata_provider import OidcMetadataProvider
+
+
+class MetadataProvider(Protocol):
+    async def get_discovery_document(self) -> dict[str, object]: ...
+
+    async def get_jwks(self) -> dict[str, object]: ...
 
 
 class JoserfcTokenVerifier:
     def __init__(
         self,
-        metadata_provider: OidcMetadataProvider,
+        metadata_provider: MetadataProvider,
         expected_audience: str | None = None,
     ) -> None:
         self.metadata_provider = metadata_provider
@@ -27,7 +33,7 @@ class JoserfcTokenVerifier:
         jwks = await self.metadata_provider.get_jwks()
 
         try:
-            key_set = KeySet.import_key_set(jwks)
+            key_set = KeySet.import_key_set(cast(Any, jwks))
         except Exception as error:
             raise AuthenticationServiceException(
                 "Failed to construct JWT key set",
@@ -37,7 +43,7 @@ class JoserfcTokenVerifier:
         try:
             token = jwt.decode(bearer_token, key_set)
             claims_registry = jwt.JWTClaimsRegistry(
-                **self._claim_options(discovery_document)
+                **cast(dict[str, Any], self._claim_options(discovery_document))
             )
             claims_registry.validate(token.claims)
         except JoseError as error:
