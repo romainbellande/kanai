@@ -35,7 +35,7 @@ class AuthMiddleware:
         self.whitelist_paths = set(whitelist_paths or ())
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http" or scope["path"] in self.whitelist_paths:
+        if scope["type"] != "http" or self._is_whitelisted_path(scope["path"]):
             await self.app(scope, receive, send)
             return
 
@@ -74,7 +74,12 @@ class AuthMiddleware:
         await JSONResponse(
             status_code=exc.status_code,
             content={"detail": exc.detail},
+            headers=exc.headers,
         )(scope, receive, send)
+
+    def _is_whitelisted_path(self, path: str) -> bool:
+        normalized_path = path.rstrip("/") or "/"
+        return normalized_path in self.whitelist_paths
 
     def _extract_bearer_token(self, scope: Scope) -> str:
         authorization = Headers(scope=scope).get("Authorization")
