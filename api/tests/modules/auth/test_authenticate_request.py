@@ -46,6 +46,16 @@ class StubTokenVerifier:
         return self.context
 
 
+class FixedDateTime(datetime):
+    current: datetime
+
+    @classmethod
+    def now(cls, tz: object = None) -> datetime:
+        if tz is None:
+            return cls.current.replace(tzinfo=None)
+        return cls.current.astimezone(tz)
+
+
 def build_session(*, expires_at: datetime) -> Session:
     return Session(
         subject="user-1",
@@ -146,3 +156,51 @@ async def test_verified_token_with_non_positive_ttl_is_rejected() -> None:
         await use_case.execute("bearer-token")
 
     assert repository.saved_calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("bearer_token", ["", "   "])
+async def test_blank_or_whitespace_token_raises_invalid_token_exception(
+    bearer_token: str,
+) -> None:
+    repository = StubSessionRepository()
+    verifier = StubTokenVerifier(
+        AuthenticatedContext.from_session(
+            build_session(expires_at=datetime.now(UTC) + timedelta(minutes=5))
+        )
+    )
+
+    use_case = AuthenticateRequest(repository=repository, token_verifier=verifier)
+
+    with pytest.raises(InvalidTokenException, match="Bearer token cannot be empty"):
+        await use_case.execute(bearer_token)
+
+    assert verifier.calls == []
+    assert repository.saved_calls == []
+
+
+@pytest.mark.asyncio
+async def test_token_with_less_than_one_second_remaining_is_accepted_and_saved(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixed_now = datetime(2026, 1, 1, tzinfo=UTC)
+    FixedDateTime.current = fixed_now
+    monkeypatch.setattr(
+        "app.modules.auth.application.authenticate_request.datetime",
+        FixedDateTime,
+    )
+
+    repository = StubSessionRepository()
+    verified_context = AuthenticatedContext.from_session(
+        build_session(expires_at=fixed_now + timedelta(milliseconds=100))
+    )
+    verifier = StubTokenVerifier(verified_context)
+
+    use_case = AuthenticateRequest(repository=repository, token_verifier=verifier)
+
+    context = await use_case.execute("bearer-token")
+
+    assert context == verified_context
+    assert verifier.calls == ["bearer-token"]
+    assert len(repository.saved_calls) == 1
+    assert repository.saved_calls[0][2] == 1

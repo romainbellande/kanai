@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from datetime import UTC, datetime
 
 from app.modules.auth.application.dto import AuthenticatedContext
@@ -20,7 +21,11 @@ class AuthenticateRequest:
         self._token_verifier = token_verifier
 
     async def execute(self, bearer_token: str) -> AuthenticatedContext:
-        fingerprint = TokenFingerprint.from_token(bearer_token)
+        try:
+            fingerprint = TokenFingerprint.from_token(bearer_token)
+        except ValueError as error:
+            raise InvalidTokenException(str(error), original_error=error) from error
+
         existing_session = await self._repository.get(fingerprint)
 
         if existing_session is not None:
@@ -47,4 +52,4 @@ class AuthenticateRequest:
     def _compute_ttl_seconds(self, expires_at: datetime) -> int:
         now = datetime.now(UTC)
         expiration = expires_at.astimezone(UTC)
-        return int((expiration - now).total_seconds())
+        return math.ceil((expiration - now).total_seconds())
