@@ -82,3 +82,27 @@ async def test_get_returns_none_for_missing_session(
     loaded = await session_repository.get(TokenFingerprint("missing"))
 
     assert loaded is None
+
+
+@pytest.mark.asyncio
+async def test_delete_returns_true_for_existing_session(
+    session_repository: RedisSessionRepository,
+) -> None:
+    fingerprint = TokenFingerprint("fingerprint-1")
+
+    await session_repository.save(fingerprint, build_session(), ttl_seconds=60)
+
+    deleted = await session_repository.delete(fingerprint)
+    loaded = await session_repository.get(fingerprint)
+
+    assert deleted is True
+    assert loaded is None
+
+
+@pytest.mark.asyncio
+async def test_delete_returns_false_for_missing_session(
+    session_repository: RedisSessionRepository,
+) -> None:
+    deleted = await session_repository.delete(TokenFingerprint("missing"))
+
+    assert deleted is False

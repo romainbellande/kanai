@@ -93,6 +93,39 @@ async def test_put_overwrites_value_and_applies_ttl(
 
 
 @pytest.mark.asyncio
+async def test_put_preserves_existing_ttl_when_none_is_passed(
+    redis_service: RedisService,
+) -> None:
+    original_user = RedisUser(id="user-1", name="Alice", enabled=True)
+    overwritten_user = RedisUser(id="user-1", name="Bob", enabled=False)
+
+    await redis_service.put("users:user-1", original_user, ttl_seconds=30)
+
+    client = await redis_service._get_client()
+    initial_ttl = await client.ttl("users:user-1")
+
+    await redis_service.put("users:user-1", overwritten_user)
+
+    loaded = await redis_service.get("users:user-1", RedisUser)
+    ttl = await client.ttl("users:user-1")
+
+    assert loaded == overwritten_user
+    assert 0 < ttl <= initial_ttl
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("ttl_seconds", [0, -1])
+async def test_put_rejects_non_positive_ttl_values(
+    redis_service: RedisService,
+    ttl_seconds: int,
+) -> None:
+    user = RedisUser(id="user-1", name="Alice", enabled=True)
+
+    with pytest.raises(RedisDataValidationException):
+        await redis_service.put("users:user-1", user, ttl_seconds=ttl_seconds)
+
+
+@pytest.mark.asyncio
 async def test_get_returns_none_for_missing_key(redis_service: RedisService) -> None:
     loaded = await redis_service.get("users:missing", RedisUser)
 

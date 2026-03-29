@@ -69,6 +69,11 @@ class RedisService:
 
         return cast(JsonObject, payload)
 
+    def _validate_ttl_seconds(self, ttl_seconds: int | None) -> None:
+        if ttl_seconds is not None and ttl_seconds <= 0:
+            message = "Redis TTL must be greater than zero"
+            raise RedisDataValidationException(message)
+
     async def create(self, key: str, value: ModelT) -> ModelT:
         """Create a Redis document from a Pydantic model and return the stored model instance."""
         payload = self._model_to_json_object(value)
@@ -94,12 +99,18 @@ class RedisService:
         ttl_seconds: int | None = None,
     ) -> ModelT:
         """Store or overwrite a Redis document, optionally applying a TTL."""
+        self._validate_ttl_seconds(ttl_seconds)
         payload = self._model_to_json_object(value)
         model_type = value.__class__
         client = await self._get_client()
 
         try:
-            await client.set(key, json.dumps(payload), ex=ttl_seconds)
+            await client.set(
+                key,
+                json.dumps(payload),
+                ex=ttl_seconds,
+                keepttl=ttl_seconds is None,
+            )
         except RedisError as exc:
             message = f"Failed to store Redis data for key '{key}'"
             raise RedisConnectionException(message, exc) from exc
