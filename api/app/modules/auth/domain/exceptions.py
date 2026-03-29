@@ -12,4 +12,4 @@ class InvalidTokenException(AuthDomainException):
 
 
 class AuthenticationServiceException(AuthDomainException):
-    """Raised when discovery, JWKS, or Redis infrastructure prevents auth."""
+    """Raised when supporting services prevent authentication."""

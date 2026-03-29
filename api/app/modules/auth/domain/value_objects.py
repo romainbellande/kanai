@@ -15,6 +15,3 @@ class TokenFingerprint:
 
         digest = hashlib.sha256(token.encode("utf-8")).hexdigest()
         return cls(digest)
-
-    def as_redis_key(self) -> str:
-        return f"auth:sessions:{self.value}"

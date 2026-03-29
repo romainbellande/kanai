@@ -3,9 +3,20 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field, field_validator
+from typing_extensions import TypeAliasType
 
 JsonScalar = str | int | float | bool | None
-JsonValue = JsonScalar | list[JsonScalar] | dict[str, JsonScalar]
+JsonValue = TypeAliasType(
+    "JsonValue",
+    JsonScalar | list["JsonValue"] | dict[str, "JsonValue"],
+)
+
+
+def _normalize_datetime(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+
+    return value
 
 
 class Session(BaseModel):
@@ -24,10 +35,7 @@ class Session(BaseModel):
         return cleaned
 
     def is_expired(self, now: datetime | None = None) -> bool:
-        current = now or datetime.now(UTC)
-        expiration = self.expires_at
-
-        if expiration.tzinfo is None:
-            expiration = expiration.replace(tzinfo=UTC)
+        current = _normalize_datetime(now or datetime.now(UTC))
+        expiration = _normalize_datetime(self.expires_at)
 
         return expiration <= current
