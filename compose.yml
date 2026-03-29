@@ -18,6 +18,8 @@ services:
     ports:
       - "7080:7080"
       - "7443:7443"
+    volumes:
+      - keycloak-data:/opt/keycloak/data
 
   db:
     image: postgres:18-alpine
@@ -30,5 +32,31 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: postgres
 
+  redis:
+    image: redis:8-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  redisinsight:
+    image: redis/redisinsight:2.70
+    ports:
+      - "5540:5540"
+    environment:
+      RI_REDIS_HOST: redis
+      RI_REDIS_PORT: 6379
+    volumes:
+      - redisinsight-data:/data
+
 volumes:
+  keycloak-data:
   db-data:
+  redis-data:
+  redisinsight-data:

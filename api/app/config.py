@@ -2,6 +2,7 @@ from enum import StrEnum
 from functools import cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import BaseModel
 
 
 class Environment(StrEnum):
@@ -10,6 +11,8 @@ class Environment(StrEnum):
     STA = "staging"
     PROD = "prod"
 
+class AuthSettings(BaseModel):
+    discovery_endpoint: str
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -18,6 +21,7 @@ class Settings(BaseSettings):
 
     database_url: str
     environment: Environment
+    auth: AuthSettings
 
     def is_local(self) -> bool:
         return self.environment == Environment.LOCAL
