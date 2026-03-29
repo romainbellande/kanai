@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     )
 
     database_url: str
+    redis_url: str
     environment: Environment
 
     def is_local(self) -> bool:
