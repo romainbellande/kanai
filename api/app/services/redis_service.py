@@ -87,6 +87,25 @@ class RedisService:
 
         return model_type.model_validate(payload)
 
+    async def put(
+        self,
+        key: str,
+        value: ModelT,
+        ttl_seconds: int | None = None,
+    ) -> ModelT:
+        """Store or overwrite a Redis document, optionally applying a TTL."""
+        payload = self._model_to_json_object(value)
+        model_type = value.__class__
+        client = await self._get_client()
+
+        try:
+            await client.set(key, json.dumps(payload), ex=ttl_seconds)
+        except RedisError as exc:
+            message = f"Failed to store Redis data for key '{key}'"
+            raise RedisConnectionException(message, exc) from exc
+
+        return model_type.model_validate(payload)
+
     async def get(self, key: str, model_type: type[ModelT]) -> ModelT | None:
         """Fetch a Redis document by key and validate it into the requested Pydantic model."""
         client = await self._get_client()

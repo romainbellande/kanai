@@ -75,6 +75,22 @@ async def test_get_returns_requested_model_type(redis_service: RedisService) -> 
 
 
 @pytest.mark.asyncio
+async def test_put_overwrites_value_and_applies_ttl(
+    redis_service: RedisService,
+) -> None:
+    user = RedisUser(id="user-1", name="Alice", enabled=True)
+
+    await redis_service.put("users:user-1", user, ttl_seconds=30)
+
+    loaded = await redis_service.get("users:user-1", RedisUser)
+    client = await redis_service._get_client()
+    ttl = await client.ttl("users:user-1")
+
+    assert loaded == user
+    assert 0 < ttl <= 30
+
+
+@pytest.mark.asyncio
 async def test_get_returns_none_for_missing_key(redis_service: RedisService) -> None:
     loaded = await redis_service.get("users:missing", RedisUser)
 
