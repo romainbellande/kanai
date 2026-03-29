@@ -28,7 +28,7 @@ class JoserfcTokenVerifier:
 
         try:
             key_set = KeySet.import_key_set(jwks)
-        except (TypeError, ValueError) as error:
+        except Exception as error:
             raise AuthenticationServiceException(
                 "Failed to construct JWT key set",
                 original_error=error,

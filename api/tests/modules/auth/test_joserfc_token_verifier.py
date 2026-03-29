@@ -239,3 +239,24 @@ async def test_verify_maps_malformed_jwks_to_authentication_service_exception(
         match="Failed to construct JWT key set",
     ):
         await verifier.verify("bearer-token")
+
+
+@pytest.mark.asyncio
+async def test_verify_maps_realistic_key_import_failure_to_authentication_service_exception(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    verifier = JoserfcTokenVerifier(metadata_provider=StubMetadataProvider())
+
+    def fake_import_key_set(_: dict[str, object]) -> object:
+        raise KeyError("keys")
+
+    monkeypatch.setattr(
+        "app.modules.auth.infrastructure.joserfc_token_verifier.KeySet.import_key_set",
+        fake_import_key_set,
+    )
+
+    with pytest.raises(
+        AuthenticationServiceException,
+        match="Failed to construct JWT key set",
+    ):
+        await verifier.verify("bearer-token")
