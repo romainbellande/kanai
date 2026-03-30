@@ -14,3 +14,4 @@ os.environ.setdefault("ENVIRONMENT", "local")
 os.environ.setdefault(
     "AUTH__DISCOVERY_ENDPOINT", "https://example.test/.well-known/openid-configuration"
 )
+os.environ.setdefault("AUTH__AUDIENCE", "kanai-api")
