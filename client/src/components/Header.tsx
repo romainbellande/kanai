@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 
 import { getKeycloakLogoutUrl } from "#/lib/auth-client";
+import { clearAuthSession } from "#/lib/openid-client";
 
 import ThemeToggle from "./ThemeToggle";
 
@@ -39,6 +40,7 @@ export default function Header() {
 								return;
 							}
 
+							clearAuthSession();
 							window.location.assign(logoutUrl);
 						}}
 						className="inline-flex items-center justify-center rounded-full border border-[rgba(23,58,64,0.14)] bg-[var(--chip-bg)] px-3 py-2 text-sm font-semibold text-[var(--sea-ink)] shadow-[0_8px_24px_rgba(30,90,72,0.06)] transition hover:-translate-y-0.5 hover:border-[rgba(168,67,54,0.24)] hover:bg-[rgba(168,67,54,0.08)] disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50"

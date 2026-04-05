@@ -14,10 +14,20 @@ type PendingAuthorizationRequest = {
 	state: string;
 	nonce: string;
 	redirectUri: string;
+	returnToPath: string;
+};
+
+type StoredAuthSession = {
+	accessToken?: string;
+	expiresAt?: number;
+	idToken?: string;
+	refreshToken?: string;
 };
 
 const pendingAuthorizationRequestStorageKey =
 	"kanai.openid-client.pending-authorization-request";
+const authSessionStorageKey = "kanai.openid-client.auth-session";
+const authSessionExpiryLeewayMs = 30_000;
 
 let openIdConfigurationPromise: Promise<client.Configuration> | null = null;
 
@@ -79,6 +89,24 @@ function getCallbackPath(origin: string): string {
 	return new URL(authSuccessPath, origin).pathname;
 }
 
+function getAuthErrorPath(origin: string): string {
+	return new URL(authErrorPath, origin).pathname;
+}
+
+function getSafeReturnToPath(
+	origin: string,
+	returnToPath: string | undefined,
+): string {
+	if (!returnToPath?.startsWith("/")) {
+		return "/";
+	}
+
+	const url = new URL(returnToPath, origin);
+	return url.origin === origin
+		? `${url.pathname}${url.search}${url.hash}`
+		: "/";
+}
+
 function replaceBrowserLocation(url: URL): void {
 	window.history.replaceState(
 		window.history.state,
@@ -91,6 +119,47 @@ function buildAuthErrorUrl(origin: string, reason: string): URL {
 	const url = new URL(authErrorPath, origin);
 	url.searchParams.set("reason", reason);
 	return url;
+}
+
+function readStoredAuthSession(): StoredAuthSession | null {
+	if (typeof window === "undefined") {
+		return null;
+	}
+
+	const serializedSession = window.sessionStorage.getItem(
+		authSessionStorageKey,
+	);
+
+	if (!serializedSession) {
+		return null;
+	}
+
+	try {
+		const parsedSession = JSON.parse(serializedSession) as StoredAuthSession;
+
+		if (
+			typeof parsedSession !== "object" ||
+			parsedSession === null ||
+			(parsedSession.accessToken !== undefined &&
+				typeof parsedSession.accessToken !== "string") ||
+			(parsedSession.expiresAt !== undefined &&
+				typeof parsedSession.expiresAt !== "number") ||
+			(parsedSession.idToken !== undefined &&
+				typeof parsedSession.idToken !== "string") ||
+			(parsedSession.refreshToken !== undefined &&
+				typeof parsedSession.refreshToken !== "string")
+		) {
+			return null;
+		}
+
+		return parsedSession;
+	} catch {
+		return null;
+	}
+}
+
+function writeStoredAuthSession(session: StoredAuthSession): void {
+	window.sessionStorage.setItem(authSessionStorageKey, JSON.stringify(session));
 }
 
 function readPendingAuthorizationRequest(): PendingAuthorizationRequest | null {
@@ -124,6 +193,12 @@ function readPendingAuthorizationRequest(): PendingAuthorizationRequest | null {
 			codeVerifier: parsedRequest.codeVerifier,
 			nonce: parsedRequest.nonce,
 			redirectUri: parsedRequest.redirectUri,
+			returnToPath: getSafeReturnToPath(
+				window.location.origin,
+				typeof parsedRequest.returnToPath === "string"
+					? parsedRequest.returnToPath
+					: undefined,
+			),
 			state: parsedRequest.state,
 		};
 	} catch {
@@ -146,6 +221,47 @@ function clearPendingAuthorizationRequest(): void {
 	}
 
 	window.sessionStorage.removeItem(pendingAuthorizationRequestStorageKey);
+}
+
+export function clearAuthSession(): void {
+	if (typeof window === "undefined") {
+		return;
+	}
+
+	window.sessionStorage.removeItem(authSessionStorageKey);
+}
+
+export function hasActiveAuthSession(): boolean {
+	const authSession = readStoredAuthSession();
+
+	if (!authSession?.accessToken) {
+		return false;
+	}
+
+	if (
+		typeof authSession.expiresAt === "number" &&
+		authSession.expiresAt <= Date.now() + authSessionExpiryLeewayMs
+	) {
+		clearAuthSession();
+		return false;
+	}
+
+	return true;
+}
+
+export function getAuthErrorUrl(origin: string, reason: string): string {
+	return buildAuthErrorUrl(origin, reason).toString();
+}
+
+export function isAuthenticationBypassPath(
+	pathname: string,
+	origin: string,
+): boolean {
+	return (
+		pathname === getCallbackPath(origin) ||
+		pathname === getAuthErrorPath(origin) ||
+		pathname === "/login"
+	);
 }
 
 function isAuthorizationCallback(url: URL): boolean {
@@ -191,18 +307,37 @@ export async function initOpenIdClient(): Promise<void> {
 
 	const configuration = await getOpenIdConfiguration();
 
-	await client.authorizationCodeGrant(configuration, currentUrl, {
-		expectedNonce: pendingAuthorizationRequest.nonce,
-		expectedState: pendingAuthorizationRequest.state,
-		idTokenExpected: true,
-		pkceCodeVerifier: pendingAuthorizationRequest.codeVerifier,
+	const tokenSet = await client.authorizationCodeGrant(
+		configuration,
+		currentUrl,
+		{
+			expectedNonce: pendingAuthorizationRequest.nonce,
+			expectedState: pendingAuthorizationRequest.state,
+			idTokenExpected: true,
+			pkceCodeVerifier: pendingAuthorizationRequest.codeVerifier,
+		},
+	);
+
+	writeStoredAuthSession({
+		accessToken: tokenSet.access_token,
+		expiresAt:
+			typeof tokenSet.expires_in === "number"
+				? Date.now() + tokenSet.expires_in * 1000
+				: undefined,
+		idToken: tokenSet.id_token,
+		refreshToken: tokenSet.refresh_token,
 	});
 
 	clearPendingAuthorizationRequest();
-	replaceBrowserLocation(new URL("/", currentUrl.origin));
+	replaceBrowserLocation(
+		new URL(pendingAuthorizationRequest.returnToPath, currentUrl.origin),
+	);
 }
 
-export async function loginWithOpenIdClient(origin: string): Promise<void> {
+export async function loginWithOpenIdClient(
+	origin: string,
+	returnToPath = "/",
+): Promise<void> {
 	const configuration = await getOpenIdConfiguration();
 	const redirectUri = getKeycloakRedirectUri(origin);
 	const codeVerifier = client.randomPKCECodeVerifier();
@@ -214,6 +349,7 @@ export async function loginWithOpenIdClient(origin: string): Promise<void> {
 		codeVerifier,
 		nonce,
 		redirectUri,
+		returnToPath: getSafeReturnToPath(origin, returnToPath),
 		state,
 	});
 

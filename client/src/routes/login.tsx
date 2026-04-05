@@ -1,6 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowRight, ExternalLink, KeyRound, ShieldCheck } from "lucide-react";
-import { useState } from "react";
+import {
+	ArrowRight,
+	ChevronRight,
+	ExternalLink,
+	KeyRound,
+	ShieldCheck,
+} from "lucide-react";
+import { useEffect, useState } from "react";
 
 import {
 	authSuccessPath,
@@ -10,7 +16,10 @@ import {
 	keycloakScopes,
 	keycloakServerUrl,
 } from "#/lib/auth-client";
-import { loginWithOpenIdClient } from "#/lib/openid-client";
+import {
+	hasActiveAuthSession,
+	loginWithOpenIdClient,
+} from "#/lib/openid-client";
 
 type LoginSearch = {
 	error?: string;
@@ -74,7 +83,7 @@ function LoginPage() {
 		setIsSigningIn(true);
 
 		try {
-			await loginWithOpenIdClient(currentOrigin);
+			await loginWithOpenIdClient(currentOrigin, "/");
 		} catch (error) {
 			setClientError(
 				error instanceof Error
@@ -85,28 +94,63 @@ function LoginPage() {
 		}
 	}
 
+	useEffect(() => {
+		if (typeof window === "undefined") {
+			return;
+		}
+
+		if (hasActiveAuthSession()) {
+			window.location.replace("/");
+			return;
+		}
+
+		if (currentError || isSigningIn) {
+			return;
+		}
+
+		setClientError(null);
+		setIsSigningIn(true);
+
+		void loginWithOpenIdClient(currentOrigin, "/").catch((error) => {
+			setClientError(
+				error instanceof Error
+					? error.message
+					: "Could not start the Keycloak sign-in flow.",
+			);
+			setIsSigningIn(false);
+		});
+	}, [currentError, currentOrigin, isSigningIn]);
+
 	return (
-		<main className="page-wrap px-4 py-10 sm:py-14">
-			<div className="grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(22rem,0.8fr)]">
-				<section className="island-shell rise-in relative overflow-hidden rounded-[2rem] px-6 py-8 sm:px-10 sm:py-10">
-					<div className="pointer-events-none absolute inset-x-10 top-0 h-32 bg-[radial-gradient(circle_at_top,rgba(79,184,178,0.2),transparent_72%)]" />
-					<div className="pointer-events-none absolute -right-20 top-14 h-48 w-48 rounded-full bg-[radial-gradient(circle,rgba(47,106,74,0.18),transparent_70%)]" />
-					<div className="relative">
-						<div className="mb-5 inline-flex items-center gap-2 rounded-full border border-[var(--chip-line)] bg-[var(--chip-bg)] px-3 py-1.5 text-xs font-semibold tracking-[0.18em] text-[var(--kicker)] uppercase shadow-[0_10px_25px_rgba(30,90,72,0.08)]">
+		<main className="min-h-screen px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+			<div className="page-wrap">
+				<div className="mb-5 flex flex-wrap items-center gap-2 text-sm text-[var(--on-surface-variant)]">
+					<Link to="/" className="no-underline">
+						Workspace
+					</Link>
+					<ChevronRight className="h-4 w-4" />
+					<span>Secure Access</span>
+				</div>
+
+				<div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(22rem,0.85fr)]">
+					<section className="island-shell rise-in rounded-[2rem] p-6 sm:p-8 lg:p-10">
+						<div className="inline-flex items-center gap-2 rounded-full bg-[var(--primary-fixed)] px-3 py-1.5 text-xs font-semibold tracking-[0.18em] text-[var(--on-primary-fixed)] uppercase">
 							<ShieldCheck className="h-4 w-4" />
 							Direct Keycloak Login
 						</div>
-						<h1 className="display-title max-w-2xl text-4xl leading-[1.02] font-bold tracking-tight text-[var(--sea-ink)] sm:text-6xl">
-							Sign in through {providerLabel}.
+
+						<h1 className="display-title mt-5 max-w-3xl text-4xl font-bold tracking-tight text-[var(--on-surface)] sm:text-5xl">
+							Access the Kanai workspace through {providerLabel}.
 						</h1>
+
 						<p className="mt-5 max-w-2xl text-base leading-8 text-[var(--sea-ink-soft)] sm:text-lg">
-							This page redirects straight to Keycloak&apos;s OpenID Connect
-							authorize endpoint instead of calling a local `/api/auth` route
-							first.
+							This sign-in flow starts the browser-side Authorization Code +
+							PKCE exchange directly against Keycloak, keeping the experience
+							aligned with the board-first interface.
 						</p>
 
 						{currentError ? (
-							<div className="mt-6 rounded-2xl border border-[rgba(168,67,54,0.24)] bg-[rgba(168,67,54,0.09)] px-4 py-3 text-sm text-[color:color-mix(in_oklab,var(--sea-ink)_70%,#7a2116)]">
+							<div className="mt-6 rounded-[1.25rem] bg-[color:color-mix(in_srgb,var(--tertiary-container)_10%,white)] px-4 py-3 text-sm text-[var(--tertiary-container)]">
 								{currentError}
 							</div>
 						) : null}
@@ -116,7 +160,7 @@ function LoginPage() {
 								type="button"
 								onClick={handleSignIn}
 								disabled={isSigningIn}
-								className="inline-flex items-center justify-center gap-2 rounded-full border border-[rgba(50,143,151,0.3)] bg-[rgba(79,184,178,0.16)] px-5 py-3 text-sm font-semibold text-[var(--lagoon-deep)] shadow-[0_14px_30px_rgba(50,143,151,0.14)] no-underline transition hover:-translate-y-0.5 hover:bg-[rgba(79,184,178,0.24)] disabled:translate-y-0 disabled:cursor-wait disabled:opacity-75"
+								className="inline-flex items-center justify-center gap-2 rounded-full bg-[linear-gradient(135deg,var(--primary),var(--primary-container))] px-5 py-3 text-sm font-semibold text-[var(--on-primary)] shadow-[0_18px_36px_rgba(12,86,208,0.18)] transition hover:-translate-y-0.5 disabled:translate-y-0 disabled:cursor-wait disabled:opacity-75"
 							>
 								<KeyRound className="h-4 w-4" />
 								{isSigningIn
@@ -124,110 +168,131 @@ function LoginPage() {
 									: `Continue with ${providerLabel}`}
 								<ArrowRight className="h-4 w-4" />
 							</button>
+
 							<Link
 								to="/"
-								className="inline-flex items-center justify-center rounded-full border border-[var(--line)] bg-white/55 px-5 py-3 text-sm font-semibold text-[var(--sea-ink)] no-underline transition hover:-translate-y-0.5 hover:border-[rgba(23,58,64,0.3)]"
+								className="inline-flex items-center justify-center rounded-full bg-[var(--surface-container)] px-5 py-3 text-sm font-semibold text-[var(--on-surface)] no-underline"
 							>
-								Back home
+								Back to board
 							</Link>
 						</div>
 
-						<div className="mt-8 flex flex-wrap gap-2 text-sm text-[var(--sea-ink-soft)]">
-							<span className="rounded-full border border-[var(--chip-line)] bg-[var(--chip-bg)] px-3 py-1.5">
-								Client <code>{keycloakClientId ?? "missing"}</code>
-							</span>
-							<span className="rounded-full border border-[var(--chip-line)] bg-[var(--chip-bg)] px-3 py-1.5">
-								Scopes <code>{keycloakScopes.join(" ")}</code>
-							</span>
-							<span className="rounded-full border border-[var(--chip-line)] bg-[var(--chip-bg)] px-3 py-1.5">
-								Success <code>{authSuccessPath}</code>
-							</span>
-							<span className="rounded-full border border-[var(--chip-line)] bg-[var(--chip-bg)] px-3 py-1.5">
-								Issuer <code>{keycloakIssuer ?? "missing"}</code>
-							</span>
+						<div className="mt-8 grid gap-3 sm:grid-cols-2">
+							<div className="rounded-[1.5rem] bg-[var(--surface-container)] p-4">
+								<p className="text-xs font-semibold tracking-[0.16em] text-[var(--on-surface-variant)] uppercase">
+									Client
+								</p>
+								<p className="mt-2 text-sm text-[var(--on-surface)]">
+									<code>{keycloakClientId ?? "missing"}</code>
+								</p>
+							</div>
+							<div className="rounded-[1.5rem] bg-[var(--surface-container)] p-4">
+								<p className="text-xs font-semibold tracking-[0.16em] text-[var(--on-surface-variant)] uppercase">
+									Scopes
+								</p>
+								<p className="mt-2 text-sm text-[var(--on-surface)]">
+									<code>{keycloakScopes.join(" ")}</code>
+								</p>
+							</div>
+							<div className="rounded-[1.5rem] bg-[var(--surface-container)] p-4">
+								<p className="text-xs font-semibold tracking-[0.16em] text-[var(--on-surface-variant)] uppercase">
+									Success Path
+								</p>
+								<p className="mt-2 text-sm text-[var(--on-surface)]">
+									<code>{authSuccessPath}</code>
+								</p>
+							</div>
+							<div className="rounded-[1.5rem] bg-[var(--surface-container)] p-4">
+								<p className="text-xs font-semibold tracking-[0.16em] text-[var(--on-surface-variant)] uppercase">
+									Issuer
+								</p>
+								<p className="mt-2 text-sm text-[var(--on-surface)]">
+									<code>{keycloakIssuer ?? "missing"}</code>
+								</p>
+							</div>
 						</div>
-					</div>
-				</section>
+					</section>
 
-				<section className="grid gap-4">
-					<article
-						className="island-shell rise-in rounded-[1.75rem] p-6"
-						style={{ animationDelay: "90ms" }}
-					>
-						<p className="island-kicker mb-2">Client wiring</p>
-						<p className="m-0 text-sm leading-7 text-[var(--sea-ink-soft)]">
-							Expose the Keycloak issuer and public client id to the Vite app so
-							<code>openid-client</code> can discover the issuer before the
-							router starts.
-						</p>
-						<pre className="mt-4 overflow-x-auto rounded-2xl border border-[var(--line)] bg-[rgba(255,255,255,0.45)] p-4 text-sm text-[var(--sea-ink)]">
-							<code>{clientEnvSnippet}</code>
-						</pre>
-						<p className="mt-4 text-sm leading-7 text-[var(--sea-ink-soft)]">
-							Current Keycloak config:{" "}
-							<code>
-								{keycloakServerUrl && keycloakRealm
-									? `${keycloakServerUrl} (realm ${keycloakRealm})`
-									: "missing or invalid VITE_KEYCLOAK_ISSUER"}
-							</code>
-						</p>
-					</article>
-
-					<article
-						className="island-shell rise-in rounded-[1.75rem] p-6"
-						style={{ animationDelay: "160ms" }}
-					>
-						<p className="island-kicker mb-2">OIDC flow</p>
-						<p className="m-0 text-sm leading-7 text-[var(--sea-ink-soft)]">
-							This is the browser-side <code>openid-client</code> flow the
-							button now performs.
-						</p>
-						<pre className="mt-4 overflow-x-auto rounded-2xl border border-[var(--line)] bg-[rgba(255,255,255,0.45)] p-4 text-sm text-[var(--sea-ink)]">
-							<code>{authorizeSnippet}</code>
-						</pre>
-					</article>
-
-					<article
-						className="island-shell rise-in rounded-[1.75rem] p-6"
-						style={{ animationDelay: "230ms" }}
-					>
-						<p className="island-kicker mb-2">Keycloak checklist</p>
-						<ul className="m-0 list-disc space-y-2 pl-5 text-sm leading-7 text-[var(--sea-ink-soft)]">
-							<li>
-								Set <code>VITE_KEYCLOAK_ISSUER</code> to your realm issuer, for
-								example <code>http://localhost:7080/realms/MyRealm</code>.
-							</li>
-							<li>
-								Register the redirect URL as{" "}
-								<code>
-									{currentOrigin}
-									{authSuccessPath}
-								</code>{" "}
-								in your Keycloak client.
-							</li>
-							<li>
-								Use a public client with standard flow enabled so the adapter
-								can exchange the authorization code in the browser.
-							</li>
-							<li>
-								Keep the PKCE verifier, state, and nonce tied to the browser
-								session until the callback returns.
-							</li>
-							<li>
-								Keep the requested scopes aligned with your Keycloak client.
-							</li>
-						</ul>
-						<a
-							href="https://github.com/panva/openid-client/blob/main/README.md"
-							target="_blank"
-							rel="noreferrer"
-							className="mt-5 inline-flex items-center gap-2 text-sm font-semibold no-underline"
+					<section className="grid gap-4">
+						<article
+							className="island-shell rise-in rounded-[1.75rem] p-6"
+							style={{ animationDelay: "80ms" }}
 						>
-							Open openid-client docs
-							<ExternalLink className="h-4 w-4" />
-						</a>
-					</article>
-				</section>
+							<p className="island-kicker mb-2">Client Wiring</p>
+							<p className="m-0 text-sm leading-7 text-[var(--sea-ink-soft)]">
+								Expose the Keycloak issuer and client id in the Vite environment
+								so `openid-client` can discover the realm before the router
+								hands off the redirect.
+							</p>
+							<pre className="mt-4 overflow-x-auto rounded-[1.25rem] bg-[var(--surface-container)] p-4 text-sm text-[var(--on-surface)]">
+								<code>{clientEnvSnippet}</code>
+							</pre>
+							<p className="mt-4 text-sm leading-7 text-[var(--sea-ink-soft)]">
+								Current Keycloak config:{" "}
+								<code>
+									{keycloakServerUrl && keycloakRealm
+										? `${keycloakServerUrl} (realm ${keycloakRealm})`
+										: "missing or invalid VITE_KEYCLOAK_ISSUER"}
+								</code>
+							</p>
+						</article>
+
+						<article
+							className="island-shell rise-in rounded-[1.75rem] p-6"
+							style={{ animationDelay: "150ms" }}
+						>
+							<p className="island-kicker mb-2">OIDC Flow</p>
+							<p className="m-0 text-sm leading-7 text-[var(--sea-ink-soft)]">
+								This is the browser-side `openid-client` sequence behind the
+								sign-in action.
+							</p>
+							<pre className="mt-4 overflow-x-auto rounded-[1.25rem] bg-[var(--surface-container)] p-4 text-sm text-[var(--on-surface)]">
+								<code>{authorizeSnippet}</code>
+							</pre>
+						</article>
+
+						<article
+							className="island-shell rise-in rounded-[1.75rem] p-6"
+							style={{ animationDelay: "220ms" }}
+						>
+							<p className="island-kicker mb-2">Keycloak Checklist</p>
+							<ul className="m-0 list-disc space-y-2 pl-5 text-sm leading-7 text-[var(--sea-ink-soft)]">
+								<li>
+									Set <code>VITE_KEYCLOAK_ISSUER</code> to your realm issuer,
+									for example <code>http://localhost:7080/realms/MyRealm</code>.
+								</li>
+								<li>
+									Register the redirect URL as{" "}
+									<code>
+										{currentOrigin}
+										{authSuccessPath}
+									</code>
+									in your Keycloak client.
+								</li>
+								<li>
+									Use a public client with standard flow enabled so the browser
+									can exchange the authorization code.
+								</li>
+								<li>
+									Keep the PKCE verifier, state, and nonce tied to the browser
+									session until the callback returns.
+								</li>
+								<li>
+									Keep the requested scopes aligned with your Keycloak client.
+								</li>
+							</ul>
+							<a
+								href="https://github.com/panva/openid-client/blob/main/README.md"
+								target="_blank"
+								rel="noreferrer"
+								className="mt-5 inline-flex items-center gap-2 text-sm font-semibold no-underline"
+							>
+								Open openid-client docs
+								<ExternalLink className="h-4 w-4" />
+							</a>
+						</article>
+					</section>
+				</div>
 			</div>
 		</main>
 	);

@@ -1,7 +1,13 @@
 import { RouterProvider } from "@tanstack/react-router";
 import ReactDOM from "react-dom/client";
 
-import { initOpenIdClient } from "#/lib/openid-client";
+import {
+	getAuthErrorUrl,
+	hasActiveAuthSession,
+	initOpenIdClient,
+	isAuthenticationBypassPath,
+	loginWithOpenIdClient,
+} from "#/lib/openid-client";
 
 import { getRouter } from "./router";
 
@@ -20,8 +26,35 @@ const rootElement = getRootElement();
 async function bootstrap() {
 	try {
 		await initOpenIdClient();
+
+		if (
+			typeof window !== "undefined" &&
+			!isAuthenticationBypassPath(
+				window.location.pathname,
+				window.location.origin,
+			) &&
+			!hasActiveAuthSession()
+		) {
+			await loginWithOpenIdClient(
+				window.location.origin,
+				`${window.location.pathname}${window.location.search}${window.location.hash}`,
+			);
+			return;
+		}
 	} catch (error) {
 		console.error("Failed to initialize openid-client", error);
+
+		if (typeof window !== "undefined") {
+			window.location.replace(
+				getAuthErrorUrl(
+					window.location.origin,
+					error instanceof Error
+						? error.message
+						: "Could not start the Keycloak sign-in flow.",
+				),
+			);
+			return;
+		}
 	}
 
 	const root = ReactDOM.createRoot(rootElement);
