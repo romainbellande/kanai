@@ -1,8 +1,22 @@
 import { Link } from "@tanstack/react-router";
 
+import { getKeycloakLogoutUrl } from "#/lib/auth-client";
+
 import ThemeToggle from "./ThemeToggle";
 
 export default function Header() {
+	const logoutUrl = (() => {
+		if (typeof window === "undefined") {
+			return null;
+		}
+
+		try {
+			return getKeycloakLogoutUrl(window.location.origin);
+		} catch {
+			return null;
+		}
+	})();
+
 	return (
 		<header className="sticky top-0 z-50 border-b border-[var(--line)] bg-[var(--header-bg)] px-4 backdrop-blur-lg">
 			<nav className="page-wrap flex flex-wrap items-center gap-x-3 gap-y-2 py-3 sm:py-4">
@@ -17,6 +31,21 @@ export default function Header() {
 				</h2>
 
 				<div className="ml-auto flex items-center gap-1.5 sm:ml-0 sm:gap-2">
+					<button
+						type="button"
+						disabled={!logoutUrl}
+						onClick={() => {
+							if (!logoutUrl) {
+								return;
+							}
+
+							window.location.assign(logoutUrl);
+						}}
+						className="inline-flex items-center justify-center rounded-full border border-[rgba(23,58,64,0.14)] bg-[var(--chip-bg)] px-3 py-2 text-sm font-semibold text-[var(--sea-ink)] shadow-[0_8px_24px_rgba(30,90,72,0.06)] transition hover:-translate-y-0.5 hover:border-[rgba(168,67,54,0.24)] hover:bg-[rgba(168,67,54,0.08)] disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50"
+					>
+						Logout
+					</button>
+
 					<a
 						href="https://x.com/tan_stack"
 						target="_blank"

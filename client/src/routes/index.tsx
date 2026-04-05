@@ -8,14 +8,13 @@ function App() {
 			<section className="island-shell rise-in relative overflow-hidden rounded-[2rem] px-6 py-10 sm:px-10 sm:py-14">
 				<div className="pointer-events-none absolute -left-20 -top-24 h-56 w-56 rounded-full bg-[radial-gradient(circle,rgba(79,184,178,0.32),transparent_66%)]" />
 				<div className="pointer-events-none absolute -bottom-20 -right-20 h-56 w-56 rounded-full bg-[radial-gradient(circle,rgba(47,106,74,0.18),transparent_66%)]" />
-				<p className="island-kicker mb-3">Better Auth starter flow</p>
+				<p className="island-kicker mb-3">openid-client starter flow</p>
 				<h1 className="display-title mb-5 max-w-3xl text-4xl leading-[1.02] font-bold tracking-tight text-[var(--sea-ink)] sm:text-6xl">
-					Ship a Keycloak login without bespoke OAuth glue.
+					Ship a Keycloak login with a direct OIDC client.
 				</h1>
 				<p className="mb-8 max-w-2xl text-base text-[var(--sea-ink-soft)] sm:text-lg">
-					Use the new login route to kick off Better Auth&apos;s generic OAuth
-					flow, then wire your Keycloak realm into the matching backend plugin
-					configuration.
+					Use the login route to kick off an Authorization Code + PKCE flow in
+					the browser, then point it at your Keycloak realm issuer.
 				</p>
 				<div className="flex flex-wrap gap-3">
 					<Link
@@ -48,12 +47,12 @@ function App() {
 						"Routes and links stay in sync as auth entry points grow.",
 					],
 					[
-						"Generic OAuth",
-						"Kick off Keycloak through Better Auth with one client action.",
+						"Authorization Code + PKCE",
+						"Kick off Keycloak with openid-client and standards-based redirects.",
 					],
 					[
 						"Callback Ready",
-						"Register a single Better Auth callback URL in your Keycloak client.",
+						"Register the browser callback URL directly in your Keycloak client.",
 					],
 					[
 						"Tailwind Native",
@@ -80,12 +79,11 @@ function App() {
 						Adjust the login experience in <code>src/routes/login.tsx</code>.
 					</li>
 					<li>
-						Point <code>src/lib/auth-client.ts</code> at your Better Auth
-						server.
+						Point <code>src/lib/auth-client.ts</code> at your Keycloak issuer.
 					</li>
 					<li>
-						Register the Better Auth callback URL in Keycloak and keep the
-						provider id aligned.
+						Register the browser callback URL in Keycloak and keep the client id
+						aligned.
 					</li>
 				</ul>
 			</section>

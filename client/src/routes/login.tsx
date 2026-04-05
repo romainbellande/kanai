@@ -1,15 +1,16 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowRight, ExternalLink, KeyRound, ShieldCheck } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import {
-	authClient,
-	authErrorPath,
 	authSuccessPath,
-	betterAuthUrl,
-	keycloakProviderId,
+	keycloakClientId,
+	keycloakIssuer,
+	keycloakRealm,
 	keycloakScopes,
+	keycloakServerUrl,
 } from "#/lib/auth-client";
+import { loginWithOpenIdClient } from "#/lib/openid-client";
 
 type LoginSearch = {
 	error?: string;
@@ -26,29 +27,34 @@ export const Route = createFileRoute("/login")({
 	component: LoginPage,
 });
 
-const clientEnvSnippet = `VITE_BETTER_AUTH_URL=http://localhost:3000
-VITE_BETTER_AUTH_KEYCLOAK_PROVIDER_ID=keycloak
-VITE_BETTER_AUTH_SCOPES=openid,profile,email
-VITE_BETTER_AUTH_SUCCESS_PATH=/
-VITE_BETTER_AUTH_ERROR_PATH=/login`;
+const clientEnvSnippet = `VITE_KEYCLOAK_ISSUER=http://localhost:7080/realms/master
+VITE_KEYCLOAK_CLIENT_ID=kanai
+VITE_KEYCLOAK_SCOPES=openid,profile,email
+VITE_KEYCLOAK_SUCCESS_PATH=/auth/callback
+VITE_KEYCLOAK_ERROR_PATH=/login`;
 
-const serverSnippet = `import { betterAuth } from "better-auth"
-import { genericOAuth, keycloak } from "better-auth/plugins"
+const authorizeSnippet = `const config = await client.discovery(
+	new URL("http://localhost:7080/realms/master"),
+	"kanai",
+	{ token_endpoint_auth_method: "none" },
+	client.None(),
+)
 
-export const auth = betterAuth({
-	plugins: [
-		genericOAuth({
-			config: [
-				keycloak({
-					clientId: process.env.KEYCLOAK_CLIENT_ID!,
-					clientSecret: process.env.KEYCLOAK_CLIENT_SECRET!,
-					issuer: process.env.KEYCLOAK_ISSUER!,
-					scopes: ["openid", "profile", "email"],
-				}),
-			],
-		}),
-	],
-})`;
+const codeVerifier = client.randomPKCECodeVerifier()
+const codeChallenge = await client.calculatePKCECodeChallenge(codeVerifier)
+const state = client.randomState()
+const nonce = client.randomNonce()
+
+const authorizationUrl = client.buildAuthorizationUrl(config, {
+	redirect_uri: "http://localhost:3000/auth/callback",
+	scope: "openid profile email",
+	code_challenge: codeChallenge,
+	code_challenge_method: "S256",
+	state,
+	nonce,
+})
+
+window.location.assign(authorizationUrl.href)`;
 
 function LoginPage() {
 	const search = Route.useSearch();
@@ -57,28 +63,23 @@ function LoginPage() {
 
 	const currentError =
 		search.error ?? search.reason ?? search.message ?? clientError;
-	const providerLabel = useMemo(
-		() =>
-			keycloakProviderId
-				.replace(/[-_]+/g, " ")
-				.replace(/\b\w/g, (char) => char.toUpperCase()),
-		[],
-	);
+	const currentOrigin =
+		typeof window === "undefined"
+			? "http://localhost:3000"
+			: window.location.origin;
+	const providerLabel = "Keycloak";
 
 	async function handleSignIn() {
 		setClientError(null);
 		setIsSigningIn(true);
 
-		const result = await authClient.signIn.oauth2({
-			providerId: keycloakProviderId,
-			callbackURL: authSuccessPath,
-			errorCallbackURL: authErrorPath,
-			scopes: keycloakScopes,
-		});
-
-		if (result.error) {
+		try {
+			await loginWithOpenIdClient(currentOrigin);
+		} catch (error) {
 			setClientError(
-				result.error.message ?? "Could not start the Keycloak sign-in flow.",
+				error instanceof Error
+					? error.message
+					: "Could not start the Keycloak sign-in flow.",
 			);
 			setIsSigningIn(false);
 		}
@@ -93,15 +94,15 @@ function LoginPage() {
 					<div className="relative">
 						<div className="mb-5 inline-flex items-center gap-2 rounded-full border border-[var(--chip-line)] bg-[var(--chip-bg)] px-3 py-1.5 text-xs font-semibold tracking-[0.18em] text-[var(--kicker)] uppercase shadow-[0_10px_25px_rgba(30,90,72,0.08)]">
 							<ShieldCheck className="h-4 w-4" />
-							Better Auth + Keycloak
+							Direct Keycloak Login
 						</div>
 						<h1 className="display-title max-w-2xl text-4xl leading-[1.02] font-bold tracking-tight text-[var(--sea-ink)] sm:text-6xl">
 							Sign in through {providerLabel}.
 						</h1>
 						<p className="mt-5 max-w-2xl text-base leading-8 text-[var(--sea-ink-soft)] sm:text-lg">
-							This page starts Better Auth&apos;s generic OAuth flow with the
-							pre-configured Keycloak provider so your app can hand off
-							authentication without custom redirect plumbing.
+							This page redirects straight to Keycloak&apos;s OpenID Connect
+							authorize endpoint instead of calling a local `/api/auth` route
+							first.
 						</p>
 
 						{currentError ? (
@@ -133,13 +134,16 @@ function LoginPage() {
 
 						<div className="mt-8 flex flex-wrap gap-2 text-sm text-[var(--sea-ink-soft)]">
 							<span className="rounded-full border border-[var(--chip-line)] bg-[var(--chip-bg)] px-3 py-1.5">
-								Provider <code>{keycloakProviderId}</code>
+								Client <code>{keycloakClientId ?? "missing"}</code>
 							</span>
 							<span className="rounded-full border border-[var(--chip-line)] bg-[var(--chip-bg)] px-3 py-1.5">
 								Scopes <code>{keycloakScopes.join(" ")}</code>
 							</span>
 							<span className="rounded-full border border-[var(--chip-line)] bg-[var(--chip-bg)] px-3 py-1.5">
 								Success <code>{authSuccessPath}</code>
+							</span>
+							<span className="rounded-full border border-[var(--chip-line)] bg-[var(--chip-bg)] px-3 py-1.5">
+								Issuer <code>{keycloakIssuer ?? "missing"}</code>
 							</span>
 						</div>
 					</div>
@@ -152,15 +156,20 @@ function LoginPage() {
 					>
 						<p className="island-kicker mb-2">Client wiring</p>
 						<p className="m-0 text-sm leading-7 text-[var(--sea-ink-soft)]">
-							Point the Better Auth client at your auth server and keep the
-							Keycloak provider id aligned with the backend plugin config.
+							Expose the Keycloak issuer and public client id to the Vite app so
+							<code>openid-client</code> can discover the issuer before the
+							router starts.
 						</p>
 						<pre className="mt-4 overflow-x-auto rounded-2xl border border-[var(--line)] bg-[rgba(255,255,255,0.45)] p-4 text-sm text-[var(--sea-ink)]">
 							<code>{clientEnvSnippet}</code>
 						</pre>
 						<p className="mt-4 text-sm leading-7 text-[var(--sea-ink-soft)]">
-							Current auth target:{" "}
-							<code>{betterAuthUrl ?? "current origin + /api/auth"}</code>
+							Current Keycloak config:{" "}
+							<code>
+								{keycloakServerUrl && keycloakRealm
+									? `${keycloakServerUrl} (realm ${keycloakRealm})`
+									: "missing or invalid VITE_KEYCLOAK_ISSUER"}
+							</code>
 						</p>
 					</article>
 
@@ -168,13 +177,13 @@ function LoginPage() {
 						className="island-shell rise-in rounded-[1.75rem] p-6"
 						style={{ animationDelay: "160ms" }}
 					>
-						<p className="island-kicker mb-2">Generic OAuth plugin</p>
+						<p className="island-kicker mb-2">OIDC flow</p>
 						<p className="m-0 text-sm leading-7 text-[var(--sea-ink-soft)]">
-							This is the server-side Better Auth setup that matches the button
-							on this page.
+							This is the browser-side <code>openid-client</code> flow the
+							button now performs.
 						</p>
 						<pre className="mt-4 overflow-x-auto rounded-2xl border border-[var(--line)] bg-[rgba(255,255,255,0.45)] p-4 text-sm text-[var(--sea-ink)]">
-							<code>{serverSnippet}</code>
+							<code>{authorizeSnippet}</code>
 						</pre>
 					</article>
 
@@ -185,31 +194,36 @@ function LoginPage() {
 						<p className="island-kicker mb-2">Keycloak checklist</p>
 						<ul className="m-0 list-disc space-y-2 pl-5 text-sm leading-7 text-[var(--sea-ink-soft)]">
 							<li>
-								Set <code>KEYCLOAK_ISSUER</code> to your realm issuer, for
+								Set <code>VITE_KEYCLOAK_ISSUER</code> to your realm issuer, for
 								example <code>http://localhost:7080/realms/MyRealm</code>.
 							</li>
 							<li>
-								Register the callback URL as{" "}
+								Register the redirect URL as{" "}
 								<code>
-									BETTER_AUTH_URL/api/auth/oauth2/callback/{keycloakProviderId}
-								</code>
-								.
+									{currentOrigin}
+									{authSuccessPath}
+								</code>{" "}
+								in your Keycloak client.
+							</li>
+							<li>
+								Use a public client with standard flow enabled so the adapter
+								can exchange the authorization code in the browser.
+							</li>
+							<li>
+								Keep the PKCE verifier, state, and nonce tied to the browser
+								session until the callback returns.
 							</li>
 							<li>
 								Keep the requested scopes aligned with your Keycloak client.
 							</li>
-							<li>
-								Use Better Auth&apos;s docs if you want to expand this into
-								account linking or multiple providers.
-							</li>
 						</ul>
 						<a
-							href="https://better-auth.com/docs/plugins/generic-oauth#example-using-pre-configured-providers"
+							href="https://github.com/panva/openid-client/blob/main/README.md"
 							target="_blank"
 							rel="noreferrer"
 							className="mt-5 inline-flex items-center gap-2 text-sm font-semibold no-underline"
 						>
-							Open Better Auth docs
+							Open openid-client docs
 							<ExternalLink className="h-4 w-4" />
 						</a>
 					</article>
