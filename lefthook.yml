@@ -1,0 +1,39 @@
+# EXAMPLE USAGE:
+#
+#   Refer for explanation to following link:
+#   https://lefthook.dev/configuration/
+#
+# pre-push:
+#   jobs:
+#     - name: packages audit
+#       tags:
+#         - frontend
+#         - security
+#       run: yarn audit
+#
+#     - name: gems audit
+#       tags:
+#         - backend
+#         - security
+#       run: bundle audit
+#
+pre-commit:
+  parallel: true
+  jobs:
+    - name: typecheck
+      run: uv --directory ./api run pyrefly check --summarize-errors
+      glob: "./api/*.py"
+
+    - name: tests
+      run: uv --directory ./api run pytest -n auto -qq --show-capture=no --color=no
+      glob: "./api/*.py"
+
+    - name: lint
+      run: uv --directory ./api run ruff check . --fix
+      stage_fixed: true
+      glob: "./api/*.py"
+
+    - name: format
+      run: uv --directory ./api run ruff format
+      stage_fixed: true
+      glob: "./api/*.py"

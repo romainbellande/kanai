@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     def should_init_db_on_startup(self) -> bool:
         return self.is_local() or self.is_dev()
 
+    def should_seed_db_on_startup(self) -> bool:
+        return self.is_local() or self.is_dev()
+
 
 @cache
 def get_settings() -> Settings:

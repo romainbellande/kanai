@@ -14,6 +14,7 @@ from app.modules.auth.infrastructure.redis_session_repository import (
     RedisSessionRepository,
 )
 from app.modules.auth.interface.auth_middleware import AuthMiddleware
+from app.modules.seeder.startup import seed_reference_data
 from app.modules.user.user_router import user_router
 from app.services.database_service import create_db_and_tables
 from app.services.redis_service import redis_service
@@ -32,6 +33,7 @@ authenticate_request = AuthenticateRequest(
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
     await create_db_and_tables()
+    await seed_reference_data()
     yield
     await redis_service.aclose()
 
