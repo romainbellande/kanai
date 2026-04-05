@@ -5,13 +5,9 @@ from fastapi import FastAPI
 
 import app.logger as customLogger
 from app.config import settings
-from app.modules.auth.application.authenticate_request import AuthenticateRequest
-from app.modules.auth.infrastructure.joserfc_token_verifier import (
-    JoserfcTokenVerifier,
-)
-from app.modules.auth.infrastructure.oidc_metadata_provider import OidcMetadataProvider
-from app.modules.auth.infrastructure.redis_session_repository import (
-    RedisSessionRepository,
+from app.modules.auth.bootstrap import (
+    build_authenticate_request,
+    get_auth_whitelist_paths,
 )
 from app.modules.auth.interface.auth_middleware import AuthMiddleware
 from app.modules.seeder.startup import seed_reference_data
@@ -21,13 +17,11 @@ from app.services.redis_service import redis_service
 
 customLogger.init()
 
-authenticate_request = AuthenticateRequest(
-    repository=RedisSessionRepository(redis_service),
-    token_verifier=JoserfcTokenVerifier(
-        OidcMetadataProvider(settings.auth.discovery_endpoint),
-        expected_audience=settings.auth.audience,
-    ),
+authenticate_request = build_authenticate_request(
+    settings=settings,
+    redis_service=redis_service,
 )
+auth_whitelist_paths = get_auth_whitelist_paths()
 
 
 @asynccontextmanager
@@ -42,7 +36,7 @@ app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     AuthMiddleware,
     authenticate_request=authenticate_request,
-    whitelist_paths={"/docs", "/docs/oauth2-redirect", "/openapi.json", "/redoc"},
+    whitelist_paths=auth_whitelist_paths,
 )
 
 app.include_router(user_router)
