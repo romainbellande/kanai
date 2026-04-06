@@ -20,20 +20,46 @@
 pre-commit:
   parallel: true
   jobs:
-    - name: typecheck
-      run: uv --directory ./api run pyrefly check --summarize-errors
-      glob: "./api/*.py"
+    - name: api - typecheck
+      run: uv run pyrefly check --summarize-errors
+      glob: "*.py"
+      root: ./api
 
-    - name: tests
-      run: uv --directory ./api run pytest -n auto -qq --show-capture=no --color=no
-      glob: "./api/*.py"
+    - name: api - tests
+      run: uv run pytest -n auto -qq --show-capture=no --color=no
+      glob: "*.py"
+      root: ./api
 
-    - name: lint
-      run: uv --directory ./api run ruff check . --fix
+    - name: api - lint
+      run: uv run ruff check . --fix
       stage_fixed: true
-      glob: "./api/*.py"
+      glob: "*.py"
+      root: ./api
 
-    - name: format
-      run: uv --directory ./api run ruff format
+    - name: api - format
+      run: uv run ruff format
       stage_fixed: true
-      glob: "./api/*.py"
+      glob: "*.py"
+      root: ./api
+
+    - name: client - typecheck
+      run: bunx tsc --noEmit --project tsconfig.json
+      glob: "*.{ts,tsx}"
+      root: ./client
+
+    # - name: client - tests
+    #   run: bun run test
+    #   glob: "*.{ts,tsx}"
+    #   root: ./client
+
+    - name: client - lint
+      run: bunx biome lint --write .
+      stage_fixed: true
+      glob: "*.{ts,tsx,js,jsx,json,html}"
+      root: ./client
+
+    - name: client - format
+      run: bunx biome format --write .
+      stage_fixed: true
+      glob: "*.{ts,tsx,js,jsx,json,css,html}"
+      root: ./client
