@@ -50,7 +50,7 @@ async function bootstrap() {
 					window.location.origin,
 					error instanceof Error
 						? error.message
-						: "Could not start the Keycloak sign-in flow.",
+						: "Could not start the sign-in flow.",
 				),
 			);
 			return;

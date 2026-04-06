@@ -3,14 +3,14 @@ function getTrimmedEnvValue(value: string | undefined): string | undefined {
 	return trimmed ? trimmed : undefined;
 }
 
-type ParsedKeycloakIssuer = {
+type ParsedAuthIssuer = {
 	url: string;
 	realm: string;
 };
 
 function getScopes(): string[] {
 	const configuredScopes =
-		getTrimmedEnvValue(import.meta.env.VITE_KEYCLOAK_SCOPES) ??
+		getTrimmedEnvValue(import.meta.env.VITE_AUTH_SCOPES) ??
 		getTrimmedEnvValue(import.meta.env.VITE_BETTER_AUTH_SCOPES);
 
 	if (!configuredScopes) {
@@ -23,23 +23,21 @@ function getScopes(): string[] {
 		.filter((scope) => scope.length > 0);
 }
 
-export const keycloakIssuer = getTrimmedEnvValue(
-	import.meta.env.VITE_KEYCLOAK_ISSUER,
+export const authIssuer = getTrimmedEnvValue(import.meta.env.VITE_AUTH_ISSUER);
+export const authClientId = getTrimmedEnvValue(
+	import.meta.env.VITE_AUTH_CLIENT_ID,
 );
-export const keycloakClientId = getTrimmedEnvValue(
-	import.meta.env.VITE_KEYCLOAK_CLIENT_ID,
-);
-export const keycloakScopes = getScopes();
+export const authScopes = getScopes();
 export const authSuccessPath =
-	getTrimmedEnvValue(import.meta.env.VITE_KEYCLOAK_SUCCESS_PATH) ??
+	getTrimmedEnvValue(import.meta.env.VITE_AUTH_SUCCESS_PATH) ??
 	getTrimmedEnvValue(import.meta.env.VITE_BETTER_AUTH_SUCCESS_PATH) ??
 	"/auth/callback";
 export const authErrorPath =
-	getTrimmedEnvValue(import.meta.env.VITE_KEYCLOAK_ERROR_PATH) ??
+	getTrimmedEnvValue(import.meta.env.VITE_AUTH_ERROR_PATH) ??
 	getTrimmedEnvValue(import.meta.env.VITE_BETTER_AUTH_ERROR_PATH) ??
 	"/login";
 
-function parseKeycloakIssuer(issuer: string): ParsedKeycloakIssuer {
+function parseAuthIssuer(issuer: string): ParsedAuthIssuer {
 	const issuerUrl = new URL(issuer);
 	const pathSegments = issuerUrl.pathname.split("/").filter(Boolean);
 	const realmSegmentIndex = pathSegments.indexOf("realms");
@@ -49,7 +47,7 @@ function parseKeycloakIssuer(issuer: string): ParsedKeycloakIssuer {
 		realmSegmentIndex === pathSegments.length - 1
 	) {
 		throw new Error(
-			"VITE_KEYCLOAK_ISSUER must include /realms/<realm> in the URL.",
+			"VITE_AUTH_ISSUER must include /realms/<realm> in the URL.",
 		);
 	}
 
@@ -60,29 +58,29 @@ function parseKeycloakIssuer(issuer: string): ParsedKeycloakIssuer {
 	return { url, realm };
 }
 
-export function getKeycloakConfig(): ParsedKeycloakIssuer & {
+export function getAuthConfig(): ParsedAuthIssuer & {
 	clientId: string;
 } {
-	if (!keycloakIssuer) {
-		throw new Error("Missing VITE_KEYCLOAK_ISSUER.");
+	if (!authIssuer) {
+		throw new Error("Missing VITE_AUTH_ISSUER.");
 	}
 
-	if (!keycloakClientId) {
-		throw new Error("Missing VITE_KEYCLOAK_CLIENT_ID.");
+	if (!authClientId) {
+		throw new Error("Missing VITE_AUTH_CLIENT_ID.");
 	}
 
 	return {
-		...parseKeycloakIssuer(keycloakIssuer),
-		clientId: keycloakClientId,
+		...parseAuthIssuer(authIssuer),
+		clientId: authClientId,
 	};
 }
 
-export function getKeycloakRedirectUri(origin: string): string {
+export function getAuthRedirectUri(origin: string): string {
 	return new URL(authSuccessPath, origin).toString();
 }
 
-export function getKeycloakLogoutUrl(origin: string): string {
-	const { url, realm, clientId } = getKeycloakConfig();
+export function getAuthLogoutUrl(origin: string): string {
+	const { url, realm, clientId } = getAuthConfig();
 	const logoutUrl = new URL(url);
 
 	logoutUrl.pathname = `${logoutUrl.pathname.replace(/\/$/, "")}/realms/${realm}/protocol/openid-connect/logout`;
@@ -95,9 +93,9 @@ export function getKeycloakLogoutUrl(origin: string): string {
 	return logoutUrl.toString();
 }
 
-export const keycloakRealm = keycloakIssuer
-	? parseKeycloakIssuer(keycloakIssuer).realm
+export const authRealm = authIssuer
+	? parseAuthIssuer(authIssuer).realm
 	: undefined;
-export const keycloakServerUrl = keycloakIssuer
-	? parseKeycloakIssuer(keycloakIssuer).url
+export const authServerUrl = authIssuer
+	? parseAuthIssuer(authIssuer).url
 	: undefined;

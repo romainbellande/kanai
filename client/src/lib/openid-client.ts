@@ -1,12 +1,12 @@
 import * as client from "openid-client";
 
 import {
+	authClientId,
 	authErrorPath,
+	authIssuer,
+	authScopes,
 	authSuccessPath,
-	getKeycloakRedirectUri,
-	keycloakClientId,
-	keycloakIssuer,
-	keycloakScopes,
+	getAuthRedirectUri,
 } from "#/lib/auth-client";
 
 type PendingAuthorizationRequest = {
@@ -54,17 +54,17 @@ function getOpenIdClientConfig(): {
 	clientId: string;
 	issuer: string;
 } {
-	if (!keycloakIssuer) {
-		throw new Error("Missing VITE_KEYCLOAK_ISSUER.");
+	if (!authIssuer) {
+		throw new Error("Missing VITE_AUTH_ISSUER.");
 	}
 
-	if (!keycloakClientId) {
-		throw new Error("Missing VITE_KEYCLOAK_CLIENT_ID.");
+	if (!authClientId) {
+		throw new Error("Missing VITE_AUTH_CLIENT_ID.");
 	}
 
 	return {
-		clientId: keycloakClientId,
-		issuer: keycloakIssuer,
+		clientId: authClientId,
+		issuer: authIssuer,
 	};
 }
 
@@ -286,7 +286,7 @@ export async function initOpenIdClient(): Promise<void> {
 		const reason =
 			currentUrl.searchParams.get("error_description") ??
 			currentUrl.searchParams.get("error") ??
-			"Could not finish the Keycloak sign-in flow.";
+			"Could not finish the sign-in flow.";
 
 		clearPendingAuthorizationRequest();
 		replaceBrowserLocation(buildAuthErrorUrl(currentUrl.origin, reason));
@@ -339,7 +339,7 @@ export async function loginWithOpenIdClient(
 	returnToPath = "/",
 ): Promise<void> {
 	const configuration = await getOpenIdConfiguration();
-	const redirectUri = getKeycloakRedirectUri(origin);
+	const redirectUri = getAuthRedirectUri(origin);
 	const codeVerifier = client.randomPKCECodeVerifier();
 	const codeChallenge = await client.calculatePKCECodeChallenge(codeVerifier);
 	const state = client.randomState();
@@ -358,7 +358,7 @@ export async function loginWithOpenIdClient(
 		code_challenge_method: "S256",
 		nonce,
 		redirect_uri: redirectUri,
-		scope: keycloakScopes.join(" "),
+		scope: authScopes.join(" "),
 		state,
 	});
 

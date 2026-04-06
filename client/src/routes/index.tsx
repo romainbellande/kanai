@@ -25,7 +25,7 @@ import {
 	UserPlus,
 } from "lucide-react";
 
-import { getKeycloakLogoutUrl } from "#/lib/auth-client";
+import { getAuthLogoutUrl } from "#/lib/auth-client";
 import { clearAuthSession } from "#/lib/openid-client";
 
 export const Route = createFileRoute("/")({ component: App });
@@ -103,7 +103,7 @@ function App() {
 		}
 
 		try {
-			return getKeycloakLogoutUrl(window.location.origin);
+			return getAuthLogoutUrl(window.location.origin);
 		} catch {
 			return null;
 		}

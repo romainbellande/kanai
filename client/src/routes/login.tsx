@@ -9,12 +9,12 @@ import {
 import { useEffect, useState } from "react";
 
 import {
+	authClientId,
+	authIssuer,
+	authRealm,
+	authScopes,
+	authServerUrl,
 	authSuccessPath,
-	keycloakClientId,
-	keycloakIssuer,
-	keycloakRealm,
-	keycloakScopes,
-	keycloakServerUrl,
 } from "#/lib/auth-client";
 import {
 	hasActiveAuthSession,
@@ -36,11 +36,11 @@ export const Route = createFileRoute("/login")({
 	component: LoginPage,
 });
 
-const clientEnvSnippet = `VITE_KEYCLOAK_ISSUER=http://localhost:7080/realms/master
-VITE_KEYCLOAK_CLIENT_ID=kanai
-VITE_KEYCLOAK_SCOPES=openid,profile,email
-VITE_KEYCLOAK_SUCCESS_PATH=/auth/callback
-VITE_KEYCLOAK_ERROR_PATH=/login`;
+const clientEnvSnippet = `VITE_AUTH_ISSUER=http://localhost:7080/realms/master
+VITE_AUTH_CLIENT_ID=kanai
+VITE_AUTH_SCOPES=openid,profile,email
+VITE_AUTH_SUCCESS_PATH=/auth/callback
+VITE_AUTH_ERROR_PATH=/login`;
 
 const authorizeSnippet = `const config = await client.discovery(
 	new URL("http://localhost:7080/realms/master"),
@@ -76,7 +76,7 @@ function LoginPage() {
 		typeof window === "undefined"
 			? "http://localhost:3000"
 			: window.location.origin;
-	const providerLabel = "Keycloak";
+	const providerLabel = "your identity provider";
 
 	async function handleSignIn() {
 		setClientError(null);
@@ -88,7 +88,7 @@ function LoginPage() {
 			setClientError(
 				error instanceof Error
 					? error.message
-					: "Could not start the Keycloak sign-in flow.",
+					: "Could not start the sign-in flow.",
 			);
 			setIsSigningIn(false);
 		}
@@ -115,7 +115,7 @@ function LoginPage() {
 			setClientError(
 				error instanceof Error
 					? error.message
-					: "Could not start the Keycloak sign-in flow.",
+					: "Could not start the sign-in flow.",
 			);
 			setIsSigningIn(false);
 		});
@@ -136,7 +136,7 @@ function LoginPage() {
 					<section className="island-shell rise-in rounded-[2rem] p-6 sm:p-8 lg:p-10">
 						<div className="inline-flex items-center gap-2 rounded-full bg-[var(--primary-fixed)] px-3 py-1.5 text-xs font-semibold tracking-[0.18em] text-[var(--on-primary-fixed)] uppercase">
 							<ShieldCheck className="h-4 w-4" />
-							Direct Keycloak Login
+							Direct OIDC Login
 						</div>
 
 						<h1 className="display-title mt-5 max-w-3xl text-4xl font-bold tracking-tight text-[var(--on-surface)] sm:text-5xl">
@@ -145,8 +145,8 @@ function LoginPage() {
 
 						<p className="mt-5 max-w-2xl text-base leading-8 text-[var(--sea-ink-soft)] sm:text-lg">
 							This sign-in flow starts the browser-side Authorization Code +
-							PKCE exchange directly against Keycloak, keeping the experience
-							aligned with the board-first interface.
+							PKCE exchange directly against your OIDC provider, keeping the
+							experience aligned with the board-first interface.
 						</p>
 
 						{currentError ? (
@@ -183,7 +183,7 @@ function LoginPage() {
 									Client
 								</p>
 								<p className="mt-2 text-sm text-[var(--on-surface)]">
-									<code>{keycloakClientId ?? "missing"}</code>
+									<code>{authClientId ?? "missing"}</code>
 								</p>
 							</div>
 							<div className="rounded-[1.5rem] bg-[var(--surface-container)] p-4">
@@ -191,7 +191,7 @@ function LoginPage() {
 									Scopes
 								</p>
 								<p className="mt-2 text-sm text-[var(--on-surface)]">
-									<code>{keycloakScopes.join(" ")}</code>
+									<code>{authScopes.join(" ")}</code>
 								</p>
 							</div>
 							<div className="rounded-[1.5rem] bg-[var(--surface-container)] p-4">
@@ -207,7 +207,7 @@ function LoginPage() {
 									Issuer
 								</p>
 								<p className="mt-2 text-sm text-[var(--on-surface)]">
-									<code>{keycloakIssuer ?? "missing"}</code>
+									<code>{authIssuer ?? "missing"}</code>
 								</p>
 							</div>
 						</div>
@@ -220,19 +220,19 @@ function LoginPage() {
 						>
 							<p className="island-kicker mb-2">Client Wiring</p>
 							<p className="m-0 text-sm leading-7 text-[var(--sea-ink-soft)]">
-								Expose the Keycloak issuer and client id in the Vite environment
-								so `openid-client` can discover the realm before the router
-								hands off the redirect.
+								Expose the auth issuer and client id in the Vite environment so
+								`openid-client` can discover the realm before the router hands
+								off the redirect.
 							</p>
 							<pre className="mt-4 overflow-x-auto rounded-[1.25rem] bg-[var(--surface-container)] p-4 text-sm text-[var(--on-surface)]">
 								<code>{clientEnvSnippet}</code>
 							</pre>
 							<p className="mt-4 text-sm leading-7 text-[var(--sea-ink-soft)]">
-								Current Keycloak config:{" "}
+								Current auth config:{" "}
 								<code>
-									{keycloakServerUrl && keycloakRealm
-										? `${keycloakServerUrl} (realm ${keycloakRealm})`
-										: "missing or invalid VITE_KEYCLOAK_ISSUER"}
+									{authServerUrl && authRealm
+										? `${authServerUrl} (realm ${authRealm})`
+										: "missing or invalid VITE_AUTH_ISSUER"}
 								</code>
 							</p>
 						</article>
@@ -255,11 +255,11 @@ function LoginPage() {
 							className="island-shell rise-in rounded-[1.75rem] p-6"
 							style={{ animationDelay: "220ms" }}
 						>
-							<p className="island-kicker mb-2">Keycloak Checklist</p>
+							<p className="island-kicker mb-2">Auth Checklist</p>
 							<ul className="m-0 list-disc space-y-2 pl-5 text-sm leading-7 text-[var(--sea-ink-soft)]">
 								<li>
-									Set <code>VITE_KEYCLOAK_ISSUER</code> to your realm issuer,
-									for example <code>http://localhost:7080/realms/MyRealm</code>.
+									Set <code>VITE_AUTH_ISSUER</code> to your realm issuer, for
+									example <code>http://localhost:7080/realms/MyRealm</code>.
 								</li>
 								<li>
 									Register the redirect URL as{" "}
@@ -267,7 +267,7 @@ function LoginPage() {
 										{currentOrigin}
 										{authSuccessPath}
 									</code>
-									in your Keycloak client.
+									in your identity provider client.
 								</li>
 								<li>
 									Use a public client with standard flow enabled so the browser
@@ -278,7 +278,8 @@ function LoginPage() {
 									session until the callback returns.
 								</li>
 								<li>
-									Keep the requested scopes aligned with your Keycloak client.
+									Keep the requested scopes aligned with your identity provider
+									client.
 								</li>
 							</ul>
 							<a

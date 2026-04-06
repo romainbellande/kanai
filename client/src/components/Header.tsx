@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 
-import { getKeycloakLogoutUrl } from "#/lib/auth-client";
+import { getAuthLogoutUrl } from "#/lib/auth-client";
 import { clearAuthSession } from "#/lib/openid-client";
 
 import ThemeToggle from "./ThemeToggle";
@@ -12,7 +12,7 @@ export default function Header() {
 		}
 
 		try {
-			return getKeycloakLogoutUrl(window.location.origin);
+			return getAuthLogoutUrl(window.location.origin);
 		} catch {
 			return null;
 		}
