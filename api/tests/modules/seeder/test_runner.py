@@ -5,6 +5,7 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlmodel import SQLModel
 
 from app.modules.seeder.base import BaseSeeder, SeedContext
 from app.modules.seeder.runner import (
@@ -14,7 +15,6 @@ from app.modules.seeder.runner import (
     SeederRunner,
 )
 from app.modules.user.user_model import User
-from app.services.database_service import Base
 
 
 class RecordingSeeder(BaseSeeder):
@@ -82,7 +82,7 @@ async def session_factory(
     engine = create_async_engine(f"sqlite+aiosqlite:///{database_path}")
 
     async with engine.begin() as connection:
-        await connection.run_sync(Base.metadata.create_all)
+        await connection.run_sync(SQLModel.metadata.create_all)
 
     factory = async_sessionmaker(engine, expire_on_commit=False)
 
@@ -158,7 +158,7 @@ async def test_runner_rolls_back_on_failure(
 
     async with session_factory() as verification_session:
         result = await verification_session.execute(
-            select(User).where(User.externalId == "rollback-user")
+            select(User).filter_by(externalId="rollback-user")
         )
 
     assert result.scalar_one_or_none() is None

@@ -1,25 +1,34 @@
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, String, func
-from sqlalchemy.orm import Mapped, mapped_column
-
-from app.services.database_service import Base
+from sqlalchemy import Column, DateTime, String, Uuid, func
+from sqlmodel import Field, SQLModel
 
 
-class User(Base):
-    __tablename__ = "users"
+class User(SQLModel, table=True):
+    __tablename__ = "users"  # type: ignore[bad-override]
 
-    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
-    externalId: Mapped[str] = mapped_column(String(), nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-        nullable=False,
+    id: UUID | None = Field(
+        default=None,
+        sa_column=Column(Uuid(), primary_key=True, nullable=False, default=uuid4),
     )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        nullable=False,
+    externalId: str = Field(
+        sa_column=Column("externalId", String(), nullable=False),
+    )
+    updated_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(
+            DateTime(timezone=True),
+            server_default=func.now(),
+            onupdate=func.now(),
+            nullable=False,
+        ),
+    )
+    created_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(
+            DateTime(timezone=True),
+            server_default=func.now(),
+            nullable=False,
+        ),
     )

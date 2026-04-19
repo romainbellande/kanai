@@ -1,8 +1,9 @@
 from collections.abc import AsyncIterator
+from importlib import import_module
 
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.orm import DeclarativeBase
+from sqlmodel import SQLModel
 
 from loguru import logger
 
@@ -12,12 +13,12 @@ from app.exceptions import DatabaseConnectionException
 settings = get_settings()
 
 
-class Base(DeclarativeBase):
-    pass
-
-
 engine = create_async_engine(settings.database_url)
 DBSession = async_sessionmaker[AsyncSession](engine, expire_on_commit=False)
+
+
+def import_models() -> None:
+    import_module("app.modules.user.user_model")
 
 
 async def get_db() -> AsyncIterator[AsyncSession]:
@@ -52,8 +53,9 @@ async def create_db_and_tables() -> None:
         raise DatabaseConnectionException("Database connection is not available")
 
     try:
+        import_models()
         async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+            await conn.run_sync(SQLModel.metadata.create_all)
         logger.info("Database tables created successfully")
     except SQLAlchemyError as e:
         logger.error(f"Failed to create database tables: {str(e)}")
