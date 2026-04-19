@@ -1,9 +1,9 @@
 import { Link } from "@tanstack/react-router";
 
-import { getAuthLogoutUrl } from "#/lib/auth-client";
-import { clearAuthSession } from "#/lib/openid-client";
+import { getAuthLogoutUrl } from "#/domains/auth/model/auth-client";
+import { clearAuthSession } from "#/domains/auth/model/openid-client";
 
-import ThemeToggle from "./ThemeToggle";
+import ThemeToggle from "#/shared/ui/ThemeToggle";
 
 export default function Header() {
 	const logoutUrl = (() => {

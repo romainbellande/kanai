@@ -7,7 +7,7 @@ import {
 	authScopes,
 	authSuccessPath,
 	getAuthRedirectUri,
-} from "#/lib/auth-client";
+} from "#/domains/auth/model/auth-client";
 
 type PendingAuthorizationRequest = {
 	codeVerifier: string;

@@ -7,7 +7,7 @@ import {
 	initOpenIdClient,
 	isAuthenticationBypassPath,
 	loginWithOpenIdClient,
-} from "#/lib/openid-client";
+} from "#/domains/auth/model/openid-client";
 
 import { getRouter } from "./router";
 
