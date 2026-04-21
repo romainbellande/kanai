@@ -25,4 +25,4 @@ pre-commit:
 
 [working-directory: 'client']
 gen-openapi-client:
-    bunx @openapitools/openapi-generator-cli generate -i http://localhost:8000/openapi.json -g typescript-fetch -o src/api-client
+    bunx @openapitools/openapi-generator-cli generate -i http://localhost:8000/openapi.json -g typescript-fetch -o src/api/openapi-client
