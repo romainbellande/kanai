@@ -13,6 +13,7 @@ import {
 	User,
 } from "lucide-react";
 
+import { useCurrentUserQuery } from "#/api/client";
 import { WorkspaceIconButton } from "#/domains/workspace/ui/atoms/WorkspaceIconButton";
 
 type SectionTab = {
@@ -26,11 +27,26 @@ type WorkspaceHeaderProps = {
 	sectionTabs: SectionTab[];
 };
 
+function getInitials(value: string | null | undefined): string {
+	const normalizedValue = value?.trim();
+
+	return normalizedValue ? normalizedValue.slice(0, 1).toUpperCase() : "";
+}
+
 export function WorkspaceHeader({
 	logoutUrl,
 	onLogout,
 	sectionTabs,
 }: WorkspaceHeaderProps) {
+	const { data: currentUser } = useCurrentUserQuery();
+
+	const accountInitials = [
+		getInitials(currentUser?.first_name),
+		getInitials(currentUser?.last_name),
+	]
+		.join("")
+		.trim();
+
 	return (
 		<>
 			<div className="sticky top-0 z-20 rounded-[1.75rem] bg-[rgba(255,255,255,0.78)] px-5 py-4 shadow-[0_18px_42px_rgba(25,28,30,0.04)] backdrop-blur-xl">
@@ -67,8 +83,15 @@ export function WorkspaceHeader({
 						<div className="relative hidden sm:block">
 							<button
 								type="button"
-								className="inline-flex h-11 items-center rounded-full px-2 text-sm font-medium text-[var(--on-surface)]"
+								className="inline-flex h-11 items-center gap-2 rounded-full bg-[var(--surface-container-lowest)] px-2 text-sm font-medium text-[var(--on-surface)] shadow-[0_12px_24px_rgba(25,28,30,0.05)]"
 							>
+								<span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--surface-container)] text-xs font-semibold tracking-[0.08em] text-[var(--on-surface)]">
+									{accountInitials ? (
+										accountInitials
+									) : (
+										<User className="h-4 w-4 text-[var(--on-surface-variant)]" />
+									)}
+								</span>
 								Account
 							</button>
 							<div className="absolute right-0 top-[calc(100%+0.5rem)] w-52 rounded-[1.15rem] border border-[color:color-mix(in_srgb,var(--outline-variant)_16%,transparent)] bg-[rgba(255,255,255,0.84)] p-2 text-sm shadow-[0_20px_44px_rgba(25,28,30,0.08)] backdrop-blur-[20px]">

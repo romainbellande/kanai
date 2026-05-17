@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     redis_url: str
     environment: Environment
     auth: AuthSettings
+    client_origin: str
 
     def is_local(self) -> bool:
         return self.environment == Environment.LOCAL

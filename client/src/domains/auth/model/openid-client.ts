@@ -17,7 +17,7 @@ type PendingAuthorizationRequest = {
 	returnToPath: string;
 };
 
-type StoredAuthSession = {
+export type StoredAuthSession = {
 	accessToken?: string;
 	expiresAt?: number;
 	idToken?: string;
@@ -223,6 +223,21 @@ function clearPendingAuthorizationRequest(): void {
 	window.sessionStorage.removeItem(pendingAuthorizationRequestStorageKey);
 }
 
+export function getStoredAuthSession(): StoredAuthSession | null {
+	const authSession = readStoredAuthSession();
+
+	if (
+		authSession &&
+		typeof authSession.expiresAt === "number" &&
+		authSession.expiresAt <= Date.now() + authSessionExpiryLeewayMs
+	) {
+		clearAuthSession();
+		return null;
+	}
+
+	return authSession;
+}
+
 export function clearAuthSession(): void {
 	if (typeof window === "undefined") {
 		return;
@@ -232,17 +247,9 @@ export function clearAuthSession(): void {
 }
 
 export function hasActiveAuthSession(): boolean {
-	const authSession = readStoredAuthSession();
+	const authSession = getStoredAuthSession();
 
 	if (!authSession?.accessToken) {
-		return false;
-	}
-
-	if (
-		typeof authSession.expiresAt === "number" &&
-		authSession.expiresAt <= Date.now() + authSessionExpiryLeewayMs
-	) {
-		clearAuthSession();
 		return false;
 	}
 

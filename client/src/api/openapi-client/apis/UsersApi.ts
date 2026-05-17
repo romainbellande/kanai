@@ -37,7 +37,7 @@ export class UsersApi extends runtime.BaseAPI {
             }
         }
 
-        let urlPath = `/users/me`;
+        const urlPath = `/users/me`;
 
         return {
             path: urlPath,

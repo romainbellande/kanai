@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import ReactDOM from "react-dom/client";
 
@@ -22,6 +23,7 @@ function getRootElement(): HTMLElement {
 }
 
 const rootElement = getRootElement();
+const queryClient = new QueryClient();
 
 async function bootstrap() {
 	try {
@@ -60,7 +62,11 @@ async function bootstrap() {
 	const root = ReactDOM.createRoot(rootElement);
 	const router = getRouter();
 
-	root.render(<RouterProvider router={router} />);
+	root.render(
+		<QueryClientProvider client={queryClient}>
+			<RouterProvider router={router} />
+		</QueryClientProvider>,
+	);
 }
 
 if (!rootElement.innerHTML) {

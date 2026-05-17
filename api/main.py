@@ -2,7 +2,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-
+from fastapi.middleware.cors import CORSMiddleware
 import app.logger as customLogger
 from app.config import settings
 from app.modules.auth.bootstrap import (
@@ -33,10 +33,22 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
 
 
 app = FastAPI(lifespan=lifespan)
+
+origins = [settings.client_origin]
+
 app.add_middleware(
     AuthMiddleware,
     authenticate_request=authenticate_request,
     whitelist_paths=auth_whitelist_paths,
 )
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 app.include_router(user_router)
