@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ProjectsProjectIdRouteImport } from './routes/projects/$projectId'
 import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
 
 const LoginRoute = LoginRouteImport.update({
@@ -29,6 +30,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProjectsProjectIdRoute = ProjectsProjectIdRouteImport.update({
+  id: '/projects/$projectId',
+  path: '/projects/$projectId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthCallbackRoute = AuthCallbackRouteImport.update({
   id: '/auth/callback',
   path: '/auth/callback',
@@ -40,12 +46,14 @@ export interface FileRoutesByFullPath {
   '/about': typeof AboutRoute
   '/login': typeof LoginRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/projects/$projectId': typeof ProjectsProjectIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/login': typeof LoginRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/projects/$projectId': typeof ProjectsProjectIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -53,13 +61,25 @@ export interface FileRoutesById {
   '/about': typeof AboutRoute
   '/login': typeof LoginRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/projects/$projectId': typeof ProjectsProjectIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/about' | '/login' | '/auth/callback'
+  fullPaths:
+    | '/'
+    | '/about'
+    | '/login'
+    | '/auth/callback'
+    | '/projects/$projectId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/about' | '/login' | '/auth/callback'
-  id: '__root__' | '/' | '/about' | '/login' | '/auth/callback'
+  to: '/' | '/about' | '/login' | '/auth/callback' | '/projects/$projectId'
+  id:
+    | '__root__'
+    | '/'
+    | '/about'
+    | '/login'
+    | '/auth/callback'
+    | '/projects/$projectId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -67,6 +87,7 @@ export interface RootRouteChildren {
   AboutRoute: typeof AboutRoute
   LoginRoute: typeof LoginRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
+  ProjectsProjectIdRoute: typeof ProjectsProjectIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -92,6 +113,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/projects/$projectId': {
+      id: '/projects/$projectId'
+      path: '/projects/$projectId'
+      fullPath: '/projects/$projectId'
+      preLoaderRoute: typeof ProjectsProjectIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/auth/callback': {
       id: '/auth/callback'
       path: '/auth/callback'
@@ -107,6 +135,7 @@ const rootRouteChildren: RootRouteChildren = {
   AboutRoute: AboutRoute,
   LoginRoute: LoginRoute,
   AuthCallbackRoute: AuthCallbackRoute,
+  ProjectsProjectIdRoute: ProjectsProjectIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
