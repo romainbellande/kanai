@@ -7,6 +7,12 @@
       "skillPath": "skills/agents-md/SKILL.md",
       "computedHash": "92a914bfd0054b2e917710df0ef2e9db62e7f984da1f84f01d78e54dfdce8003"
     },
+    "docstring": {
+      "source": "pipecat-ai/pipecat",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/docstring/SKILL.md",
+      "computedHash": "c3b2b7851b75a881d0aa853fb7555e8f0fa3c26795a97ce3c8699be2d6076e9a"
+    },
     "find-skills": {
       "source": "vercel-labs/skills",
       "sourceType": "github",

@@ -1,3 +1,5 @@
+"""Bootstrap authentication dependencies for the API."""
+
 from app.config import Settings
 from app.modules.auth.application.authenticate_request import AuthenticateRequest
 from app.modules.auth.infrastructure.joserfc_token_verifier import (
@@ -18,6 +20,15 @@ def build_authenticate_request(
     settings: Settings,
     redis_service: RedisService,
 ) -> AuthenticateRequest:
+    """Build the authentication request use case.
+
+    Args:
+        settings: Application settings containing auth provider configuration.
+        redis_service: Redis connection service used for session persistence.
+
+    Returns:
+        Configured `AuthenticateRequest` instance.
+    """
     return AuthenticateRequest(
         repository=RedisSessionRepository(redis_service),
         token_verifier=JoserfcTokenVerifier(
@@ -29,4 +40,9 @@ def build_authenticate_request(
 
 
 def get_auth_whitelist_paths() -> set[str]:
+    """Return API paths that bypass authentication.
+
+    Returns:
+        Set of documentation and OpenAPI paths allowed without authentication.
+    """
     return {"/docs", "/docs/oauth2-redirect", "/openapi.json", "/redoc"}

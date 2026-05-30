@@ -1,3 +1,5 @@
+"""Provide Redis-backed storage for JSON-serialized Pydantic models."""
+
 from __future__ import annotations
 
 import asyncio
@@ -28,7 +30,11 @@ _redis_lock = asyncio.Lock()
 
 
 class RedisService:
-    """Store and retrieve JSON-backed Pydantic models through a shared async Redis client."""
+    """Store and retrieve JSON-backed Pydantic models through Redis.
+
+    The service uses a lazily initialized shared async Redis client and validates
+    stored payloads through the provided Pydantic model types.
+    """
 
     async def _get_client(self) -> Redis:
         """Return the shared Redis client, creating it lazily on first use."""
@@ -75,7 +81,20 @@ class RedisService:
             raise RedisDataValidationException(message)
 
     async def create(self, key: str, value: ModelT) -> ModelT:
-        """Create a Redis document from a Pydantic model and return the stored model instance."""
+        """Create a Redis document from a Pydantic model.
+
+        Args:
+            key: Redis key used to store the serialized model.
+            value: Pydantic model instance to serialize and store.
+
+        Returns:
+            Stored model instance validated from the serialized payload.
+
+        Raises:
+            RedisConnectionException: If Redis rejects or cannot complete the write.
+            RedisDataValidationException: If `value` cannot serialize to a JSON object.
+            RedisKeyAlreadyExistsException: If `key` already exists.
+        """
         payload = self._model_to_json_object(value)
         model_type = value.__class__
         client = await self._get_client()
@@ -98,7 +117,21 @@ class RedisService:
         value: ModelT,
         ttl_seconds: int | None = None,
     ) -> ModelT:
-        """Store or overwrite a Redis document, optionally applying a TTL."""
+        """Store or overwrite a Redis document, optionally applying a TTL.
+
+        Args:
+            key: Redis key used to store the serialized model.
+            value: Pydantic model instance to serialize and store.
+            ttl_seconds: Optional expiration time in seconds. Defaults to `None`.
+
+        Returns:
+            Stored model instance validated from the serialized payload.
+
+        Raises:
+            RedisConnectionException: If Redis rejects or cannot complete the write.
+            RedisDataValidationException: If `value` cannot serialize to a JSON object
+                or `ttl_seconds` is not greater than zero.
+        """
         self._validate_ttl_seconds(ttl_seconds)
         payload = self._model_to_json_object(value)
         model_type = value.__class__
@@ -118,7 +151,20 @@ class RedisService:
         return model_type.model_validate(payload)
 
     async def get(self, key: str, model_type: type[ModelT]) -> ModelT | None:
-        """Fetch a Redis document by key and validate it into the requested Pydantic model."""
+        """Fetch a Redis document by key and validate it into a Pydantic model.
+
+        Args:
+            key: Redis key to read.
+            model_type: Pydantic model type used to validate the stored payload.
+
+        Returns:
+            Validated model instance, or `None` when `key` does not exist.
+
+        Raises:
+            RedisConnectionException: If Redis rejects or cannot complete the read.
+            RedisDataValidationException: If stored data is not a JSON object or
+                cannot be validated as `model_type`.
+        """
         client = await self._get_client()
 
         try:
@@ -141,7 +187,22 @@ class RedisService:
     async def patch(
         self, key: str, updates: BaseModel, model_type: type[ModelT]
     ) -> ModelT:
-        """Apply a shallow top-level patch and return the updated Pydantic model."""
+        """Apply a shallow top-level patch to a Redis document.
+
+        Args:
+            key: Redis key to update.
+            updates: Pydantic model containing fields to merge into the stored payload.
+            model_type: Pydantic model type used to validate the merged payload.
+
+        Returns:
+            Updated model instance validated from the merged payload.
+
+        Raises:
+            RedisConnectionException: If Redis rejects or cannot complete the update.
+            RedisDataValidationException: If current or updated data is not a valid
+                JSON object or cannot be validated as `model_type`.
+            RedisKeyNotFoundException: If `key` does not exist.
+        """
         current_value = await self.get(key, model_type)
         if current_value is None:
             message = f"Redis key was not found: {key}"
@@ -182,7 +243,17 @@ class RedisService:
         return validated
 
     async def delete(self, key: str) -> bool:
-        """Delete a Redis document and report whether the key existed."""
+        """Delete a Redis document.
+
+        Args:
+            key: Redis key to delete.
+
+        Returns:
+            `True` when a key was deleted, otherwise `False`.
+
+        Raises:
+            RedisConnectionException: If Redis rejects or cannot complete the delete.
+        """
         client = await self._get_client()
 
         try:
@@ -194,7 +265,11 @@ class RedisService:
         return deleted > 0
 
     async def aclose(self) -> None:
-        """Close and reset the shared Redis client used by the service."""
+        """Close and reset the shared Redis client used by the service.
+
+        Raises:
+            RedisConnectionException: If Redis rejects or cannot complete the close.
+        """
         global _redis_client
 
         client = _redis_client

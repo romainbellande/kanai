@@ -1,3 +1,5 @@
+"""Application service for authenticating bearer-token requests."""
+
 from __future__ import annotations
 
 import math
@@ -13,17 +15,37 @@ from app.modules.auth.domain.value_objects import TokenFingerprint
 
 
 class AuthenticateRequest:
+    """Authenticate bearer tokens and cache validated sessions."""
+
     def __init__(
         self,
         repository: SessionRepository,
         token_verifier: TokenVerifier,
         user_provisioner: AuthenticatedUserProvisioner,
     ) -> None:
+        """Initialize the request authenticator.
+
+        Args:
+            repository: Session repository used to read, persist, and delete cached sessions.
+            token_verifier: Verifier used when a token is not backed by a valid cached session.
+            user_provisioner: Provisioner used to ensure authenticated users exist locally.
+        """
         self._repository = repository
         self._token_verifier = token_verifier
         self._user_provisioner = user_provisioner
 
     async def execute(self, bearer_token: str) -> AuthenticatedContext:
+        """Authenticate a bearer token and return its authenticated context.
+
+        Args:
+            bearer_token: Raw bearer token to authenticate.
+
+        Returns:
+            Authenticated context derived from a cached session or verified token.
+
+        Raises:
+            InvalidTokenException: The token is malformed or already expired.
+        """
         try:
             fingerprint = TokenFingerprint.from_token(bearer_token)
         except ValueError as error:

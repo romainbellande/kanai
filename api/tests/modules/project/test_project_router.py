@@ -1,0 +1,282 @@
+from collections.abc import AsyncIterator
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from uuid import UUID
+
+import pytest
+import pytest_asyncio
+from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlmodel import SQLModel
+
+from app.modules.auth.application.dto import AuthenticatedContext
+from app.modules.auth.interface.auth_middleware import AuthMiddleware
+from app.modules.project.project_model import Project, ProjectMember, ProjectOwner, Task
+from app.modules.project.project_router import project_router
+from app.modules.user.user_model import User
+from app.services.database_service import get_db
+
+
+class StubAuthenticateRequest:
+    async def execute(self, bearer_token: str) -> AuthenticatedContext:
+        del bearer_token
+        return AuthenticatedContext(
+            subject="creator",
+            issuer="https://issuer.test",
+            expires_at=datetime.now(UTC) + timedelta(minutes=5),
+            audience="kanai-api",
+            claims={"scope": "openid"},
+        )
+
+
+@pytest_asyncio.fixture
+async def session_factory(
+    tmp_path: Path,
+) -> AsyncIterator[async_sessionmaker[AsyncSession]]:
+    database_path = tmp_path / "project_router.sqlite3"
+    engine = create_async_engine(f"sqlite+aiosqlite:///{database_path}")
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with engine.begin() as connection:
+        await connection.run_sync(SQLModel.metadata.create_all)
+
+    yield factory
+
+    await engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def client(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> AsyncIterator[AsyncClient]:
+    app = FastAPI()
+    app.add_middleware(
+        AuthMiddleware,
+        authenticate_request=StubAuthenticateRequest(),
+        whitelist_paths=set(),
+    )
+    app.include_router(project_router)
+
+    async def override_get_db() -> AsyncIterator[AsyncSession]:
+        async with session_factory() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_get_db
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client
+
+
+@pytest_asyncio.fixture
+async def users(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> dict[str, User]:
+    async with session_factory() as session:
+        creator = User(externalId="creator")
+        owner = User(externalId="owner")
+        member = User(externalId="member")
+        assignee = User(externalId="assignee")
+        session.add_all([creator, owner, member, assignee])
+        await session.commit()
+        await session.refresh(creator)
+        await session.refresh(owner)
+        await session.refresh(member)
+        await session.refresh(assignee)
+
+    return {
+        "creator": creator,
+        "owner": owner,
+        "member": member,
+        "assignee": assignee,
+    }
+
+
+@pytest.mark.asyncio
+async def test_project_crud_endpoints(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    users: dict[str, User],
+) -> None:
+    creator_id = users["creator"].id
+    owner_id = users["owner"].id
+    member_id = users["member"].id
+    assert creator_id is not None
+    assert owner_id is not None
+    assert member_id is not None
+
+    create_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "name": "Enterprise Launch",
+            "code": "ENT",
+            "priority": "medium",
+            "description": "Launch work",
+            "status": "On Track",
+            "owner_ids": [str(owner_id)],
+            "member_ids": [str(member_id)],
+        },
+    )
+
+    assert create_response.status_code == 201
+    created_project = create_response.json()
+    assert created_project["code"] == "ENT"
+    assert set(created_project["owner_ids"]) == {str(creator_id), str(owner_id)}
+    assert created_project["member_ids"] == [str(member_id)]
+
+    list_response = await client.get(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert list_response.status_code == 200
+    assert [project["id"] for project in list_response.json()] == [
+        created_project["id"]
+    ]
+
+    get_response = await client.get(
+        f"/projects/{created_project['id']}",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert get_response.status_code == 200
+    assert get_response.json()["name"] == "Enterprise Launch"
+
+    update_response = await client.patch(
+        f"/projects/{created_project['id']}",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Enterprise Launch Updated", "owner_ids": []},
+    )
+
+    assert update_response.status_code == 200
+    updated_project = update_response.json()
+    assert updated_project["name"] == "Enterprise Launch Updated"
+    assert updated_project["owner_ids"] == [str(creator_id)]
+
+    delete_response = await client.delete(
+        f"/projects/{created_project['id']}",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert delete_response.status_code == 204
+
+    project_id = UUID(created_project["id"])
+    async with session_factory() as session:
+        project = await session.get(Project, project_id)
+        project_owners = await session.scalars(
+            select(ProjectOwner).filter_by(project_id=project_id)
+        )
+        project_members = await session.scalars(
+            select(ProjectMember).filter_by(project_id=project_id)
+        )
+
+    assert project is None
+    assert project_owners.all() == []
+    assert project_members.all() == []
+
+
+@pytest.mark.asyncio
+async def test_project_create_rejects_duplicate_global_code(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    del users
+    payload = {
+        "name": "Enterprise Launch",
+        "code": "ENT",
+        "priority": "medium",
+    }
+
+    first_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json=payload,
+    )
+    second_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json=payload,
+    )
+
+    assert first_response.status_code == 201
+    assert second_response.status_code == 409
+    assert second_response.json() == {"detail": "Project code already exists"}
+
+
+@pytest.mark.asyncio
+async def test_task_crud_endpoints_do_not_expose_due_fields(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    users: dict[str, User],
+) -> None:
+    assignee_id = users["assignee"].id
+    assert assignee_id is not None
+
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Enterprise Launch", "code": "ENT", "priority": "medium"},
+    )
+    project_id = project_response.json()["id"]
+
+    create_response = await client.post(
+        f"/projects/{project_id}/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "title": "Finalize launch checklist",
+            "status": "todo",
+            "priority": "urgent",
+            "assignee_id": str(assignee_id),
+            "description": "Launch handoff",
+            "acceptance_criteria": "Checklist approved",
+            "tag": "Strategic",
+        },
+    )
+
+    assert create_response.status_code == 201
+    created_task = create_response.json()
+    assert created_task["title"] == "Finalize launch checklist"
+    assert "due_label" not in created_task
+    assert "due_date" not in created_task
+
+    list_response = await client.get(
+        f"/projects/{project_id}/tasks",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert list_response.status_code == 200
+    assert [task["id"] for task in list_response.json()] == [created_task["id"]]
+
+    get_response = await client.get(
+        f"/projects/{project_id}/tasks/{created_task['id']}",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert get_response.status_code == 200
+    assert get_response.json()["tag"] == "Strategic"
+
+    update_response = await client.patch(
+        f"/projects/{project_id}/tasks/{created_task['id']}",
+        headers={"Authorization": "Bearer token"},
+        json={"status": "done", "priority": "low"},
+    )
+
+    assert update_response.status_code == 200
+    updated_task = update_response.json()
+    assert updated_task["status"] == "done"
+    assert updated_task["priority"] == "low"
+
+    delete_response = await client.delete(
+        f"/projects/{project_id}/tasks/{created_task['id']}",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert delete_response.status_code == 204
+
+    async with session_factory() as session:
+        task = await session.get(Task, UUID(created_task["id"]))
+
+    assert task is None

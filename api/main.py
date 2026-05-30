@@ -10,6 +10,7 @@ from app.modules.auth.bootstrap import (
     get_auth_whitelist_paths,
 )
 from app.modules.auth.interface.auth_middleware import AuthMiddleware
+from app.modules.project.project_router import project_router
 from app.modules.seeder.startup import seed_reference_data
 from app.modules.user.user_router import user_router
 from app.services.database_service import create_db_and_tables
@@ -52,3 +53,4 @@ app.add_middleware(
 
 
 app.include_router(user_router)
+app.include_router(project_router)

@@ -1,3 +1,5 @@
+"""Run registered seeders in dependency order within a database session."""
+
 from collections.abc import Sequence
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,19 +9,40 @@ from app.modules.seeder.service import SeedService
 
 
 class SeederConfigurationError(Exception):
+    """Raised when seeder registration or configuration is invalid."""
+
     pass
 
 
 class SeederDependencyError(SeederConfigurationError):
+    """Raised when a seeder dependency is missing or cannot be resolved."""
+
     pass
 
 
 class SeederCycleError(SeederConfigurationError):
+    """Raised when seeder dependencies contain a cycle."""
+
     pass
 
 
 class SeederRunner:
+    """Coordinates seeder execution for a database session.
+
+    The runner validates unique seeder names, resolves dependencies between
+    seeders, and commits all seed changes as a single transaction.
+    """
+
     def __init__(self, seeders: Sequence[BaseSeeder], session: AsyncSession):
+        """Initialize the `SeederRunner`.
+
+        Args:
+            seeders: Seeder instances to register for execution.
+            session: Database session used by seeders and transaction handling.
+
+        Raises:
+            SeederConfigurationError: If multiple seeders share the same name.
+        """
         self._session = session
         self._seeders_by_name: dict[str, BaseSeeder] = {}
 
@@ -29,6 +52,15 @@ class SeederRunner:
             self._seeders_by_name[seeder.name] = seeder
 
     async def run(self) -> None:
+        """Run all registered seeders in dependency order.
+
+        Commits the session when every seeder succeeds and rolls back the
+        session if any seeder raises an exception.
+
+        Raises:
+            SeederConfigurationError: If dependency resolution fails.
+            Exception: Re-raises any exception raised by a seeder or session operation.
+        """
         ordered_seeders = self._resolve_order()
         ctx = SeedContext(
             session=self._session,

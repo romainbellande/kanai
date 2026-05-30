@@ -1,3 +1,5 @@
+"""Configure shared asynchronous database access for the application."""
+
 from collections.abc import AsyncIterator
 from importlib import import_module
 
@@ -18,10 +20,18 @@ DBSession = async_sessionmaker[AsyncSession](engine, expire_on_commit=False)
 
 
 def import_models() -> None:
+    """Import application models so SQLModel metadata includes their tables."""
+    import_module("app.modules.project.project_model")
     import_module("app.modules.user.user_model")
 
 
 async def get_db() -> AsyncIterator[AsyncSession]:
+    """Yield a request-scoped asynchronous database session.
+
+    Returns:
+        Asynchronous iterator that yields a database session and closes it
+        after request handling completes.
+    """
     db = DBSession()
     try:
         yield db

@@ -1,3 +1,5 @@
+"""Fetch and cache OpenID Connect provider metadata."""
+
 from copy import deepcopy
 
 from cachetools import TTLCache
@@ -7,7 +9,14 @@ from app.modules.auth.domain.exceptions import AuthenticationServiceException
 
 
 class OidcMetadataProvider:
+    """Provides cached access to OIDC discovery and JWKS metadata."""
+
     def __init__(self, discovery_endpoint: str) -> None:
+        """Initialize the metadata provider.
+
+        Args:
+            discovery_endpoint: URL for the OIDC discovery document.
+        """
         self.discovery_endpoint = discovery_endpoint
         self._discovery_cache: TTLCache[str, dict[str, object]] = TTLCache(
             maxsize=1024,
@@ -19,6 +28,15 @@ class OidcMetadataProvider:
         )
 
     async def get_discovery_document(self) -> dict[str, object]:
+        """Return the OIDC discovery document.
+
+        Returns:
+            A copy of the cached or fetched discovery document.
+
+        Raises:
+            AuthenticationServiceException: If the discovery document cannot be
+                fetched or is malformed.
+        """
         cached_document = self._discovery_cache.get(self.discovery_endpoint)
         if cached_document is not None:
             return deepcopy(cached_document)
@@ -28,6 +46,15 @@ class OidcMetadataProvider:
         return deepcopy(discovery_document)
 
     async def get_jwks(self) -> dict[str, object]:
+        """Return the JSON Web Key Set for the OIDC provider.
+
+        Returns:
+            A copy of the cached or fetched JWKS payload.
+
+        Raises:
+            AuthenticationServiceException: If the discovery document does not
+                include a JWKS URI or the JWKS payload is malformed.
+        """
         discovery_document = await self.get_discovery_document()
         jwks_uri = discovery_document.get("jwks_uri")
 

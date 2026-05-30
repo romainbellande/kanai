@@ -1,3 +1,5 @@
+"""JWT verification infrastructure backed by joserfc."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -14,21 +16,57 @@ from app.modules.auth.domain.session import Session
 
 
 class MetadataProvider(Protocol):
-    async def get_discovery_document(self) -> dict[str, object]: ...
+    """Provides OpenID Connect metadata required to validate tokens."""
 
-    async def get_jwks(self) -> dict[str, object]: ...
+    async def get_discovery_document(self) -> dict[str, object]:
+        """Fetch the OIDC discovery document.
+
+        Returns:
+            Discovery metadata used to configure token claim validation.
+        """
+        ...
+
+    async def get_jwks(self) -> dict[str, object]:
+        """Fetch the JSON Web Key Set for token signature verification.
+
+        Returns:
+            JWKS document containing public signing keys.
+        """
+        ...
 
 
 class JoserfcTokenVerifier:
+    """Verifies bearer tokens against OIDC metadata and JWKS keys."""
+
     def __init__(
         self,
         metadata_provider: MetadataProvider,
         expected_audience: str | None = None,
     ) -> None:
+        """Initialize the token verifier.
+
+        Args:
+            metadata_provider: Provider for OIDC discovery metadata and JWKS keys.
+            expected_audience: Required JWT audience when audience validation is
+                enabled. Defaults to None.
+        """
         self.metadata_provider = metadata_provider
         self.expected_audience = expected_audience
 
     async def verify(self, bearer_token: str) -> AuthenticatedContext:
+        """Validate a bearer token and return its authenticated context.
+
+        Args:
+            bearer_token: Encoded JWT bearer token to validate.
+
+        Returns:
+            Authenticated context derived from the token claims.
+
+        Raises:
+            AuthenticationServiceException: If OIDC metadata or JWKS setup fails.
+            InvalidTokenException: If the token cannot be decoded, validated, or
+                converted into a session.
+        """
         discovery_document = await self.metadata_provider.get_discovery_document()
         jwks = await self.metadata_provider.get_jwks()
 

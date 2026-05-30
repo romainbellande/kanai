@@ -1,10 +1,19 @@
+"""Configure application logging through Loguru."""
+
 from loguru import logger
 import logging
 import sys
 
 
 class InterceptHandler(logging.Handler):
+    """Route standard logging records through Loguru."""
+
     def emit(self, record):
+        """Emit a standard logging record through Loguru.
+
+        Args:
+            record: The standard logging record to emit.
+        """
         # Get corresponding Loguru level if it exists
         try:
             level = logger.level(record.levelname).name
@@ -23,6 +32,8 @@ class InterceptHandler(logging.Handler):
 
 
 def init():
+    """Initialize application logging handlers and formatting."""
+
     # Remove default Loguru handlers
     logger.remove()
 

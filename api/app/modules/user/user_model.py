@@ -1,3 +1,5 @@
+"""Database model for user records."""
+
 from datetime import datetime
 from uuid import UUID, uuid4
 
@@ -6,6 +8,8 @@ from sqlmodel import Field, SQLModel
 
 
 class User(SQLModel, table=True):
+    """Persisted user account linked to an external identity provider."""
+
     __tablename__ = "users"  # type: ignore[bad-override]
 
     id: UUID | None = Field(

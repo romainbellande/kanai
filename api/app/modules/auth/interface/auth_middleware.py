@@ -1,3 +1,5 @@
+"""ASGI middleware for authenticating HTTP requests."""
+
 from __future__ import annotations
 
 from collections.abc import Iterable
@@ -20,21 +22,54 @@ from app.modules.auth.interface.http_exceptions import (
 
 
 class AuthenticateRequestHandler(Protocol):
-    async def execute(self, bearer_token: str) -> AuthenticatedContext: ...
+    """Defines the request authentication use case required by middleware."""
+
+    async def execute(self, bearer_token: str) -> AuthenticatedContext:
+        """Authenticate a bearer token and return the authenticated context.
+
+        Args:
+            bearer_token: Token extracted from the HTTP Authorization header.
+
+        Returns:
+            Authenticated request context for downstream handlers.
+        """
+        ...
 
 
 class AuthMiddleware:
+    """Authenticates HTTP requests before passing them to the ASGI app.
+
+    The middleware skips non-HTTP scopes and configured whitelist paths. For
+    protected HTTP requests, it validates the Bearer token and stores the
+    authenticated context on the ASGI scope.
+    """
+
     def __init__(
         self,
         app: ASGIApp,
         authenticate_request: AuthenticateRequestHandler,
         whitelist_paths: Iterable[str] | None = None,
     ) -> None:
+        """Initialize the authentication middleware.
+
+        Args:
+            app: Downstream ASGI application to call after authentication.
+            authenticate_request: Handler used to authenticate bearer tokens.
+            whitelist_paths: Paths that bypass authentication. Defaults to no
+                whitelisted paths.
+        """
         self.app = app
         self.authenticate_request = authenticate_request
         self.whitelist_paths = set(whitelist_paths or ())
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        """Authenticate a request scope and call the downstream application.
+
+        Args:
+            scope: ASGI connection scope for the request.
+            receive: ASGI callable for receiving request events.
+            send: ASGI callable for sending response events.
+        """
         if scope["type"] != "http" or self._is_whitelisted_path(scope["path"]):
             await self.app(scope, receive, send)
             return
