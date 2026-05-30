@@ -63,3 +63,6 @@ pre-commit:
       stage_fixed: true
       glob: "*.{ts,tsx,js,jsx,json,css,html}"
       root: ./client
+
+    - name: secrets
+      run: gitleaks git --pre-commit --redact --staged --verbose
