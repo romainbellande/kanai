@@ -46,6 +46,14 @@ class StubTokenVerifier:
         return self.context
 
 
+class StubUserProvisioner:
+    def __init__(self) -> None:
+        self.contexts: list[AuthenticatedContext] = []
+
+    async def provision(self, context: AuthenticatedContext) -> None:
+        self.contexts.append(context)
+
+
 class FixedDateTime(datetime):
     current: datetime
 
@@ -76,12 +84,18 @@ async def test_existing_valid_session_skips_token_verification() -> None:
             build_session(expires_at=datetime.now(UTC) + timedelta(minutes=10))
         )
     )
+    user_provisioner = StubUserProvisioner()
 
-    use_case = AuthenticateRequest(repository=repository, token_verifier=verifier)
+    use_case = AuthenticateRequest(
+        repository=repository,
+        token_verifier=verifier,
+        user_provisioner=user_provisioner,
+    )
 
     context = await use_case.execute("bearer-token")
 
     assert context == AuthenticatedContext.from_session(existing_session)
+    assert user_provisioner.contexts == [context]
     assert verifier.calls == []
     assert repository.saved_calls == []
     assert repository.deleted_fingerprints == []
@@ -99,12 +113,18 @@ async def test_missing_session_verifies_token_and_saves_session_with_positive_tt
         build_session(expires_at=datetime.now(UTC) + timedelta(minutes=5))
     )
     verifier = StubTokenVerifier(verified_context)
+    user_provisioner = StubUserProvisioner()
 
-    use_case = AuthenticateRequest(repository=repository, token_verifier=verifier)
+    use_case = AuthenticateRequest(
+        repository=repository,
+        token_verifier=verifier,
+        user_provisioner=user_provisioner,
+    )
 
     context = await use_case.execute("bearer-token")
 
     assert context == verified_context
+    assert user_provisioner.contexts == [context]
     assert verifier.calls == ["bearer-token"]
     assert len(repository.saved_calls) == 1
 
@@ -128,12 +148,18 @@ async def test_expired_session_is_deleted_before_revalidation() -> None:
         build_session(expires_at=datetime.now(UTC) + timedelta(minutes=5))
     )
     verifier = StubTokenVerifier(verified_context)
+    user_provisioner = StubUserProvisioner()
 
-    use_case = AuthenticateRequest(repository=repository, token_verifier=verifier)
+    use_case = AuthenticateRequest(
+        repository=repository,
+        token_verifier=verifier,
+        user_provisioner=user_provisioner,
+    )
 
     context = await use_case.execute("bearer-token")
 
     assert context == verified_context
+    assert user_provisioner.contexts == [context]
     assert repository.deleted_fingerprints == [
         TokenFingerprint.from_token("bearer-token")
     ]
@@ -149,7 +175,11 @@ async def test_verified_token_with_non_positive_ttl_is_rejected() -> None:
     )
     verifier = StubTokenVerifier(verified_context)
 
-    use_case = AuthenticateRequest(repository=repository, token_verifier=verifier)
+    use_case = AuthenticateRequest(
+        repository=repository,
+        token_verifier=verifier,
+        user_provisioner=StubUserProvisioner(),
+    )
 
     with pytest.raises(InvalidTokenException):
         await use_case.execute("bearer-token")
@@ -169,7 +199,11 @@ async def test_blank_or_whitespace_token_raises_invalid_token_exception(
         )
     )
 
-    use_case = AuthenticateRequest(repository=repository, token_verifier=verifier)
+    use_case = AuthenticateRequest(
+        repository=repository,
+        token_verifier=verifier,
+        user_provisioner=StubUserProvisioner(),
+    )
 
     with pytest.raises(InvalidTokenException, match="Bearer token cannot be empty"):
         await use_case.execute(bearer_token)
@@ -194,12 +228,18 @@ async def test_token_with_less_than_one_second_remaining_is_accepted_and_saved(
         build_session(expires_at=fixed_now + timedelta(milliseconds=100))
     )
     verifier = StubTokenVerifier(verified_context)
+    user_provisioner = StubUserProvisioner()
 
-    use_case = AuthenticateRequest(repository=repository, token_verifier=verifier)
+    use_case = AuthenticateRequest(
+        repository=repository,
+        token_verifier=verifier,
+        user_provisioner=user_provisioner,
+    )
 
     context = await use_case.execute("bearer-token")
 
     assert context == verified_context
+    assert user_provisioner.contexts == [context]
     assert verifier.calls == ["bearer-token"]
     assert len(repository.saved_calls) == 1
     assert repository.saved_calls[0][2] == 1

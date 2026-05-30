@@ -57,6 +57,11 @@ class StubTokenVerifier:
         raise AssertionError("verify should not be called")
 
 
+class StubUserProvisioner:
+    async def provision(self, context: AuthenticatedContext) -> None:
+        del context
+
+
 def build_context() -> AuthenticatedContext:
     return AuthenticatedContext(
         subject="user-1",
@@ -183,6 +188,7 @@ def test_repository_failure_returns_503() -> None:
             AuthenticateRequest(
                 repository=FailingSessionRepository(),
                 token_verifier=StubTokenVerifier(),
+                user_provisioner=StubUserProvisioner(),
             )
         )
     )

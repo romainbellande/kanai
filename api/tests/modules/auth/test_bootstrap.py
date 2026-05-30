@@ -7,6 +7,9 @@ from app.modules.auth.bootstrap import (
 from app.modules.auth.infrastructure.joserfc_token_verifier import (
     JoserfcTokenVerifier,
 )
+from app.modules.auth.infrastructure.database_user_provisioner import (
+    DatabaseUserProvisioner,
+)
 from app.modules.auth.infrastructure.redis_session_repository import (
     RedisSessionRepository,
 )
@@ -27,6 +30,10 @@ def test_build_authenticate_request_wires_configured_audience_and_redis_reposito
     assert isinstance(authenticate_request._repository, RedisSessionRepository)
     assert authenticate_request._repository._redis_service is redis_service
     assert isinstance(authenticate_request._token_verifier, JoserfcTokenVerifier)
+    assert isinstance(
+        authenticate_request._user_provisioner,
+        DatabaseUserProvisioner,
+    )
     assert (
         authenticate_request._token_verifier.expected_audience == settings.auth.audience
     )

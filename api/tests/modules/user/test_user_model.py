@@ -34,6 +34,7 @@ def test_user_model_uses_sqlmodel_metadata_with_expected_columns() -> None:
     assert User.metadata is SQLModel.metadata
     assert isinstance(columns.id.type, Uuid)
     assert columns.externalId.nullable is False
+    assert columns.externalId.unique is True
     assert columns.created_at.nullable is False
     assert columns.created_at.server_default is not None
     assert columns.updated_at.nullable is False

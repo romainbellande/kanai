@@ -4,6 +4,7 @@ import math
 from datetime import UTC, datetime
 
 from app.modules.auth.application.dto import AuthenticatedContext
+from app.modules.auth.application.ports import AuthenticatedUserProvisioner
 from app.modules.auth.application.ports import TokenVerifier
 from app.modules.auth.domain.exceptions import InvalidTokenException
 from app.modules.auth.domain.repositories import SessionRepository
@@ -16,9 +17,11 @@ class AuthenticateRequest:
         self,
         repository: SessionRepository,
         token_verifier: TokenVerifier,
+        user_provisioner: AuthenticatedUserProvisioner,
     ) -> None:
         self._repository = repository
         self._token_verifier = token_verifier
+        self._user_provisioner = user_provisioner
 
     async def execute(self, bearer_token: str) -> AuthenticatedContext:
         try:
@@ -30,7 +33,11 @@ class AuthenticateRequest:
 
         if existing_session is not None:
             if not existing_session.is_expired():
-                return AuthenticatedContext.from_session(existing_session)
+                authenticated_context = AuthenticatedContext.from_session(
+                    existing_session
+                )
+                await self._user_provisioner.provision(authenticated_context)
+                return authenticated_context
 
             await self._repository.delete(fingerprint)
 
@@ -47,6 +54,7 @@ class AuthenticateRequest:
             claims=authenticated_context.claims,
         )
         await self._repository.save(fingerprint, session, ttl_seconds)
+        await self._user_provisioner.provision(authenticated_context)
         return authenticated_context
 
     def _compute_ttl_seconds(self, expires_at: datetime) -> int:

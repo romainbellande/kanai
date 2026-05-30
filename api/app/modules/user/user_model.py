@@ -13,7 +13,7 @@ class User(SQLModel, table=True):
         sa_column=Column(Uuid(), primary_key=True, nullable=False, default=uuid4),
     )
     externalId: str = Field(
-        sa_column=Column("externalId", String(), nullable=False),
+        sa_column=Column("externalId", String(), nullable=False, unique=True),
     )
     updated_at: datetime | None = Field(
         default=None,
