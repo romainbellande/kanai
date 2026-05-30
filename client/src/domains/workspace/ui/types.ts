@@ -4,6 +4,7 @@ export type SidebarItem = {
 	label: string;
 	icon: LucideIcon;
 	active?: boolean;
+	to?: string;
 };
 
 export type BoardMetaItem = {

@@ -8,6 +8,7 @@ import {
 	FileText,
 	LayoutDashboard,
 	LogOut,
+	Plus,
 	Search,
 	Settings2,
 	Target,
@@ -24,7 +25,7 @@ import { SidebarNavItem } from "#/domains/workspace/ui/molecules/SidebarNavItem"
 import type { SidebarItem } from "#/domains/workspace/ui/types";
 
 const sidebarItems: SidebarItem[] = [
-	{ label: "Projects", icon: LayoutDashboard, active: true },
+	{ label: "Projects", icon: LayoutDashboard, active: true, to: "/" },
 	{ label: "Team Goals", icon: Target },
 	{ label: "Analytics", icon: TrendingUp },
 ];
@@ -265,14 +266,23 @@ export function ProjectsPage() {
 										<h3 className="font-display text-xl font-semibold tracking-tight">
 											Projects
 										</h3>
-										<label className="flex w-full items-center gap-2 rounded-full border border-[var(--outline-variant)] bg-[var(--surface-container-low)] px-4 py-2 text-[var(--on-surface-variant)] focus-within:border-[var(--primary)] sm:w-64">
-											<Search className="h-4 w-4" />
-											<input
-												className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm outline-none placeholder:text-[var(--on-surface-variant)]"
-												placeholder="Search projects..."
-												type="search"
-											/>
-										</label>
+										<div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+											<label className="flex w-full items-center gap-2 rounded-full border border-[var(--outline-variant)] bg-[var(--surface-container-low)] px-4 py-2 text-[var(--on-surface-variant)] focus-within:border-[var(--primary)] sm:w-64">
+												<Search className="h-4 w-4" />
+												<input
+													className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm outline-none placeholder:text-[var(--on-surface-variant)]"
+													placeholder="Search projects..."
+													type="search"
+												/>
+											</label>
+											<Link
+												to="/projects/new"
+												aria-label="Add project"
+												className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[var(--primary)] no-underline shadow-[0_12px_28px_rgba(0,61,155,0.18)] hover:bg-[var(--primary-container)]"
+											>
+												<Plus className="h-4 w-4 text-white" />
+											</Link>
+										</div>
 									</div>
 
 									<div className="flex flex-col gap-2 p-4">

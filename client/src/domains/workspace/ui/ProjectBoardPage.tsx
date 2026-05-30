@@ -28,7 +28,7 @@ import { SidebarNavItem } from "#/domains/workspace/ui/molecules/SidebarNavItem"
 import type { SidebarItem } from "#/domains/workspace/ui/types";
 
 const sidebarItems: SidebarItem[] = [
-	{ label: "Projects", icon: LayoutDashboard, active: true },
+	{ label: "Projects", icon: LayoutDashboard, active: true, to: "/" },
 	{ label: "Team Goals", icon: Target },
 	{ label: "Analytics", icon: TrendingUp },
 ];
