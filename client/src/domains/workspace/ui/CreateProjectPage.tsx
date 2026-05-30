@@ -25,10 +25,19 @@ function getInitials(value: string | null | undefined): string {
 	return normalizedValue ? normalizedValue.slice(0, 1).toUpperCase() : "";
 }
 
+function createProjectCode(value: string): string {
+	return value
+		.replace(/[^a-z0-9]/gi, "")
+		.slice(0, 3)
+		.toUpperCase();
+}
+
 export function CreateProjectPage() {
 	const navigate = useNavigate();
 	const [isMembersOpen, setIsMembersOpen] = useState(false);
 	const [memberSearch, setMemberSearch] = useState("");
+	const [projectCode, setProjectCode] = useState("");
+	const [isProjectCodeEdited, setIsProjectCodeEdited] = useState(false);
 	const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
 	const normalizedMemberSearch = memberSearch.trim().toLowerCase();
 	const filteredMembers = projectMembers.filter(
@@ -53,6 +62,17 @@ export function CreateProjectPage() {
 		);
 	}
 
+	function handleProjectNameChange(value: string) {
+		if (!isProjectCodeEdited) {
+			setProjectCode(createProjectCode(value));
+		}
+	}
+
+	function handleProjectCodeChange(value: string) {
+		setIsProjectCodeEdited(true);
+		setProjectCode(createProjectCode(value));
+	}
+
 	return (
 		<WorkspaceLayout
 			breadcrumbItems={[{ label: "Projects", to: "/" }, { label: "New" }]}
@@ -65,7 +85,7 @@ export function CreateProjectPage() {
 			<section className="rise-in rounded-[1.75rem] border border-[color:color-mix(in_srgb,var(--outline-variant)_50%,transparent)] bg-[var(--surface-container-lowest)] p-6 shadow-[0_18px_42px_rgba(25,28,30,0.04)] sm:p-10">
 				<form className="flex flex-col gap-8" onSubmit={handleSubmit}>
 					<div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-						<div>
+						<div className="sm:col-span-2">
 							<label
 								className="mb-2 block text-sm font-semibold text-[var(--on-surface)]"
 								htmlFor="projectName"
@@ -76,9 +96,40 @@ export function CreateProjectPage() {
 								className="w-full rounded-lg border border-[var(--outline-variant)] bg-[var(--surface)] px-4 py-3 text-base text-[var(--on-surface)] outline-none transition placeholder:text-[var(--outline)] focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]"
 								id="projectName"
 								name="projectName"
+								onChange={(event) =>
+									handleProjectNameChange(event.target.value)
+								}
 								placeholder="e.g., Q3 Market Expansion"
 								type="text"
 							/>
+						</div>
+
+						<div>
+							<label
+								className="mb-2 block text-sm font-semibold text-[var(--on-surface)]"
+								htmlFor="projectCode"
+							>
+								Project Code
+							</label>
+							<input
+								className="w-full rounded-lg border border-[var(--outline-variant)] bg-[var(--surface)] px-4 py-3 text-base text-[var(--on-surface)] uppercase outline-none transition placeholder:text-[var(--outline)] focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]"
+								id="projectCode"
+								maxLength={3}
+								minLength={3}
+								name="projectCode"
+								onChange={(event) =>
+									handleProjectCodeChange(event.target.value)
+								}
+								pattern="[A-Z0-9]{3}"
+								placeholder="Q3M"
+								required
+								title="Use exactly 3 uppercase letters or numbers."
+								type="text"
+								value={projectCode}
+							/>
+							<p className="mt-2 text-xs text-[var(--on-surface-variant)]">
+								Auto-generated from the project name, but editable.
+							</p>
 						</div>
 
 						<div>

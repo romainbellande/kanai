@@ -218,12 +218,14 @@ tags:
 <concrete future trigger or context>
 
 ## Backlinks
-- [[memories/<related-note-without-.md>|<short label>]]
+- [[memories/<related-previous-note-without-.md>|<short label>]]
 ~~~
 
 Backlink rules:
-- Link to 1-5 relevant previous memory notes from the new memory.
-- If previous memories exist but none are strongly related, link the most recent memory as a continuity backlink.
+- Backlinks must point to previous memories that share a clear subject with the new insight, such as the same subsystem, workflow, tool, convention, or recurring problem.
+- Inspect previous memories through the Obsidian MCP tools before choosing backlinks; do not inspect or modify memory notes through shell or direct filesystem writes.
+- Link to 1-5 relevant previous memory notes when a shared subject exists.
+- If previous memories exist but none share a clear subject, write \`- None yet\` instead of adding a continuity backlink.
 - If this is the first memory, write \`- None yet\` in the Backlinks section.
 - If a new memory supersedes an older memory, link the older memory and state what changed.
 

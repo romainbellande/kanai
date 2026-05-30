@@ -32,8 +32,10 @@ type WorkspaceLayoutProps = {
 
 type WorkspaceBreadcrumbItem = {
 	label: string;
-	to?: "/";
-};
+} & (
+	| { to?: "/"; params?: never }
+	| { to: "/projects/$projectId"; params: { projectId: string } }
+);
 
 function getLogoutUrl() {
 	if (typeof window === "undefined") {
@@ -97,6 +99,7 @@ export function WorkspaceLayout({
 														{item.to && !isLastItem ? (
 															<Link
 																to={item.to}
+																params={item.params}
 																className="font-medium text-[var(--on-surface-variant)] no-underline hover:text-[var(--primary)]"
 															>
 																{item.label}

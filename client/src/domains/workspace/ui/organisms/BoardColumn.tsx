@@ -41,7 +41,7 @@ export function BoardColumn({ column, animationDelay }: BoardColumnProps) {
 				className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[var(--surface-container-lowest)] px-4 py-3 text-sm font-medium text-[var(--on-surface-variant)]"
 			>
 				<Plus className="h-4 w-4" />
-				Add a card
+				Add a task
 			</button>
 		</section>
 	);
