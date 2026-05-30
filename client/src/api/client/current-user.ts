@@ -11,6 +11,7 @@ export type CurrentUser = {
 };
 
 const currentUserQueryKey = ["users", "me"] as const;
+
 export { CurrentUserAuthError } from "./utils";
 
 function createUsersApi(): UsersApi {

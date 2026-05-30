@@ -17,75 +17,71 @@ export function WorkspaceSidebar({
 	sidebarItems,
 }: WorkspaceSidebarProps) {
 	return (
-		<aside className="bg-[var(--surface-container-low)] px-4 py-4 sm:px-6 lg:w-72 lg:px-5 lg:py-6">
-			<div className="rounded-[1.75rem] bg-[rgba(255,255,255,0.78)] p-5 shadow-[0_18px_42px_rgba(25,28,30,0.06)] backdrop-blur-xl">
+		<aside className="border-[var(--outline-variant)] bg-[var(--surface-container-low)] px-4 py-4 lg:sticky lg:top-0 lg:h-screen lg:w-72 lg:flex-shrink-0 lg:border-r lg:px-6 lg:py-6">
+			<div className="flex h-full flex-col rounded-[1.75rem] bg-[color:color-mix(in_srgb,var(--surface-container-lowest)_78%,transparent)] p-5 shadow-[0_18px_42px_rgba(25,28,30,0.06)] backdrop-blur-xl lg:rounded-none lg:bg-transparent lg:p-0 lg:shadow-none">
 				<div className="flex items-start justify-between gap-3">
 					<div>
-						<p className="font-display text-xl font-semibold tracking-tight text-[var(--on-surface)]">
+						<h1 className="font-display text-xl font-bold tracking-tight text-[var(--on-surface)]">
 							Executive Architect
-						</p>
+						</h1>
 						<p className="mt-1 text-sm text-[var(--on-surface-variant)]">
 							Board Workspace
 						</p>
 					</div>
 					<WorkspaceIconButton
 						size="sm"
-						className="bg-[var(--surface-container)] text-[var(--on-surface-variant)]"
+						className="bg-[var(--surface-container-highest)] text-[var(--on-surface-variant)]"
 					>
 						<Search className="h-4 w-4" />
 					</WorkspaceIconButton>
 				</div>
 
-				<div className="mt-8">
-					<p className="island-kicker mb-3">Workspace</p>
-					<div className="rounded-2xl bg-[var(--surface-container)] p-4">
-						<p className="text-sm font-semibold text-[var(--on-surface)]">
-							Global Strategy
-						</p>
-						<p className="mt-1 text-sm text-[var(--on-surface-variant)]">
-							Premium Tier
-						</p>
-					</div>
+				<div className="mt-8 rounded-xl bg-[var(--surface-container-high)] p-3">
+					<h2 className="text-sm font-semibold text-[var(--on-surface)]">
+						Global Strategy
+					</h2>
+					<p className="mt-1 text-xs font-semibold text-[var(--on-surface-variant)]">
+						Premium Tier
+					</p>
 				</div>
 
-				<nav className="mt-8 space-y-2">
+				<nav className="mt-8 flex flex-col gap-1">
 					{sidebarItems.map((item) => (
 						<SidebarNavItem key={item.label} {...item} />
 					))}
 				</nav>
 
-				<div className="mt-8 space-y-2">
-					<Link
-						to="/about"
-						className="flex items-center gap-3 rounded-full px-4 py-3 text-sm font-medium text-[var(--on-surface-variant)] no-underline"
-					>
-						<CircleHelp className="h-4 w-4" />
-						<span>Help</span>
-					</Link>
-					{logoutUrl ? (
-						<button
-							type="button"
-							onClick={onLogout}
-							className="flex w-full items-center gap-3 rounded-full px-4 py-3 text-left text-sm font-medium text-[var(--on-surface-variant)]"
-						>
-							<LogOut className="h-4 w-4" />
-							<span>Logout</span>
-						</button>
-					) : (
+				<div className="mt-8 border-t border-[var(--outline-variant)] pt-6 lg:mt-auto">
+					<nav className="mb-4 flex flex-col gap-1">
 						<Link
-							to="/login"
-							className="flex items-center gap-3 rounded-full px-4 py-3 text-sm font-medium text-[var(--on-surface-variant)] no-underline"
+							to="/about"
+							className="flex items-center gap-3 rounded-full px-4 py-3 text-sm font-medium text-[var(--on-surface-variant)] no-underline hover:bg-[var(--surface-bright)]"
 						>
-							<LogOut className="h-4 w-4" />
-							<span>Login</span>
+							<CircleHelp className="h-4 w-4" />
+							Help
 						</Link>
-					)}
-				</div>
-
-				<div className="mt-8 flex flex-wrap gap-3">
+						{logoutUrl ? (
+							<button
+								type="button"
+								onClick={onLogout}
+								className="flex items-center gap-3 rounded-full px-4 py-3 text-left text-sm font-medium text-[var(--on-surface-variant)] hover:bg-[var(--surface-bright)]"
+							>
+								<LogOut className="h-4 w-4" />
+								Logout
+							</button>
+						) : (
+							<Link
+								to="/login"
+								className="flex items-center gap-3 rounded-full px-4 py-3 text-sm font-medium text-[var(--on-surface-variant)] no-underline hover:bg-[var(--surface-bright)]"
+							>
+								<LogOut className="h-4 w-4" />
+								Login
+							</Link>
+						)}
+					</nav>
 					<button
 						type="button"
-						className="inline-flex flex-1 items-center justify-center gap-2 rounded-full bg-[linear-gradient(135deg,var(--primary),var(--primary-container))] px-4 py-3 text-sm font-semibold text-[var(--on-primary)] shadow-[0_18px_36px_rgba(12,86,208,0.18)]"
+						className="flex w-full items-center justify-center gap-2 rounded-full bg-[var(--primary)] px-4 py-3 text-sm font-semibold text-[var(--on-primary)] shadow-[0_12px_28px_rgba(0,61,155,0.18)] hover:bg-[var(--primary-container)]"
 					>
 						<UserPlus className="h-4 w-4" />
 						Invite Member

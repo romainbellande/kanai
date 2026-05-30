@@ -2,7 +2,6 @@ import { Link, useParams } from "@tanstack/react-router";
 import {
 	Bell,
 	Calendar,
-	ChevronDown,
 	ChevronRight,
 	CircleHelp,
 	FileText,
@@ -31,13 +30,6 @@ const sidebarItems: SidebarItem[] = [
 	{ label: "Projects", icon: LayoutDashboard, active: true, to: "/" },
 	{ label: "Team Goals", icon: Target },
 	{ label: "Analytics", icon: TrendingUp },
-];
-
-const sectionTabs = [
-	{ label: "Projects", active: true },
-	{ label: "Team" },
-	{ label: "Reports" },
-	{ label: "Archives" },
 ];
 
 const projectNames: Record<string, string> = {
@@ -204,34 +196,8 @@ export function ProjectBoardPage() {
 				</aside>
 
 				<section className="flex min-w-0 flex-1 flex-col lg:h-screen">
-					<header className="sticky top-0 z-20 flex flex-col gap-4 border-[var(--outline-variant)] bg-[color:color-mix(in_srgb,var(--background)_88%,transparent)] px-4 py-4 backdrop-blur-xl sm:px-6 lg:flex-row lg:items-center lg:border-b lg:px-8">
-						<div className="flex min-w-0 flex-1 items-center gap-5">
-							<button
-								type="button"
-								className="inline-flex items-center gap-1.5 text-sm font-semibold"
-							>
-								Global Strategy
-								<ChevronDown className="h-4 w-4" />
-							</button>
-							<nav className="hidden items-center gap-5 md:flex">
-								{sectionTabs.map(({ label, active }) => (
-									<button
-										key={label}
-										type="button"
-										className={[
-											"border-b-2 pb-1 text-sm font-semibold",
-											active
-												? "border-[var(--primary)] text-[var(--primary)]"
-												: "border-transparent text-[var(--on-surface-variant)] hover:text-[var(--primary)]",
-										].join(" ")}
-									>
-										{label}
-									</button>
-								))}
-							</nav>
-						</div>
-
-						<label className="flex min-w-0 flex-1 items-center gap-2 rounded-full bg-[var(--primary-fixed)] px-4 py-2 text-[var(--on-primary-fixed)] focus-within:ring-2 focus-within:ring-[var(--primary)] lg:max-w-2xl">
+					<header className="sticky top-0 z-20 grid gap-4 border-[var(--outline-variant)] bg-[color:color-mix(in_srgb,var(--background)_88%,transparent)] px-4 py-4 backdrop-blur-xl sm:px-6 lg:grid-cols-[1fr_minmax(0,42rem)_1fr] lg:items-center lg:border-b lg:px-8">
+						<label className="flex min-w-0 items-center gap-2 rounded-full bg-[var(--primary-fixed)] px-4 py-2 text-[var(--on-primary-fixed)] focus-within:ring-2 focus-within:ring-[var(--primary)] lg:col-start-2">
 							<Search className="h-4 w-4 flex-shrink-0" />
 							<input
 								className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm outline-none placeholder:text-[var(--on-primary-fixed)]"
@@ -240,7 +206,7 @@ export function ProjectBoardPage() {
 							/>
 						</label>
 
-						<div className="flex items-center gap-2 self-end lg:self-auto">
+						<div className="flex items-center gap-2 justify-self-end lg:col-start-3 lg:row-start-1">
 							<WorkspaceIconButton className="text-[var(--on-surface-variant)] hover:bg-[var(--surface-container-high)]">
 								<Bell className="h-4 w-4" />
 							</WorkspaceIconButton>

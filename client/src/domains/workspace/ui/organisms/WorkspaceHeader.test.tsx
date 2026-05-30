@@ -46,28 +46,18 @@ describe("WorkspaceHeader", () => {
 	});
 
 	it("renders current-user initials in the account avatar", () => {
-		renderWithQueryClient(
-			<WorkspaceHeader
-				logoutUrl="https://issuer.example.test/logout"
-				onLogout={() => undefined}
-				sectionTabs={[{ label: "Projects", active: true }]}
-			/>,
-			{ id: "123", first_name: "John", last_name: "Doe" },
-		);
+		renderWithQueryClient(<WorkspaceHeader />, {
+			id: "123",
+			first_name: "John",
+			last_name: "Doe",
+		});
 
 		expect(screen.getByText("JD")).toBeTruthy();
 		expect(screen.getByRole("button", { name: /account/i })).toBeTruthy();
 	});
 
 	it("falls back to the account label when initials cannot be derived", () => {
-		renderWithQueryClient(
-			<WorkspaceHeader
-				logoutUrl={null}
-				onLogout={() => undefined}
-				sectionTabs={[{ label: "Projects", active: true }]}
-			/>,
-			{ id: "123" },
-		);
+		renderWithQueryClient(<WorkspaceHeader />, { id: "123" });
 
 		expect(screen.getByRole("button", { name: /account/i })).toBeTruthy();
 		expect(screen.queryByText("JD")).toBeNull();
