@@ -1,3 +1,6 @@
 .env
 .worktrees/
 opencode.json
+!AGENTS.md
+!.opencode
+!opencode.json
