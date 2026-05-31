@@ -11,7 +11,7 @@ This file is for coding agents working in `/home/naimor/dev/kanai/api`.
 - Database layer: SQLAlchemy asyncio
 - Migrations: Alembic
 - Lint/format: Ruff
-- Type checking: Pyrefly
+- Type checking: ty
 - Tests: Pytest with `pytest-asyncio`, `pytest-xdist`, `pytest-cov`, `pytest-httpx`, `pytest-env`
 
 ## Repository Layout
@@ -44,7 +44,7 @@ This file is for coding agents working in `/home/naimor/dev/kanai/api`.
 - Lint only, no writes: `uv run ruff check .`
 - Format only: `uv run ruff format .`
 - Type check: `just typecheck`
-- Direct type check: `uv run pyrefly check --summarize-errors`
+- Direct type check: `uvx ty check`
 
 - Full test suite: `just tests`
 - Direct full test command: `uv run pytest -n auto -qq --show-capture=no --color=no`
@@ -92,7 +92,7 @@ This file is for coding agents working in `/home/naimor/dev/kanai/api`.
 - Use `X | None` syntax instead of `Optional[X]` in new code.
 - Keep request/response boundaries typed with Pydantic models once schemas are introduced.
 - Make async database dependencies and service entrypoints obviously typed.
-- Pyrefly is part of the default workflow, so leave code type-check friendly.
+- `ty` is part of the default workflow, so leave code type-check friendly.
 
 ## Naming Conventions
 

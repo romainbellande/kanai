@@ -23,7 +23,7 @@ inspector server:
     npx @modelcontextprotocol/inspector --config ./mcp.json --server {{server}}
 
 typecheck:
-    uv run pyrefly check --summarize-errors
+    uvx ty check
 
 check-all:
     just typecheck

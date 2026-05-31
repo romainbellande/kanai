@@ -14,7 +14,7 @@ These repository-level backend notes apply to `api/`, but `api/AGENTS.md` is the
 - Direct Ruff lint fix: `uv run ruff check . --fix`
 - Format with Ruff: `uv run ruff format .`
 - Type check: `just typecheck`
-- Direct type check: `uv run pyrefly check --summarize-errors`
+- Direct type check: `uvx ty check`
 - Run full backend tests: `just tests`
 - Direct backend tests: `uv run pytest -n auto -qq --show-capture=no --color=no`
 - Coverage run from Justfile: `just tests-cov`

@@ -13,7 +13,7 @@ This repository has two active workspaces: `client/` and `api/`.
 ## Quick Reference
 
 - Frontend: React 19, Vite 7, TanStack Router, TypeScript, Vitest, Tailwind CSS v4, Biome.
-- Backend: FastAPI, `uv`, Ruff, Pyrefly, Pytest, SQLAlchemy asyncio, Alembic, Pydantic Settings.
+- Backend: FastAPI, `uv`, Ruff, ty, Pytest, SQLAlchemy asyncio, Alembic, Pydantic Settings.
 - Infra: `compose.yml` defines a local Keycloak service.
 
 ## Commands
