@@ -2,6 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
+	act,
 	cleanup,
 	fireEvent,
 	render,
@@ -12,6 +13,7 @@ import type { AnchorHTMLAttributes, ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+	currentUserQueryOptions,
 	type Project,
 	projectQueryOptions,
 	projectTasksQueryOptions,
@@ -85,6 +87,12 @@ function renderTaskDetailPage(
 	ui: ReactNode,
 	queryClient = createTestQueryClient(),
 ) {
+	queryClient.setQueryData(currentUserQueryOptions().queryKey, {
+		id: "user-1",
+		first_name: "Task",
+		last_name: "Owner",
+	});
+
 	return render(
 		<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>,
 	);
@@ -213,5 +221,33 @@ describe("TaskDetailPage", () => {
 		await waitFor(() => {
 			expect(screen.getByDisplayValue("Unsaved Task")).toBeTruthy();
 		});
+	});
+
+	it("keeps unsaved edits visible when task details refetch", async () => {
+		const { TaskDetailPage } = await import(
+			"#/domains/workspace/ui/TaskDetailPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project(),
+		);
+		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
+			task(),
+		]);
+
+		renderTaskDetailPage(<TaskDetailPage />, queryClient);
+
+		fireEvent.change(screen.getByLabelText("Task Title"), {
+			target: { value: "Unsaved Task" },
+		});
+		act(() => {
+			queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
+				task({ title: "Server Refetch Task" }),
+			]);
+		});
+
+		expect(screen.getByDisplayValue("Unsaved Task")).toBeTruthy();
+		expect(screen.queryByDisplayValue("Server Refetch Task")).toBeNull();
 	});
 });

@@ -146,22 +146,13 @@ async def update_task(
             status_code=status.HTTP_404_NOT_FOUND, detail="Task not found"
         )
 
-    if payload.assignee_id is not None:
-        await validate_user_ids(session, {payload.assignee_id})
+    updates = payload.update_values()
+    assignee_id = updates.get("assignee_id")
+    if isinstance(assignee_id, UUID):
+        await validate_user_ids(session, {assignee_id})
 
-    for field_name in (
-        "title",
-        "status",
-        "priority",
-        "rank",
-        "assignee_id",
-        "description",
-        "acceptance_criteria",
-        "tag",
-    ):
-        value = getattr(payload, field_name)
-        if value is not None:
-            setattr(task, field_name, value)
+    for field_name, value in updates.items():
+        setattr(task, field_name, value)
 
     return task_to_read(await repository.update(task))
 

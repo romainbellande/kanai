@@ -42,20 +42,25 @@ export function TaskDetailPage() {
 	const updateTaskMutation = useUpdateProjectTaskMutation();
 	const task = tasksQuery.data?.find((item) => item.id === taskId) ?? null;
 	const [formState, setFormState] = useState<TaskFormState | null>(null);
+	const [formTaskId, setFormTaskId] = useState<string | null>(null);
+	const [isDirty, setIsDirty] = useState(false);
 	const [formError, setFormError] = useState<string | null>(null);
 	const [savedMessage, setSavedMessage] = useState<string | null>(null);
 	const projectName = projectQuery.data?.name ?? "Project";
 
 	useEffect(() => {
-		if (task) {
+		if (task && (formTaskId !== task.id || !isDirty)) {
 			setFormState(getFormState(task));
+			setFormTaskId(task.id);
+			setIsDirty(false);
 		}
-	}, [task]);
+	}, [formTaskId, isDirty, task]);
 
 	function updateField(field: keyof TaskFormState, value: string) {
 		setFormState((current) =>
 			current ? { ...current, [field]: value } : current,
 		);
+		setIsDirty(true);
 		setSavedMessage(null);
 	}
 
@@ -97,6 +102,8 @@ export function TaskDetailPage() {
 				queryKey: projectTasksQueryKey(projectId),
 			});
 			setFormState(getFormState(updatedTask));
+			setFormTaskId(updatedTask.id);
+			setIsDirty(false);
 			setSavedMessage("Task changes saved.");
 		} catch {
 			setFormError("Task could not be saved. Please try again.");
