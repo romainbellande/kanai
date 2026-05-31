@@ -16,6 +16,7 @@ import { Route as ProjectsNewRouteImport } from './routes/projects/new'
 import { Route as ProjectsProjectIdRouteImport } from './routes/projects/$projectId'
 import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
 import { Route as ProjectsProjectIdTasksNewRouteImport } from './routes/projects_.$projectId.tasks.new'
+import { Route as ProjectsProjectIdTasksTaskIdRouteImport } from './routes/projects_.$projectId.tasks.$taskId'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -53,6 +54,12 @@ const ProjectsProjectIdTasksNewRoute =
     path: '/projects/$projectId/tasks/new',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ProjectsProjectIdTasksTaskIdRoute =
+  ProjectsProjectIdTasksTaskIdRouteImport.update({
+    id: '/projects_/$projectId/tasks/$taskId',
+    path: '/projects/$projectId/tasks/$taskId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -61,6 +68,7 @@ export interface FileRoutesByFullPath {
   '/auth/callback': typeof AuthCallbackRoute
   '/projects/$projectId': typeof ProjectsProjectIdRoute
   '/projects/new': typeof ProjectsNewRoute
+  '/projects/$projectId/tasks/$taskId': typeof ProjectsProjectIdTasksTaskIdRoute
   '/projects/$projectId/tasks/new': typeof ProjectsProjectIdTasksNewRoute
 }
 export interface FileRoutesByTo {
@@ -70,6 +78,7 @@ export interface FileRoutesByTo {
   '/auth/callback': typeof AuthCallbackRoute
   '/projects/$projectId': typeof ProjectsProjectIdRoute
   '/projects/new': typeof ProjectsNewRoute
+  '/projects/$projectId/tasks/$taskId': typeof ProjectsProjectIdTasksTaskIdRoute
   '/projects/$projectId/tasks/new': typeof ProjectsProjectIdTasksNewRoute
 }
 export interface FileRoutesById {
@@ -80,6 +89,7 @@ export interface FileRoutesById {
   '/auth/callback': typeof AuthCallbackRoute
   '/projects/$projectId': typeof ProjectsProjectIdRoute
   '/projects/new': typeof ProjectsNewRoute
+  '/projects_/$projectId/tasks/$taskId': typeof ProjectsProjectIdTasksTaskIdRoute
   '/projects_/$projectId/tasks/new': typeof ProjectsProjectIdTasksNewRoute
 }
 export interface FileRouteTypes {
@@ -91,6 +101,7 @@ export interface FileRouteTypes {
     | '/auth/callback'
     | '/projects/$projectId'
     | '/projects/new'
+    | '/projects/$projectId/tasks/$taskId'
     | '/projects/$projectId/tasks/new'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -100,6 +111,7 @@ export interface FileRouteTypes {
     | '/auth/callback'
     | '/projects/$projectId'
     | '/projects/new'
+    | '/projects/$projectId/tasks/$taskId'
     | '/projects/$projectId/tasks/new'
   id:
     | '__root__'
@@ -109,6 +121,7 @@ export interface FileRouteTypes {
     | '/auth/callback'
     | '/projects/$projectId'
     | '/projects/new'
+    | '/projects_/$projectId/tasks/$taskId'
     | '/projects_/$projectId/tasks/new'
   fileRoutesById: FileRoutesById
 }
@@ -119,6 +132,7 @@ export interface RootRouteChildren {
   AuthCallbackRoute: typeof AuthCallbackRoute
   ProjectsProjectIdRoute: typeof ProjectsProjectIdRoute
   ProjectsNewRoute: typeof ProjectsNewRoute
+  ProjectsProjectIdTasksTaskIdRoute: typeof ProjectsProjectIdTasksTaskIdRoute
   ProjectsProjectIdTasksNewRoute: typeof ProjectsProjectIdTasksNewRoute
 }
 
@@ -173,6 +187,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProjectsProjectIdTasksNewRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/projects_/$projectId/tasks/$taskId': {
+      id: '/projects_/$projectId/tasks/$taskId'
+      path: '/projects/$projectId/tasks/$taskId'
+      fullPath: '/projects/$projectId/tasks/$taskId'
+      preLoaderRoute: typeof ProjectsProjectIdTasksTaskIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -183,6 +204,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthCallbackRoute: AuthCallbackRoute,
   ProjectsProjectIdRoute: ProjectsProjectIdRoute,
   ProjectsNewRoute: ProjectsNewRoute,
+  ProjectsProjectIdTasksTaskIdRoute: ProjectsProjectIdTasksTaskIdRoute,
   ProjectsProjectIdTasksNewRoute: ProjectsProjectIdTasksNewRoute,
 }
 export const routeTree = rootRouteImport

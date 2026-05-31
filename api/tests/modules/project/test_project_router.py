@@ -270,6 +270,24 @@ async def test_task_crud_endpoints_do_not_expose_due_fields(
     assert updated_task["status"] == "done"
     assert updated_task["priority"] == "low"
 
+    clear_response = await client.patch(
+        f"/projects/{project_id}/tasks/{created_task['id']}",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "assignee_id": None,
+            "description": None,
+            "acceptance_criteria": None,
+            "tag": None,
+        },
+    )
+
+    assert clear_response.status_code == 200
+    cleared_task = clear_response.json()
+    assert cleared_task["assignee_id"] is None
+    assert cleared_task["description"] is None
+    assert cleared_task["acceptance_criteria"] is None
+    assert cleared_task["tag"] is None
+
     delete_response = await client.delete(
         f"/projects/{project_id}/tasks/{created_task['id']}",
         headers={"Authorization": "Bearer token"},

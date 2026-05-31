@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
 	currentUserQueryOptions,
+	type Project,
 	projectQueryOptions,
 	projectTasksQueryOptions,
 	type Task,
@@ -20,11 +21,20 @@ vi.mock("@tanstack/react-router", () => ({
 		...props
 	}: AnchorHTMLAttributes<HTMLAnchorElement> & {
 		children: ReactNode;
-		params?: { projectId?: string };
+		params?: { projectId?: string; taskId?: string };
 		to: string;
 	}) => (
 		<a
-			href={params?.projectId ? to.replace("$projectId", params.projectId) : to}
+			href={
+				params?.projectId
+					? to
+							.replace("$projectId", params.projectId)
+							.replace(
+								"$taskId",
+								"taskId" in params ? String(params.taskId) : "",
+							)
+					: to
+			}
 			{...props}
 		>
 			{children}
@@ -45,6 +55,22 @@ function task(overrides: Partial<Task>): Task {
 		description: null,
 		acceptanceCriteria: null,
 		tag: null,
+		createdAt: null,
+		updatedAt: null,
+		...overrides,
+	};
+}
+
+function project(overrides: Partial<Project> = {}): Project {
+	return {
+		id: "project-1",
+		name: "Project",
+		code: "PRJ",
+		priority: "medium",
+		description: null,
+		status: null,
+		ownerIds: [],
+		memberIds: [],
 		createdAt: null,
 		updatedAt: null,
 		...overrides,
@@ -128,10 +154,10 @@ describe("ProjectBoardPage", () => {
 			first_name: "Jane",
 			last_name: "Doe",
 		});
-		queryClient.setQueryData(projectQueryOptions("project-1").queryKey, {
-			id: "project-1",
-			name: "API Board",
-		});
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project({ name: "API Board" }),
+		);
 		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
 			task({ id: "todo-task", title: "API Todo", status: "todo" }),
 			task({ id: "doing-task", title: "API Doing", status: "in-progress" }),
@@ -147,6 +173,10 @@ describe("ProjectBoardPage", () => {
 
 		expect(screen.getByText("Main Board: API Board")).toBeTruthy();
 		expect(screen.getByText("API Todo")).toBeTruthy();
+		expect(
+			(screen.getByRole("link", { name: /API Todo/i }) as HTMLAnchorElement)
+				.href,
+		).toContain("/projects/project-1/tasks/todo-task");
 		expect(screen.getByText("API Doing")).toBeTruthy();
 		expect(screen.getByText("API Done")).toBeTruthy();
 		expect(screen.queryByText("Other Project")).toBeNull();
@@ -158,10 +188,10 @@ describe("ProjectBoardPage", () => {
 			"#/domains/workspace/ui/ProjectBoardPage"
 		);
 		const queryClient = createTestQueryClient();
-		queryClient.setQueryData(projectQueryOptions("project-1").queryKey, {
-			id: "project-1",
-			name: "Empty Board",
-		});
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project({ name: "Empty Board" }),
+		);
 		queryClient.setQueryData(
 			projectTasksQueryOptions("project-1").queryKey,
 			[],

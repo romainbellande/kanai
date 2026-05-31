@@ -21,6 +21,7 @@ import { mapValues } from '../runtime';
  *     title: Optional replacement task title.
  *     status: Optional replacement workflow status.
  *     priority: Optional replacement priority level.
+ *     rank: Optional replacement sortable LexoRank-style position.
  *     assignee_id: Optional replacement user ID assigned to the task.
  *     description: Optional replacement task details.
  *     acceptance_criteria: Optional replacement completion criteria.
@@ -30,7 +31,7 @@ import { mapValues } from '../runtime';
  */
 export interface TaskUpdate {
     /**
-     *
+     * 
      * @type {string}
      * @memberof TaskUpdate
      */
@@ -54,7 +55,7 @@ export interface TaskUpdate {
      */
     rank?: string | null;
     /**
-     *
+     * 
      * @type {string}
      * @memberof TaskUpdate
      */
@@ -128,3 +129,4 @@ export function TaskUpdateToJSONTyped(value?: TaskUpdate | null, ignoreDiscrimin
         'tag': value['tag'],
     };
 }
+

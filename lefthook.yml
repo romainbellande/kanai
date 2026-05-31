@@ -48,11 +48,11 @@ pre-commit:
         parallel: false
         jobs:
           - name: client - gen openapi client
-            run: bunx @openapitools/openapi-generator-cli generate -i http://localhost:8000/openapi.json -g typescript-fetch -o src/api/openapi-client && node scripts/mark-openapi-client-ts-nocheck.mjs
+            run: bun --bun run gen:openapi:client
             stage_fixed: true
 
           - name: client - typecheck
-            run: bunx tsc --noEmit --project tsconfig.json
+            run: bun --bun run typecheck
             glob: "*.{ts,tsx}"
 
     # - name: client - tests

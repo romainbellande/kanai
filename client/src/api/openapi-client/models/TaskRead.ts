@@ -23,6 +23,7 @@ import { mapValues } from '../runtime';
  *     title: Task title.
  *     status: Workflow status for the task.
  *     priority: Priority level for the task.
+ *     rank: Sortable LexoRank-style position within the task status column.
  *     assignee_id: Optional user ID assigned to the task.
  *     description: Optional task details.
  *     acceptance_criteria: Optional criteria required to complete the task.
@@ -34,7 +35,7 @@ import { mapValues } from '../runtime';
  */
 export interface TaskRead {
     /**
-     *
+     * 
      * @type {string}
      * @memberof TaskRead
      */
@@ -70,7 +71,7 @@ export interface TaskRead {
      */
     rank: string;
     /**
-     *
+     * 
      * @type {string}
      * @memberof TaskRead
      */
@@ -176,3 +177,4 @@ export function TaskReadToJSONTyped(value?: TaskRead | null, ignoreDiscriminator
         'updated_at': value['updatedAt'] == null ? value['updatedAt'] : value['updatedAt'].toISOString(),
     };
 }
+

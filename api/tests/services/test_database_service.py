@@ -86,7 +86,9 @@ async def test_create_db_and_tables_repairs_legacy_task_rank_column_in_prod(
     monkeypatch.setattr(database_service, "settings", build_settings(Environment.PROD))
     monkeypatch.setattr(database_service, "engine", engine)
     async with engine.begin() as connection:
-        await connection.exec_driver_sql('CREATE TABLE tasks (id VARCHAR, "rank" VARCHAR)')
+        await connection.exec_driver_sql(
+            'CREATE TABLE tasks (id VARCHAR, "rank" VARCHAR)'
+        )
 
     await database_service.create_db_and_tables()
 

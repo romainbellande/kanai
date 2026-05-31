@@ -1,9 +1,13 @@
 """Schemas for project task request and response payloads."""
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+
+NULLABLE_UPDATE_FIELD = "nullable_update_field"
 
 
 class TaskCreate(BaseModel):
@@ -48,10 +52,47 @@ class TaskUpdate(BaseModel):
     status: str | None = None
     priority: str | None = None
     rank: str | None = None
-    assignee_id: UUID | None = None
-    description: str | None = None
-    acceptance_criteria: str | None = None
-    tag: str | None = None
+    assignee_id: UUID | None = Field(
+        default=None,
+        json_schema_extra={NULLABLE_UPDATE_FIELD: True},
+    )
+    description: str | None = Field(
+        default=None,
+        json_schema_extra={NULLABLE_UPDATE_FIELD: True},
+    )
+    acceptance_criteria: str | None = Field(
+        default=None,
+        json_schema_extra={NULLABLE_UPDATE_FIELD: True},
+    )
+    tag: str | None = Field(
+        default=None,
+        json_schema_extra={NULLABLE_UPDATE_FIELD: True},
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_null_required_fields(cls, data: Any) -> Any:
+        """Allow omitted required fields for PATCH, but reject explicit nulls."""
+        if not isinstance(data, dict):
+            return data
+
+        for field_name, field in cls.model_fields.items():
+            field_extra = field.json_schema_extra
+            is_nullable_update = isinstance(field_extra, dict) and field_extra.get(
+                NULLABLE_UPDATE_FIELD, False
+            )
+            if (
+                not is_nullable_update
+                and field_name in data
+                and data[field_name] is None
+            ):
+                raise ValueError(f"{field_name} cannot be null")
+
+        return data
+
+    def update_values(self) -> dict[str, object]:
+        """Return fields submitted by the client, preserving explicit nulls."""
+        return self.model_dump(exclude_unset=True)
 
 
 class TaskRead(BaseModel):
