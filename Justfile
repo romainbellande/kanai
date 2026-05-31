@@ -12,20 +12,39 @@ dev:
     trap "kill $CLIENT_PID $API_PID 2>/dev/null" EXIT
     wait
 
-[working-directory: 'api']
+[working-directory('api')]
 dev-api:
     uv run fastapi dev --port 8000
 
-[working-directory: 'client']
+[working-directory('client')]
 dev-client:
     bun run dev
 
 pre-commit:
     uv --directory ./api run lefthook run pre-commit --force
 
-[working-directory: 'client']
+[working-directory('client')]
 gen-openapi-client:
     bunx @openapitools/openapi-generator-cli generate -i http://localhost:8000/openapi.json -g typescript-fetch -o src/api/openapi-client
+
+watch-gen-openapi-client:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    if ! command -v inotifywait >/dev/null 2>&1; then
+      echo "inotifywait is required. Install inotify-tools to use this watcher." >&2
+      exit 1
+    fi
+
+    while true; do
+      inotifywait -r -q \
+        --exclude '(^|/)(\.git|\.venv|__pycache__|\.pytest_cache|\.ruff_cache)(/|$)' \
+        -e close_write,move,create,delete \
+        api
+      if ! just gen-openapi-client; then
+        echo "gen-openapi-client failed; continuing to watch." >&2
+      fi
+    done
 
 install-gitleaks:
     #!/usr/bin/env bash

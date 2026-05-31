@@ -37,7 +37,7 @@ export class UsersApi extends runtime.BaseAPI {
             }
         }
 
-        const urlPath = `/users/me`;
+        let urlPath = `/users/me`;
 
         return {
             path: urlPath,
@@ -48,6 +48,7 @@ export class UsersApi extends runtime.BaseAPI {
     }
 
     /**
+     * Return the authenticated user\'s profile.  Args:     _: Bearer authorization credentials supplied by FastAPI security.  Returns:     A JSON-serializable dictionary containing the user profile fields.
      * Get Users Me
      */
     async getUsersMeUsersMeGetRaw(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<any>> {
@@ -62,6 +63,7 @@ export class UsersApi extends runtime.BaseAPI {
     }
 
     /**
+     * Return the authenticated user\'s profile.  Args:     _: Bearer authorization credentials supplied by FastAPI security.  Returns:     A JSON-serializable dictionary containing the user profile fields.
      * Get Users Me
      */
     async getUsersMeUsersMeGet(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<any> {

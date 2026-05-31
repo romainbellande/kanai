@@ -1,3 +1,5 @@
 /* tslint:disable */
 /* eslint-disable */
-export * from "./UsersApi";
+export * from './ProjectsApi';
+export * from './TasksApi';
+export * from './UsersApi';

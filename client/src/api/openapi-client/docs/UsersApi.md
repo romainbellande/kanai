@@ -14,6 +14,8 @@ All URIs are relative to *http://localhost*
 
 Get Users Me
 
+Return the authenticated user\&#39;s profile.  Args:     _: Bearer authorization credentials supplied by FastAPI security.  Returns:     A JSON-serializable dictionary containing the user profile fields.
+
 ### Example
 
 ```ts

@@ -47,6 +47,11 @@ pre-commit:
       glob: "*.{ts,tsx}"
       root: ./client
 
+    - name: client - gen openapi client
+      run: bunx @openapitools/openapi-generator-cli generate -i http://localhost:8000/openapi.json -g typescript-fetch -o src/api/openapi-client
+      root: ./client
+      stage_fixed: true
+
     # - name: client - tests
     #   run: bun run test
     #   glob: "*.{ts,tsx}"
