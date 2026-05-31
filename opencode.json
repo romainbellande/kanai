@@ -12,15 +12,6 @@
         "headers": {
             "X-Goog-Api-Key": "{env:STITCH_API_KEY}"
         }
-    },
-    "openmemory": {
-      "type": "local",
-      "command": [
-        "npx",
-        "-y",
-        "openmemory-js",
-        "mcp"
-      ]
     }
   },
   "plugin": [
