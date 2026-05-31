@@ -17,29 +17,28 @@ vi.mock("@tanstack/react-router", () => ({
 	Link: ({
 		children,
 		params,
+		search,
 		to,
 		...props
 	}: AnchorHTMLAttributes<HTMLAnchorElement> & {
 		children: ReactNode;
 		params?: { projectId?: string; taskId?: string };
+		search?: Record<string, string>;
 		to: string;
-	}) => (
-		<a
-			href={
-				params?.projectId
-					? to
-							.replace("$projectId", params.projectId)
-							.replace(
-								"$taskId",
-								"taskId" in params ? String(params.taskId) : "",
-							)
-					: to
-			}
-			{...props}
-		>
-			{children}
-		</a>
-	),
+	}) => {
+		const href = params?.projectId
+			? to
+					.replace("$projectId", params.projectId)
+					.replace("$taskId", "taskId" in params ? String(params.taskId) : "")
+			: to;
+		const query = search ? `?${new URLSearchParams(search).toString()}` : "";
+
+		return (
+			<a href={`${href}${query}`} {...props}>
+				{children}
+			</a>
+		);
+	},
 	useParams: () => ({ projectId: "project-1" }),
 }));
 
@@ -181,6 +180,34 @@ describe("ProjectBoardPage", () => {
 		expect(screen.getByText("API Done")).toBeTruthy();
 		expect(screen.queryByText("Other Project")).toBeNull();
 		expect(screen.queryByText("Security Audit Phase 1")).toBeNull();
+	});
+
+	it("links column task creation to the column status", async () => {
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project({ name: "API Board" }),
+		);
+		queryClient.setQueryData(
+			projectTasksQueryOptions("project-1").queryKey,
+			[],
+		);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+
+		const addTaskLinks = screen.getAllByRole("link", { name: /add a task/i });
+		expect((addTaskLinks[0] as HTMLAnchorElement).href).toContain(
+			"/projects/project-1/tasks/new?status=todo",
+		);
+		expect((addTaskLinks[1] as HTMLAnchorElement).href).toContain(
+			"/projects/project-1/tasks/new?status=in-progress",
+		);
+		expect((addTaskLinks[2] as HTMLAnchorElement).href).toContain(
+			"/projects/project-1/tasks/new?status=done",
+		);
 	});
 
 	it("renders empty board columns without fixture task cards", async () => {

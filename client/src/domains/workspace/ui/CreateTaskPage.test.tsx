@@ -135,6 +135,47 @@ describe("CreateTaskPage", () => {
 		});
 	});
 
+	it("uses the source board column as the initial task status", async () => {
+		const { CreateTaskPage } = await import(
+			"#/domains/workspace/ui/CreateTaskPage"
+		);
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		const createTask = vi
+			.spyOn(TasksApi.prototype, "createTaskEndpointProjectsProjectIdTasksPost")
+			.mockResolvedValue({
+				id: "task-1",
+				projectId: "project-1",
+				title: "Column task",
+				status: "in-progress",
+				priority: "medium",
+				rank: "0|hzzzzz:",
+				assigneeId: null,
+				description: null,
+				acceptanceCriteria: null,
+				tag: null,
+				createdAt: null,
+				updatedAt: null,
+			});
+
+		renderWithQueryClient(<CreateTaskPage initialStatus="in-progress" />);
+		fireEvent.change(screen.getByLabelText(/task title/i), {
+			target: { value: "Column task" },
+		});
+		fireEvent.submit(getCreateTaskForm());
+
+		await waitFor(() => expect(createTask).toHaveBeenCalledTimes(1));
+		expect(createTask).toHaveBeenCalledWith({
+			projectId: "project-1",
+			taskCreate: {
+				title: "Column task",
+				status: "in-progress",
+				priority: "medium",
+				description: undefined,
+				acceptanceCriteria: undefined,
+			},
+		});
+	});
+
 	it("shows validation failure without submitting", async () => {
 		const { CreateTaskPage } = await import(
 			"#/domains/workspace/ui/CreateTaskPage"

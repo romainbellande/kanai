@@ -10,7 +10,15 @@ import {
 } from "#/api/client";
 import { WorkspaceLayout } from "#/domains/workspace/ui/templates/WorkspaceLayout";
 
-export function CreateTaskPage() {
+const taskStatuses = ["todo", "in-progress", "done"] as const;
+
+type TaskStatus = (typeof taskStatuses)[number];
+
+function getInitialTaskStatus(status: string | undefined): TaskStatus {
+	return taskStatuses.find((taskStatus) => taskStatus === status) ?? "todo";
+}
+
+export function CreateTaskPage({ initialStatus }: { initialStatus?: string }) {
 	const { projectId } = useParams({ from: "/projects_/$projectId/tasks/new" });
 	const navigate = useNavigate();
 	const queryClient = useQueryClient();
@@ -18,6 +26,7 @@ export function CreateTaskPage() {
 	const createTaskMutation = useCreateProjectTaskMutation();
 	const [formError, setFormError] = useState<string | null>(null);
 	const projectName = projectQuery.data?.name ?? "Project";
+	const defaultStatus = getInitialTaskStatus(initialStatus);
 
 	async function handleSubmit(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
@@ -128,7 +137,7 @@ export function CreateTaskPage() {
 								</label>
 								<select
 									className="w-full rounded-lg border border-[var(--outline-variant)] bg-[var(--surface)] px-4 py-3 text-base text-[var(--on-surface)] outline-none transition focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]"
-									defaultValue="todo"
+									defaultValue={defaultStatus}
 									id="taskStatus"
 									name="taskStatus"
 								>

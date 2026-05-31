@@ -385,6 +385,7 @@ function BoardColumnView({
 			<Link
 				to="/projects/$projectId/tasks/new"
 				params={{ projectId }}
+				search={{ status: column.id }}
 				className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-4 py-3 text-sm font-semibold text-[var(--on-surface-variant)] hover:bg-[var(--surface-bright)]"
 			>
 				<Plus className="h-4 w-4" />
