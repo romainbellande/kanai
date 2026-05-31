@@ -30,7 +30,7 @@ import { mapValues } from '../runtime';
  */
 export interface TaskUpdate {
     /**
-     * 
+     *
      * @type {string}
      * @memberof TaskUpdate
      */
@@ -49,6 +49,12 @@ export interface TaskUpdate {
     priority?: string | null;
     /**
      * 
+     * @type {string}
+     * @memberof TaskUpdate
+     */
+    rank?: string | null;
+    /**
+     *
      * @type {string}
      * @memberof TaskUpdate
      */
@@ -93,6 +99,7 @@ export function TaskUpdateFromJSONTyped(json: any, ignoreDiscriminator: boolean)
         'title': json['title'] == null ? undefined : json['title'],
         'status': json['status'] == null ? undefined : json['status'],
         'priority': json['priority'] == null ? undefined : json['priority'],
+        'rank': json['rank'] == null ? undefined : json['rank'],
         'assigneeId': json['assignee_id'] == null ? undefined : json['assignee_id'],
         'description': json['description'] == null ? undefined : json['description'],
         'acceptanceCriteria': json['acceptance_criteria'] == null ? undefined : json['acceptance_criteria'],
@@ -114,10 +121,10 @@ export function TaskUpdateToJSONTyped(value?: TaskUpdate | null, ignoreDiscrimin
         'title': value['title'],
         'status': value['status'],
         'priority': value['priority'],
+        'rank': value['rank'],
         'assignee_id': value['assigneeId'],
         'description': value['description'],
         'acceptance_criteria': value['acceptanceCriteria'],
         'tag': value['tag'],
     };
 }
-

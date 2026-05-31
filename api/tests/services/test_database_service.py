@@ -42,6 +42,15 @@ async def get_table_names(engine: AsyncEngine) -> list[str]:
         )
 
 
+async def get_column_names(engine: AsyncEngine, table_name: str) -> list[str]:
+    async with engine.connect() as connection:
+        return await connection.run_sync(
+            lambda sync_conn: [
+                column["name"] for column in inspect(sync_conn).get_columns(table_name)
+            ]
+        )
+
+
 @pytest.mark.asyncio
 async def test_create_db_and_tables_creates_users_table_in_local(
     monkeypatch: pytest.MonkeyPatch,
@@ -67,3 +76,20 @@ async def test_create_db_and_tables_skips_table_creation_outside_startup_envs(
     await database_service.create_db_and_tables()
 
     assert "users" not in await get_table_names(engine)
+
+
+@pytest.mark.asyncio
+async def test_create_db_and_tables_repairs_legacy_task_rank_column_in_prod(
+    monkeypatch: pytest.MonkeyPatch,
+    engine: AsyncEngine,
+) -> None:
+    monkeypatch.setattr(database_service, "settings", build_settings(Environment.PROD))
+    monkeypatch.setattr(database_service, "engine", engine)
+    async with engine.begin() as connection:
+        await connection.exec_driver_sql('CREATE TABLE tasks (id VARCHAR, "rank" VARCHAR)')
+
+    await database_service.create_db_and_tables()
+
+    columns = await get_column_names(engine, "tasks")
+    assert "rank" not in columns
+    assert "task_rank" in columns

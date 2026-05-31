@@ -16,6 +16,8 @@
     "gen:openapi:client": "@openapitools/openapi-generator-cli generate -i http://localhost:8000/openapi.json -g typescript-fetch -o src/api/openapi-client && node scripts/mark-openapi-client-ts-nocheck.mjs"
   },
   "dependencies": {
+    "@atlaskit/pragmatic-drag-and-drop": "^1.8.1",
+    "@atlaskit/pragmatic-drag-and-drop-hitbox": "^1.1.0",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/react-devtools": "latest",
     "@tanstack/react-query": "^5.99.2",

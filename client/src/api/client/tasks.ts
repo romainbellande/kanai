@@ -1,11 +1,17 @@
 import { queryOptions, useMutation, useQuery } from "@tanstack/react-query";
 
-import { type TaskCreate, type TaskRead, TasksApi } from "#/api/openapi-client";
+import {
+	type TaskCreate,
+	type TaskRead,
+	TasksApi,
+	type TaskUpdate,
+} from "#/api/openapi-client";
 
 import { createAuthenticatedConfiguration } from "./utils";
 
 export type Task = TaskRead;
 export type CreateTaskInput = TaskCreate;
+export type UpdateTaskInput = TaskUpdate;
 
 export function projectTasksQueryKey(projectId: string) {
 	return ["projects", projectId, "tasks"] as const;
@@ -34,6 +40,22 @@ export async function createProjectTask({
 	});
 }
 
+export async function updateProjectTask({
+	projectId,
+	taskId,
+	taskUpdate,
+}: {
+	projectId: string;
+	taskId: string;
+	taskUpdate: UpdateTaskInput;
+}): Promise<Task> {
+	return createTasksApi().updateTaskEndpointProjectsProjectIdTasksTaskIdPatch({
+		projectId,
+		taskId,
+		taskUpdate,
+	});
+}
+
 export function projectTasksQueryOptions(projectId: string) {
 	return queryOptions({
 		queryKey: projectTasksQueryKey(projectId),
@@ -47,4 +69,8 @@ export function useProjectTasksQuery(projectId: string) {
 
 export function useCreateProjectTaskMutation() {
 	return useMutation({ mutationFn: createProjectTask });
+}
+
+export function useUpdateProjectTaskMutation() {
+	return useMutation({ mutationFn: updateProjectTask });
 }

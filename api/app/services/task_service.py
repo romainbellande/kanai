@@ -11,6 +11,46 @@ from app.schemas.task import TaskCreate, TaskRead, TaskUpdate
 from app.services.project_service import require_project_access, validate_user_ids
 
 
+RANK_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+DEFAULT_TASK_RANK = "U"
+
+
+def rank_between(before: str | None, after: str | None) -> str:
+    """Return a lexicographic rank strictly between neighboring ranks."""
+    if before is not None and after is not None and before >= after:
+        raise ValueError("before rank must sort before after rank")
+
+    base = len(RANK_ALPHABET)
+    prefix = ""
+    index = 0
+
+    while True:
+        before_digit = (
+            RANK_ALPHABET.index(before[index])
+            if before is not None and index < len(before)
+            else 0
+        )
+        after_digit = (
+            RANK_ALPHABET.index(after[index])
+            if after is not None and index < len(after)
+            else base - 1
+        )
+
+        if after_digit - before_digit > 1:
+            return f"{prefix}{RANK_ALPHABET[(before_digit + after_digit) // 2]}"
+
+        prefix = f"{prefix}{RANK_ALPHABET[before_digit]}"
+        index += 1
+
+
+async def next_task_rank(
+    repository: TaskRepository, project_id: UUID, status_value: str
+) -> str:
+    """Append a task after the current end of a status column."""
+    tasks = await repository.list_by_project_and_status(project_id, status_value)
+    return rank_between(tasks[-1].rank, None) if tasks else DEFAULT_TASK_RANK
+
+
 def task_to_read(task: Task) -> TaskRead:
     """Convert a task ORM model into an API response schema."""
     if task.id is None:
@@ -22,6 +62,7 @@ def task_to_read(task: Task) -> TaskRead:
         title=task.title,
         status=task.status,
         priority=task.priority,
+        rank=task.rank,
         assignee_id=task.assignee_id,
         description=task.description,
         acceptance_criteria=task.acceptance_criteria,
@@ -43,17 +84,19 @@ async def create_task(
     if payload.assignee_id is not None:
         await validate_user_ids(session, {payload.assignee_id})
 
+    repository = TaskRepository(session)
     task = Task(
         project_id=project_id,
         title=payload.title,
         status=payload.status,
         priority=payload.priority,
+        rank=payload.rank or await next_task_rank(repository, project_id, payload.status),
         assignee_id=payload.assignee_id,
         description=payload.description,
         acceptance_criteria=payload.acceptance_criteria,
         tag=payload.tag,
     )
-    return task_to_read(await TaskRepository(session).create(task))
+    return task_to_read(await repository.create(task))
 
 
 async def list_tasks(
@@ -109,6 +152,7 @@ async def update_task(
         "title",
         "status",
         "priority",
+        "rank",
         "assignee_id",
         "description",
         "acceptance_criteria",

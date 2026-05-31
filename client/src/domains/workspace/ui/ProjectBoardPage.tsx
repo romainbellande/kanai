@@ -1,3 +1,14 @@
+import { combine } from "@atlaskit/pragmatic-drag-and-drop/combine";
+import {
+	draggable,
+	dropTargetForElements,
+	monitorForElements,
+} from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
+import {
+	attachClosestEdge,
+	extractClosestEdge,
+} from "@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import {
 	Bell,
@@ -18,13 +29,16 @@ import {
 	User,
 	UserPlus,
 } from "lucide-react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import {
 	CurrentUserAuthError,
+	projectTasksQueryKey,
 	type Task,
 	useCurrentUserQuery,
 	useProjectQuery,
 	useProjectTasksQuery,
+	useUpdateProjectTaskMutation,
 } from "#/api/client";
 import { getAuthLogoutUrl } from "#/domains/auth/model/auth-client";
 import { clearAuthSession } from "#/domains/auth/model/openid-client";
@@ -51,6 +65,62 @@ type BoardColumn = {
 	title: string;
 	cards: Task[];
 };
+
+type CardDropTargetData = {
+	type: "card";
+	taskId: string;
+	columnId: ColumnId;
+};
+
+type ColumnDropTargetData = {
+	type: "column";
+	columnId: ColumnId;
+};
+
+const rankAlphabet =
+	"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+
+export function rankBetween(
+	before: string | null,
+	after: string | null,
+): string {
+	if (before !== null && after !== null && before >= after) {
+		throw new Error("before rank must sort before after rank");
+	}
+
+	const base = rankAlphabet.length;
+	let prefix = "";
+	let index = 0;
+
+	while (true) {
+		const beforeDigit =
+			before !== null && index < before.length
+				? rankAlphabet.indexOf(before[index])
+				: 0;
+		const afterDigit =
+			after !== null && index < after.length
+				? rankAlphabet.indexOf(after[index])
+				: base - 1;
+
+		if (afterDigit - beforeDigit > 1) {
+			return `${prefix}${rankAlphabet[Math.floor((beforeDigit + afterDigit) / 2)]}`;
+		}
+
+		prefix = `${prefix}${rankAlphabet[beforeDigit]}`;
+		index += 1;
+	}
+}
+
+function compareTasksByRank(first: Task, second: Task): number {
+	if (first.rank !== second.rank) {
+		return first.rank < second.rank ? -1 : 1;
+	}
+
+	return (
+		(first.createdAt?.getTime() ?? 0) - (second.createdAt?.getTime() ?? 0) ||
+		first.id.localeCompare(second.id)
+	);
+}
 
 function getColumnId(status: string): ColumnId {
 	const normalizedStatus = status.trim().toLowerCase();
@@ -87,7 +157,10 @@ export function groupTasksByColumn(
 		column?.cards.push(task);
 	}
 
-	return columns;
+	return columns.map((column) => ({
+		...column,
+		cards: column.cards.sort(compareTasksByRank),
+	}));
 }
 
 function getTagClass(priority: string): string {
@@ -111,11 +184,221 @@ function getInitials(value: string | null | undefined): string {
 	return normalizedValue ? normalizedValue.slice(0, 1).toUpperCase() : "";
 }
 
+function getDestinationIndex({
+	cards,
+	sourceTaskId,
+	targetTaskId,
+	closestEdge,
+}: {
+	cards: Task[];
+	sourceTaskId: string;
+	targetTaskId: string;
+	closestEdge: "top" | "bottom" | null;
+}): number {
+	const targetIndex = cards.findIndex((card) => card.id === targetTaskId);
+	if (targetIndex === -1) {
+		return cards.length;
+	}
+
+	const sourceIndex = cards.findIndex((card) => card.id === sourceTaskId);
+	const isSameColumn = sourceIndex !== -1;
+	let destinationIndex =
+		closestEdge === "bottom" ? targetIndex + 1 : targetIndex;
+
+	if (isSameColumn && sourceIndex < destinationIndex) {
+		destinationIndex -= 1;
+	}
+
+	return Math.max(0, Math.min(destinationIndex, cards.length));
+}
+
+export function getRankForDestination(
+	cards: Task[],
+	destinationIndex: number,
+): string {
+	return rankBetween(
+		cards[destinationIndex - 1]?.rank ?? null,
+		cards[destinationIndex]?.rank ?? null,
+	);
+}
+
+function getDropColumnId(
+	data: Record<string | symbol, unknown> | undefined,
+): ColumnId | null {
+	const columnId = data?.columnId;
+	return typeof columnId === "string" && getColumnId(columnId) === columnId
+		? columnId
+		: null;
+}
+
+function BoardTaskCard({
+	card,
+	columnId,
+	isDragging,
+	onDragStateChange,
+}: {
+	card: Task;
+	columnId: ColumnId;
+	isDragging: boolean;
+	onDragStateChange: (taskId: string | null) => void;
+}) {
+	const ref = useRef<HTMLElement | null>(null);
+
+	useEffect(() => {
+		const element = ref.current;
+		if (!element) {
+			return;
+		}
+
+		return combine(
+			draggable({
+				element,
+				getInitialData: () => ({
+					type: "card",
+					taskId: card.id,
+					columnId,
+				}),
+				onDragStart: () => onDragStateChange(card.id),
+				onDrop: () => onDragStateChange(null),
+			}),
+			dropTargetForElements({
+				element,
+				canDrop: ({ source }) => source.data.type === "card",
+				getData: ({ input }) =>
+					attachClosestEdge(
+						{
+							type: "card",
+							taskId: card.id,
+							columnId,
+						} satisfies CardDropTargetData,
+						{ input, element, allowedEdges: ["top", "bottom"] },
+					),
+			}),
+		);
+	}, [card.id, columnId, onDragStateChange]);
+
+	return (
+		<article
+			ref={ref}
+			className={[
+				"rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-4 shadow-sm transition hover:border-[var(--outline)] hover:bg-[var(--surface-bright)]",
+				isDragging
+					? "opacity-45 ring-2 ring-[var(--primary)]"
+					: "cursor-grab active:cursor-grabbing",
+			].join(" ")}
+		>
+			{card.tag || card.priority ? (
+				<span
+					className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${getTagClass(card.priority)}`}
+				>
+					{card.tag || card.priority}
+				</span>
+			) : null}
+			<p
+				className={[
+					"mt-3 text-sm leading-6",
+					columnId === "done"
+						? "text-[var(--on-surface-variant)] line-through"
+						: "text-[var(--on-surface)]",
+				].join(" ")}
+			>
+				{card.title}
+			</p>
+			{card.description ? (
+				<p className="mt-2 text-xs leading-5 text-[var(--on-surface-variant)]">
+					{card.description}
+				</p>
+			) : null}
+			<div className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-[var(--surface-variant)] px-2 py-1 text-xs font-semibold text-[var(--on-surface-variant)]">
+				{columnId === "in-progress" ? (
+					<FileText className="h-3.5 w-3.5" />
+				) : (
+					<Calendar className="h-3.5 w-3.5" />
+				)}
+				{getTaskMeta(card)}
+			</div>
+		</article>
+	);
+}
+
+function BoardColumnView({
+	column,
+	projectId,
+	isActiveDropTarget,
+	children,
+}: {
+	column: BoardColumn;
+	projectId: string;
+	isActiveDropTarget: boolean;
+	children: ReactNode;
+}) {
+	const ref = useRef<HTMLElement | null>(null);
+
+	useEffect(() => {
+		const element = ref.current;
+		if (!element) {
+			return;
+		}
+
+		return dropTargetForElements({
+			element,
+			canDrop: ({ source }) => source.data.type === "card",
+			getData: () =>
+				({
+					type: "column",
+					columnId: column.id,
+				}) satisfies ColumnDropTargetData,
+		});
+	}, [column.id]);
+
+	return (
+		<section
+			ref={ref}
+			className={[
+				"flex w-[340px] flex-shrink-0 flex-col rounded-[1.5rem] bg-[var(--surface-container)] p-4 transition",
+				isActiveDropTarget ? "ring-2 ring-[var(--primary)]" : "",
+			].join(" ")}
+		>
+			<div className="mb-4 flex items-center justify-between px-2">
+				<div className="flex items-center gap-2">
+					<h3 className="text-sm font-semibold">{column.title}</h3>
+					<span className="text-xs font-semibold text-[var(--on-surface-variant)]">
+						{column.cards.length}
+					</span>
+				</div>
+				<WorkspaceIconButton
+					size="sm"
+					className="bg-[var(--surface-container-lowest)] text-[var(--on-surface-variant)]"
+				>
+					<MoreHorizontal className="h-4 w-4" />
+				</WorkspaceIconButton>
+			</div>
+
+			<div className="flex flex-col gap-4">{children}</div>
+
+			<Link
+				to="/projects/$projectId/tasks/new"
+				params={{ projectId }}
+				className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-4 py-3 text-sm font-semibold text-[var(--on-surface-variant)] hover:bg-[var(--surface-bright)]"
+			>
+				<Plus className="h-4 w-4" />
+				Add a task
+			</Link>
+		</section>
+	);
+}
+
 export function ProjectBoardPage() {
 	const { projectId } = useParams({ from: "/projects/$projectId" });
 	const { data: currentUser } = useCurrentUserQuery();
 	const projectQuery = useProjectQuery(projectId);
 	const tasksQuery = useProjectTasksQuery(projectId);
+	const queryClient = useQueryClient();
+	const updateTaskMutation = useUpdateProjectTaskMutation();
+	const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
+	const [activeDropColumnId, setActiveDropColumnId] = useState<ColumnId | null>(
+		null,
+	);
 	const projectName = projectQuery.data?.name ?? "Project";
 	const columns = groupTasksByColumn(tasksQuery.data ?? [], projectId);
 	const isProjectAuthError = projectQuery.error instanceof CurrentUserAuthError;
@@ -138,6 +421,108 @@ export function ProjectBoardPage() {
 			return null;
 		}
 	})();
+
+	useEffect(() => {
+		return monitorForElements({
+			canMonitor: ({ source }) => source.data.type === "card",
+			onDropTargetChange: ({ location }) => {
+				setActiveDropColumnId(
+					getDropColumnId(location.current.dropTargets[0]?.data),
+				);
+			},
+			onDrop: ({ source, location }) => {
+				setActiveDropColumnId(null);
+				setDraggingTaskId(null);
+
+				if (source.data.type !== "card") {
+					return;
+				}
+
+				const sourceTaskId = source.data.taskId;
+				if (typeof sourceTaskId !== "string") {
+					return;
+				}
+
+				const target = location.current.dropTargets[0];
+				const destinationColumnId = getDropColumnId(target?.data);
+				if (!target || destinationColumnId === null) {
+					return;
+				}
+
+				const sourceTask = (tasksQuery.data ?? []).find(
+					(task) => task.id === sourceTaskId,
+				);
+				const destinationColumn = columns.find(
+					(column) => column.id === destinationColumnId,
+				);
+				if (!sourceTask || !destinationColumn) {
+					return;
+				}
+
+				let destinationIndex = destinationColumn.cards.filter(
+					(card) => card.id !== sourceTaskId,
+				).length;
+
+				if (target.data.type === "card") {
+					const targetTaskId = target.data.taskId;
+					if (
+						targetTaskId === sourceTaskId ||
+						typeof targetTaskId !== "string"
+					) {
+						return;
+					}
+
+					const closestEdge = extractClosestEdge(target.data);
+					destinationIndex = getDestinationIndex({
+						cards: destinationColumn.cards,
+						sourceTaskId,
+						targetTaskId,
+						closestEdge: closestEdge === "bottom" ? "bottom" : "top",
+					});
+				}
+
+				const cardsWithoutSource = destinationColumn.cards.filter(
+					(card) => card.id !== sourceTaskId,
+				);
+				const rank = getRankForDestination(
+					cardsWithoutSource,
+					destinationIndex,
+				);
+				if (
+					sourceTask.status === destinationColumnId &&
+					sourceTask.rank === rank
+				) {
+					return;
+				}
+
+				const queryKey = projectTasksQueryKey(projectId);
+				const previousTasks = queryClient.getQueryData<Task[]>(queryKey);
+				queryClient.setQueryData<Task[]>(queryKey, (tasks) =>
+					tasks?.map((task) =>
+						task.id === sourceTaskId
+							? { ...task, status: destinationColumnId, rank }
+							: task,
+					),
+				);
+
+				updateTaskMutation.mutate(
+					{
+						projectId,
+						taskId: sourceTaskId,
+						taskUpdate: { status: destinationColumnId, rank },
+					},
+					{
+						onError: () => {
+							queryClient.setQueryData(queryKey, previousTasks);
+						},
+						onSettled: () => {
+							void queryClient.invalidateQueries({ queryKey });
+						},
+					},
+				);
+			},
+		});
+	}, [columns, projectId, queryClient, tasksQuery.data, updateTaskMutation]);
 
 	function handleLogout() {
 		if (!logoutUrl) {
@@ -331,86 +716,34 @@ export function ProjectBoardPage() {
 						) : null}
 						<div className="flex min-w-[1100px] gap-6">
 							{columns.map((column) => (
-								<section
-									key={column.title}
-									className="flex w-[340px] flex-shrink-0 flex-col rounded-[1.5rem] bg-[var(--surface-container)] p-4"
+								<BoardColumnView
+									key={column.id}
+									column={column}
+									projectId={projectId}
+									isActiveDropTarget={activeDropColumnId === column.id}
 								>
-									<div className="mb-4 flex items-center justify-between px-2">
-										<div className="flex items-center gap-2">
-											<h3 className="text-sm font-semibold">{column.title}</h3>
-											<span className="text-xs font-semibold text-[var(--on-surface-variant)]">
-												{column.cards.length}
-											</span>
-										</div>
-										<WorkspaceIconButton
-											size="sm"
-											className="bg-[var(--surface-container-lowest)] text-[var(--on-surface-variant)]"
-										>
-											<MoreHorizontal className="h-4 w-4" />
-										</WorkspaceIconButton>
-									</div>
-
-									<div className="flex flex-col gap-4">
-										{tasksQuery.isPending ? (
-											<p className="rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-4 text-sm text-[var(--on-surface-variant)]">
-												Loading tasks...
-											</p>
-										) : null}
-										{!tasksQuery.isPending &&
-										!tasksQuery.isError &&
-										column.cards.length === 0 ? (
-											<p className="rounded-2xl border border-dashed border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-4 text-sm text-[var(--on-surface-variant)]">
-												No tasks in {column.title.toLowerCase()}.
-											</p>
-										) : null}
-										{column.cards.map((card) => (
-											<article
-												key={card.id}
-												className="rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-4 shadow-sm transition hover:border-[var(--outline)] hover:bg-[var(--surface-bright)]"
-											>
-												{card.tag || card.priority ? (
-													<span
-														className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${getTagClass(card.priority)}`}
-													>
-														{card.tag || card.priority}
-													</span>
-												) : null}
-												<p
-													className={[
-														"mt-3 text-sm leading-6",
-														column.id === "done"
-															? "text-[var(--on-surface-variant)] line-through"
-															: "text-[var(--on-surface)]",
-													].join(" ")}
-												>
-													{card.title}
-												</p>
-												{card.description ? (
-													<p className="mt-2 text-xs leading-5 text-[var(--on-surface-variant)]">
-														{card.description}
-													</p>
-												) : null}
-												<div className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-[var(--surface-variant)] px-2 py-1 text-xs font-semibold text-[var(--on-surface-variant)]">
-													{column.id === "in-progress" ? (
-														<FileText className="h-3.5 w-3.5" />
-													) : (
-														<Calendar className="h-3.5 w-3.5" />
-													)}
-													{getTaskMeta(card)}
-												</div>
-											</article>
-										))}
-									</div>
-
-									<Link
-										to="/projects/$projectId/tasks/new"
-										params={{ projectId }}
-										className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-4 py-3 text-sm font-semibold text-[var(--on-surface-variant)] hover:bg-[var(--surface-bright)]"
-									>
-										<Plus className="h-4 w-4" />
-										Add a task
-									</Link>
-								</section>
+									{tasksQuery.isPending ? (
+										<p className="rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-4 text-sm text-[var(--on-surface-variant)]">
+											Loading tasks...
+										</p>
+									) : null}
+									{!tasksQuery.isPending &&
+									!tasksQuery.isError &&
+									column.cards.length === 0 ? (
+										<p className="rounded-2xl border border-dashed border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-4 text-sm text-[var(--on-surface-variant)]">
+											No tasks in {column.title.toLowerCase()}.
+										</p>
+									) : null}
+									{column.cards.map((card) => (
+										<BoardTaskCard
+											key={card.id}
+											card={card}
+											columnId={column.id}
+											isDragging={draggingTaskId === card.id}
+											onDragStateChange={setDraggingTaskId}
+										/>
+									))}
+								</BoardColumnView>
 							))}
 
 							<button

@@ -13,13 +13,13 @@
             "X-Goog-Api-Key": "{env:STITCH_API_KEY}"
         }
     },
-    "obsidian": {
+    "openmemory": {
       "type": "local",
       "command": [
         "npx",
         "-y",
-        "@bitbonsai/mcpvault@latest",
-        ".vault"
+        "openmemory-js",
+        "mcp"
       ]
     }
   },

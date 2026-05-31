@@ -25,7 +25,20 @@ class TaskRepository:
     async def list_by_project(self, project_id: UUID) -> list[Task]:
         """Return all tasks that belong to a project."""
         tasks = await self._session.scalars(
-            select(Task).filter_by(project_id=project_id)
+            select(Task)
+            .filter_by(project_id=project_id)
+            .order_by("status", "task_rank", "created_at", "id")
+        )
+        return list(tasks.all())
+
+    async def list_by_project_and_status(
+        self, project_id: UUID, status: str
+    ) -> list[Task]:
+        """Return tasks in one project status ordered by rank."""
+        tasks = await self._session.scalars(
+            select(Task)
+            .filter_by(project_id=project_id, status=status)
+            .order_by("task_rank", "created_at", "id")
         )
         return list(tasks.all())
 

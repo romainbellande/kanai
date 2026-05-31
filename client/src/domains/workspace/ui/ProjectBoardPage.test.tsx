@@ -40,6 +40,7 @@ function task(overrides: Partial<Task>): Task {
 		title: "Task",
 		status: "todo",
 		priority: "medium",
+		rank: "U",
 		assigneeId: null,
 		description: null,
 		acceptanceCriteria: null,
@@ -79,10 +80,15 @@ describe("ProjectBoardPage", () => {
 		);
 		const columns = groupTasksByColumn(
 			[
-				task({ id: "todo-task", title: "Todo", status: "todo" }),
+				task({ id: "todo-task", title: "Todo", status: "todo", rank: "U" }),
 				task({ id: "doing-task", title: "Doing", status: "in-progress" }),
 				task({ id: "done-task", title: "Done", status: "done" }),
-				task({ id: "unknown-task", title: "Unknown", status: "blocked" }),
+				task({
+					id: "unknown-task",
+					title: "Unknown",
+					status: "blocked",
+					rank: "j",
+				}),
 				task({ id: "other-task", projectId: "project-2", title: "Other" }),
 			],
 			"project-1",
@@ -91,6 +97,25 @@ describe("ProjectBoardPage", () => {
 		expect(
 			columns.map((column) => column.cards.map((card) => card.id)),
 		).toEqual([["todo-task", "unknown-task"], ["doing-task"], ["done-task"]]);
+	});
+
+	it("sorts cards by rank and computes fractional ranks", async () => {
+		const { getRankForDestination, groupTasksByColumn, rankBetween } =
+			await import("#/domains/workspace/ui/ProjectBoardPage");
+		const columns = groupTasksByColumn(
+			[
+				task({ id: "last", title: "Last", rank: "j" }),
+				task({ id: "first", title: "First", rank: "U" }),
+			],
+			"project-1",
+		);
+
+		const middleRank = rankBetween("U", "j");
+
+		expect(columns[0].cards.map((card) => card.id)).toEqual(["first", "last"]);
+		expect(middleRank > "U").toBe(true);
+		expect(middleRank < "j").toBe(true);
+		expect(getRankForDestination(columns[0].cards, 1)).toBe(middleRank);
 	});
 
 	it("renders API project details and API task cards", async () => {

@@ -34,7 +34,7 @@ import { mapValues } from '../runtime';
  */
 export interface TaskRead {
     /**
-     * 
+     *
      * @type {string}
      * @memberof TaskRead
      */
@@ -65,6 +65,12 @@ export interface TaskRead {
     priority: string;
     /**
      * 
+     * @type {string}
+     * @memberof TaskRead
+     */
+    rank: string;
+    /**
+     *
      * @type {string}
      * @memberof TaskRead
      */
@@ -110,6 +116,7 @@ export function instanceOfTaskRead(value: object): value is TaskRead {
     if (!('title' in value) || value['title'] === undefined) return false;
     if (!('status' in value) || value['status'] === undefined) return false;
     if (!('priority' in value) || value['priority'] === undefined) return false;
+    if (!('rank' in value) || value['rank'] === undefined) return false;
     if (!('assigneeId' in value) || value['assigneeId'] === undefined) return false;
     if (!('description' in value) || value['description'] === undefined) return false;
     if (!('acceptanceCriteria' in value) || value['acceptanceCriteria'] === undefined) return false;
@@ -134,6 +141,7 @@ export function TaskReadFromJSONTyped(json: any, ignoreDiscriminator: boolean): 
         'title': json['title'],
         'status': json['status'],
         'priority': json['priority'],
+        'rank': json['rank'],
         'assigneeId': json['assignee_id'],
         'description': json['description'],
         'acceptanceCriteria': json['acceptance_criteria'],
@@ -159,6 +167,7 @@ export function TaskReadToJSONTyped(value?: TaskRead | null, ignoreDiscriminator
         'title': value['title'],
         'status': value['status'],
         'priority': value['priority'],
+        'rank': value['rank'],
         'assignee_id': value['assigneeId'],
         'description': value['description'],
         'acceptance_criteria': value['acceptanceCriteria'],
@@ -167,4 +176,3 @@ export function TaskReadToJSONTyped(value?: TaskRead | null, ignoreDiscriminator
         'updated_at': value['updatedAt'] == null ? value['updatedAt'] : value['updatedAt'].toISOString(),
     };
 }
-

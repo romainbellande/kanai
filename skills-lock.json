@@ -19,6 +19,12 @@
       "skillPath": "skills/find-skills/SKILL.md",
       "computedHash": "9e1c8b3103f92fa8092568a44fe64858de7c5c9dc65ce4bea8f168080e889cfd"
     },
+    "github": {
+      "source": "HKUDS/nanobot",
+      "sourceType": "github",
+      "skillPath": "nanobot/skills/github/SKILL.md",
+      "computedHash": "7639373c16dbc9aedc4df986ad17ba3c2be4626a1a080bebfb7d13d152b14f24"
+    },
     "obsidian": {
       "source": "bitbonsai/mcpvault",
       "sourceType": "github",

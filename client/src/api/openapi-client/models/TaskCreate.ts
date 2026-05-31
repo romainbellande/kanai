@@ -30,7 +30,7 @@ import { mapValues } from '../runtime';
  */
 export interface TaskCreate {
     /**
-     * 
+     *
      * @type {string}
      * @memberof TaskCreate
      */
@@ -49,6 +49,12 @@ export interface TaskCreate {
     priority?: string;
     /**
      * 
+     * @type {string}
+     * @memberof TaskCreate
+     */
+    rank?: string | null;
+    /**
+     *
      * @type {string}
      * @memberof TaskCreate
      */
@@ -94,6 +100,7 @@ export function TaskCreateFromJSONTyped(json: any, ignoreDiscriminator: boolean)
         'title': json['title'],
         'status': json['status'] == null ? undefined : json['status'],
         'priority': json['priority'] == null ? undefined : json['priority'],
+        'rank': json['rank'] == null ? undefined : json['rank'],
         'assigneeId': json['assignee_id'] == null ? undefined : json['assignee_id'],
         'description': json['description'] == null ? undefined : json['description'],
         'acceptanceCriteria': json['acceptance_criteria'] == null ? undefined : json['acceptance_criteria'],
@@ -115,10 +122,10 @@ export function TaskCreateToJSONTyped(value?: TaskCreate | null, ignoreDiscrimin
         'title': value['title'],
         'status': value['status'],
         'priority': value['priority'],
+        'rank': value['rank'],
         'assignee_id': value['assigneeId'],
         'description': value['description'],
         'acceptance_criteria': value['acceptanceCriteria'],
         'tag': value['tag'],
     };
 }
-

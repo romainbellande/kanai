@@ -65,6 +65,8 @@ def test_task_model_uses_client_fields_without_due_columns() -> None:
     assert columns.title.nullable is False
     assert columns.status.nullable is False
     assert columns.priority.nullable is False
+    assert columns.task_rank.nullable is False
+    assert "rank" not in columns
     assert columns.assignee_id.nullable is True
     assert columns.description.nullable is True
     assert columns.acceptance_criteria.nullable is True
