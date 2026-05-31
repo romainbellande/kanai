@@ -19,7 +19,13 @@ import {
 	UserPlus,
 } from "lucide-react";
 
-import { useCurrentUserQuery } from "#/api/client";
+import {
+	CurrentUserAuthError,
+	type Task,
+	useCurrentUserQuery,
+	useProjectQuery,
+	useProjectTasksQuery,
+} from "#/api/client";
 import { getAuthLogoutUrl } from "#/domains/auth/model/auth-client";
 import { clearAuthSession } from "#/domains/auth/model/openid-client";
 import { WorkspaceIconButton } from "#/domains/workspace/ui/atoms/WorkspaceIconButton";
@@ -32,56 +38,72 @@ const sidebarItems: SidebarItem[] = [
 	{ label: "Analytics", icon: TrendingUp },
 ];
 
-const projectNames: Record<string, string> = {
-	"enterprise-launch": "Enterprise Launch",
-	"q4-logistics-scaling": "Q4 Logistics Scaling",
-	"security-audit-phase-1": "Security Audit Phase 1",
+const columnDefinitions = [
+	{ id: "todo", title: "To Do" },
+	{ id: "in-progress", title: "In Progress" },
+	{ id: "done", title: "Done" },
+] as const;
+
+type ColumnId = (typeof columnDefinitions)[number]["id"];
+
+type BoardColumn = {
+	id: ColumnId;
+	title: string;
+	cards: Task[];
 };
 
-const columns = [
-	{
-		title: "To Do",
-		cards: [
-			{
-				tag: "Strategic",
-				tagClass:
-					"bg-[var(--secondary-container)] text-[var(--on-secondary-container)]",
-				title:
-					"Conduct initial market research for Southeast Asia expansion phase",
-				meta: "Oct 12",
-			},
-			{
-				tag: "Urgent",
-				tagClass:
-					"bg-[var(--error-container)] text-[var(--on-error-container)]",
-				title: "Update compliance documentation for GDPR 2024 standards",
-				meta: "Today",
-			},
-		],
-	},
-	{
-		title: "In Progress",
-		cards: [
-			{
-				tag: "Finance",
-				tagClass: "bg-[var(--primary-fixed)] text-[var(--on-primary-fixed)]",
-				title: "Drafting Q4 Budget Allocation Proposals",
-				meta: "Oct 18",
-			},
-		],
-	},
-	{
-		title: "Done",
-		cards: [
-			{
-				tag: null,
-				tagClass: "",
-				title: "Security Audit Phase 1",
-				meta: "Archive Ready",
-			},
-		],
-	},
-];
+function getColumnId(status: string): ColumnId {
+	const normalizedStatus = status.trim().toLowerCase();
+
+	if (["done", "complete", "completed", "closed"].includes(normalizedStatus)) {
+		return "done";
+	}
+
+	if (
+		["in-progress", "in progress", "doing", "active"].includes(normalizedStatus)
+	) {
+		return "in-progress";
+	}
+
+	return "todo";
+}
+
+export function groupTasksByColumn(
+	tasks: Task[],
+	projectId: string,
+): BoardColumn[] {
+	const columns: BoardColumn[] = columnDefinitions.map((column) => ({
+		...column,
+		cards: [],
+	}));
+
+	for (const task of tasks) {
+		if (task.projectId !== projectId) {
+			continue;
+		}
+
+		const column = columns.find(({ id }) => id === getColumnId(task.status));
+
+		column?.cards.push(task);
+	}
+
+	return columns;
+}
+
+function getTagClass(priority: string): string {
+	return /urgent|high/i.test(priority)
+		? "bg-[var(--error-container)] text-[var(--on-error-container)]"
+		: "bg-[var(--secondary-container)] text-[var(--on-secondary-container)]";
+}
+
+function getTaskMeta(task: Task): string {
+	return (
+		task.updatedAt?.toLocaleDateString(undefined, {
+			month: "short",
+			day: "numeric",
+		}) ?? "No activity date"
+	);
+}
 
 function getInitials(value: string | null | undefined): string {
 	const normalizedValue = value?.trim();
@@ -92,7 +114,12 @@ function getInitials(value: string | null | undefined): string {
 export function ProjectBoardPage() {
 	const { projectId } = useParams({ from: "/projects/$projectId" });
 	const { data: currentUser } = useCurrentUserQuery();
-	const projectName = projectNames[projectId] ?? "Project";
+	const projectQuery = useProjectQuery(projectId);
+	const tasksQuery = useProjectTasksQuery(projectId);
+	const projectName = projectQuery.data?.name ?? "Project";
+	const columns = groupTasksByColumn(tasksQuery.data ?? [], projectId);
+	const isProjectAuthError = projectQuery.error instanceof CurrentUserAuthError;
+	const isTasksAuthError = tasksQuery.error instanceof CurrentUserAuthError;
 	const accountInitials = [
 		getInitials(currentUser?.first_name),
 		getInitials(currentUser?.last_name),
@@ -186,10 +213,11 @@ export function ProjectBoardPage() {
 							</nav>
 							<button
 								type="button"
+								disabled
 								className="flex w-full items-center justify-center gap-2 rounded-full bg-[var(--primary)] px-4 py-3 text-sm font-semibold text-[var(--on-primary)] shadow-[0_12px_28px_rgba(0,61,155,0.18)] hover:bg-[var(--primary-container)]"
 							>
 								<UserPlus className="h-4 w-4" />
-								Invite Member
+								Invites unavailable
 							</button>
 						</div>
 					</div>
@@ -232,11 +260,22 @@ export function ProjectBoardPage() {
 									Projects
 								</Link>
 								<ChevronRight className="h-4 w-4" />
-								<span>{projectName}</span>
+								<span>
+									{projectQuery.isPending ? "Loading project..." : projectName}
+								</span>
 							</div>
+							{projectQuery.isError ? (
+								<div className="mt-3 rounded-xl border border-[var(--outline-variant)] bg-[var(--surface-container-low)] p-3 text-sm text-[var(--on-surface-variant)]">
+									{isProjectAuthError
+										? "Sign in again to load this project."
+										: "Project details could not be loaded."}
+								</div>
+							) : null}
 							<div className="mt-3 flex items-center justify-between gap-4">
 								<h2 className="font-display text-3xl font-bold tracking-tight text-[var(--on-surface)] sm:text-[2.375rem]">
-									Main Board: Q4 Logistics
+									{projectQuery.data
+										? `Main Board: ${projectQuery.data.name}`
+										: "Main Board"}
 								</h2>
 								<div className="flex items-center gap-3">
 									<div className="flex rounded-full border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-1 shadow-sm">
@@ -254,14 +293,9 @@ export function ProjectBoardPage() {
 										</button>
 									</div>
 									<div className="flex -space-x-2">
-										{["AM", "RS", "+4"].map((member) => (
-											<span
-												key={member}
-												className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-[var(--background)] bg-[var(--surface-variant)] text-xs font-bold"
-											>
-												{member}
-											</span>
-										))}
+										<span className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-[var(--background)] bg-[var(--surface-variant)] text-xs font-bold">
+											{accountInitials || <User className="h-4 w-4" />}
+										</span>
 									</div>
 									<button
 										type="button"
@@ -281,6 +315,20 @@ export function ProjectBoardPage() {
 							</div>
 						</div>
 
+						{tasksQuery.isError ? (
+							<div className="mb-4 min-w-[1100px] rounded-xl border border-[var(--outline-variant)] bg-[var(--surface-container-low)] p-4 text-sm text-[var(--on-surface-variant)]">
+								{isTasksAuthError
+									? "Sign in again to load tasks."
+									: "Tasks could not be loaded."}
+								<button
+									type="button"
+									onClick={() => void tasksQuery.refetch()}
+									className="ml-3 rounded-full bg-[var(--primary)] px-3 py-1.5 text-xs font-semibold text-[var(--on-primary)]"
+								>
+									Retry
+								</button>
+							</div>
+						) : null}
 						<div className="flex min-w-[1100px] gap-6">
 							{columns.map((column) => (
 								<section
@@ -303,35 +351,52 @@ export function ProjectBoardPage() {
 									</div>
 
 									<div className="flex flex-col gap-4">
+										{tasksQuery.isPending ? (
+											<p className="rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-4 text-sm text-[var(--on-surface-variant)]">
+												Loading tasks...
+											</p>
+										) : null}
+										{!tasksQuery.isPending &&
+										!tasksQuery.isError &&
+										column.cards.length === 0 ? (
+											<p className="rounded-2xl border border-dashed border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-4 text-sm text-[var(--on-surface-variant)]">
+												No tasks in {column.title.toLowerCase()}.
+											</p>
+										) : null}
 										{column.cards.map((card) => (
 											<article
-												key={card.title}
+												key={card.id}
 												className="rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-4 shadow-sm transition hover:border-[var(--outline)] hover:bg-[var(--surface-bright)]"
 											>
-												{card.tag ? (
+												{card.tag || card.priority ? (
 													<span
-														className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${card.tagClass}`}
+														className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${getTagClass(card.priority)}`}
 													>
-														{card.tag}
+														{card.tag || card.priority}
 													</span>
 												) : null}
 												<p
 													className={[
 														"mt-3 text-sm leading-6",
-														column.title === "Done"
+														column.id === "done"
 															? "text-[var(--on-surface-variant)] line-through"
 															: "text-[var(--on-surface)]",
 													].join(" ")}
 												>
 													{card.title}
 												</p>
+												{card.description ? (
+													<p className="mt-2 text-xs leading-5 text-[var(--on-surface-variant)]">
+														{card.description}
+													</p>
+												) : null}
 												<div className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-[var(--surface-variant)] px-2 py-1 text-xs font-semibold text-[var(--on-surface-variant)]">
-													{column.title === "In Progress" ? (
+													{column.id === "in-progress" ? (
 														<FileText className="h-3.5 w-3.5" />
 													) : (
 														<Calendar className="h-3.5 w-3.5" />
 													)}
-													{card.meta}
+													{getTaskMeta(card)}
 												</div>
 											</article>
 										))}

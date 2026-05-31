@@ -1,8 +1,8 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
 
-import { Configuration, UsersApi } from "#/api/openapi-client";
+import { UsersApi } from "#/api/openapi-client";
 
-import { getAccessToken, getApiBaseUrl } from "./utils";
+import { createAuthenticatedConfiguration } from "./utils";
 
 export type CurrentUser = {
 	id: string;
@@ -15,12 +15,7 @@ const currentUserQueryKey = ["users", "me"] as const;
 export { CurrentUserAuthError } from "./utils";
 
 function createUsersApi(): UsersApi {
-	return new UsersApi(
-		new Configuration({
-			basePath: getApiBaseUrl(),
-			accessToken: getAccessToken,
-		}),
-	);
+	return new UsersApi(createAuthenticatedConfiguration());
 }
 
 export async function getCurrentUser(): Promise<CurrentUser> {

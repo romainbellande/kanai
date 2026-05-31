@@ -42,15 +42,18 @@ pre-commit:
       glob: "*.py"
       root: ./api
 
-    - name: client - typecheck
-      run: bunx tsc --noEmit --project tsconfig.json
-      glob: "*.{ts,tsx}"
+    - name: client - generated client and typecheck
       root: ./client
+      group:
+        parallel: false
+        jobs:
+          - name: client - gen openapi client
+            run: bunx @openapitools/openapi-generator-cli generate -i http://localhost:8000/openapi.json -g typescript-fetch -o src/api/openapi-client && node scripts/mark-openapi-client-ts-nocheck.mjs
+            stage_fixed: true
 
-    - name: client - gen openapi client
-      run: bunx @openapitools/openapi-generator-cli generate -i http://localhost:8000/openapi.json -g typescript-fetch -o src/api/openapi-client
-      root: ./client
-      stage_fixed: true
+          - name: client - typecheck
+            run: bunx tsc --noEmit --project tsconfig.json
+            glob: "*.{ts,tsx}"
 
     # - name: client - tests
     #   run: bun run test

@@ -1,3 +1,4 @@
+import { Configuration } from "#/api/openapi-client";
 import { getStoredAuthSession } from "#/domains/auth/model/openid-client";
 
 const missingAccessTokenErrorMessage =
@@ -28,4 +29,29 @@ export async function getAccessToken(): Promise<string> {
 	}
 
 	return accessToken;
+}
+
+export function createAuthenticatedConfiguration(): Configuration {
+	return new Configuration({
+		basePath: getApiBaseUrl(),
+		accessToken: getAccessToken,
+		middleware: [
+			{
+				pre: async ({ init, url }) => {
+					const token = await getAccessToken();
+					const headers = new Headers(init.headers);
+
+					headers.set("Authorization", `Bearer ${token}`);
+
+					return {
+						url,
+						init: {
+							...init,
+							headers,
+						},
+					};
+				},
+			},
+		],
+	});
 }

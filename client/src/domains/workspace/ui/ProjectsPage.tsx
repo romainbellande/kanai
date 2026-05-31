@@ -1,38 +1,14 @@
 import { Link } from "@tanstack/react-router";
+import { Plus, Search } from "lucide-react";
+import { useState } from "react";
+
 import {
-	ChevronLeft,
-	ChevronRight,
-	FileText,
-	Plus,
-	Search,
-} from "lucide-react";
-
-import { useCurrentUserQuery } from "#/api/client";
+	CurrentUserAuthError,
+	type Project,
+	useCurrentUserQuery,
+	useProjectsQuery,
+} from "#/api/client";
 import { WorkspaceLayout } from "#/domains/workspace/ui/templates/WorkspaceLayout";
-
-const projects = [
-	{
-		id: "enterprise-launch",
-		name: "Enterprise Launch",
-		description: "Finalizing marketing assets and press release schedule.",
-		status: "On Track",
-		tone: "primary",
-	},
-	{
-		id: "q4-logistics-scaling",
-		name: "Q4 Logistics Scaling",
-		description: "Awaiting budget approval for southeast asia expansion.",
-		status: "Review Required",
-		tone: "warning",
-	},
-	{
-		id: "security-audit-phase-1",
-		name: "Security Audit Phase 1",
-		description: "Penetration testing on primary database clusters.",
-		status: "In Progress",
-		tone: "secondary",
-	},
-];
 
 function getInitials(value: string | null | undefined): string {
 	const normalizedValue = value?.trim();
@@ -40,13 +16,26 @@ function getInitials(value: string | null | undefined): string {
 	return normalizedValue ? normalizedValue.slice(0, 1).toUpperCase() : "";
 }
 
+function getProjectStatus(project: Project): { status: string; tone: string } {
+	const normalizedStatus = project.status?.trim();
+	const status = normalizedStatus || "Active";
+	const tone = /blocked|risk|review/i.test(status)
+		? "warning"
+		: /done|complete|closed/i.test(status)
+			? "secondary"
+			: "primary";
+
+	return { status, tone };
+}
+
 function ProjectStatus({ tone, status }: { tone: string; status: string }) {
-	const toneClass = {
-		primary: "bg-[var(--primary-fixed)] text-[var(--on-primary-fixed)]",
-		secondary:
-			"bg-[var(--secondary-container)] text-[var(--on-secondary-container)]",
-		warning: "bg-[#ffdbcf] text-[#812800]",
-	}[tone];
+	const toneClass =
+		{
+			primary: "bg-[var(--primary-fixed)] text-[var(--on-primary-fixed)]",
+			secondary:
+				"bg-[var(--secondary-container)] text-[var(--on-secondary-container)]",
+			warning: "bg-[#ffdbcf] text-[#812800]",
+		}[tone] ?? "bg-[var(--surface-variant)] text-[var(--on-surface-variant)]";
 
 	return (
 		<span
@@ -58,13 +47,27 @@ function ProjectStatus({ tone, status }: { tone: string; status: string }) {
 }
 
 export function ProjectsPage() {
+	const [searchQuery, setSearchQuery] = useState("");
 	const { data: currentUser } = useCurrentUserQuery();
+	const projectsQuery = useProjectsQuery();
 	const accountInitials = [
 		getInitials(currentUser?.first_name),
 		getInitials(currentUser?.last_name),
 	]
 		.join("")
 		.trim();
+	const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+	const projects = (projectsQuery.data ?? []).filter((project) => {
+		if (!normalizedSearchQuery) {
+			return true;
+		}
+
+		return [project.name, project.code, project.description ?? ""]
+			.join(" ")
+			.toLowerCase()
+			.includes(normalizedSearchQuery);
+	});
+	const isAuthError = projectsQuery.error instanceof CurrentUserAuthError;
 
 	return (
 		<WorkspaceLayout
@@ -83,7 +86,9 @@ export function ProjectsPage() {
 								<input
 									className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm outline-none placeholder:text-[var(--on-surface-variant)]"
 									placeholder="Search projects..."
+									onChange={(event) => setSearchQuery(event.target.value)}
 									type="search"
+									value={searchQuery}
 								/>
 							</label>
 							<Link
@@ -97,65 +102,82 @@ export function ProjectsPage() {
 					</div>
 
 					<div className="flex flex-col gap-2 p-4">
-						{projects.map((project) => (
-							<Link
-								key={project.name}
-								to="/projects/$projectId"
-								params={{ projectId: project.id }}
-								className="flex flex-col gap-4 rounded-xl border border-transparent p-4 text-inherit no-underline hover:border-[var(--outline-variant)] hover:bg-[var(--surface-bright)] sm:flex-row sm:items-center sm:justify-between"
-							>
-								<div className="min-w-0 flex-1">
-									<div className="flex flex-wrap items-center gap-2">
-										<h4 className="text-sm font-semibold text-[var(--on-surface)]">
-											{project.name}
-										</h4>
-										<ProjectStatus
-											status={project.status}
-											tone={project.tone}
-										/>
+						{projectsQuery.isPending ? (
+							<p className="rounded-xl p-4 text-sm text-[var(--on-surface-variant)]">
+								Loading projects...
+							</p>
+						) : null}
+						{projectsQuery.isError ? (
+							<div className="rounded-xl border border-[var(--outline-variant)] bg-[var(--surface-container-low)] p-4">
+								<p className="text-sm font-semibold text-[var(--on-surface)]">
+									{isAuthError
+										? "Sign in again to load your projects."
+										: "Projects could not be loaded."}
+								</p>
+								<button
+									type="button"
+									onClick={() => void projectsQuery.refetch()}
+									className="mt-3 rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--on-primary)]"
+								>
+									Retry
+								</button>
+							</div>
+						) : null}
+						{!projectsQuery.isPending &&
+						!projectsQuery.isError &&
+						projects.length === 0 ? (
+							<div className="rounded-xl border border-dashed border-[var(--outline-variant)] bg-[var(--surface-container-low)] p-6 text-center">
+								<p className="text-sm font-semibold text-[var(--on-surface)]">
+									{normalizedSearchQuery
+										? "No projects match your search."
+										: "No projects yet."}
+								</p>
+								<Link
+									to="/projects/new"
+									className="mt-3 inline-flex rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--on-primary)] no-underline"
+								>
+									Create a project
+								</Link>
+							</div>
+						) : null}
+						{projects.map((project) => {
+							const status = getProjectStatus(project);
+
+							return (
+								<Link
+									key={project.id}
+									to="/projects/$projectId"
+									params={{ projectId: project.id }}
+									className="flex flex-col gap-4 rounded-xl border border-transparent p-4 text-inherit no-underline hover:border-[var(--outline-variant)] hover:bg-[var(--surface-bright)] sm:flex-row sm:items-center sm:justify-between"
+								>
+									<div className="min-w-0 flex-1">
+										<div className="flex flex-wrap items-center gap-2">
+											<h4 className="text-sm font-semibold text-[var(--on-surface)]">
+												{project.name}
+											</h4>
+											<ProjectStatus {...status} />
+											<span className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--on-surface-variant)]">
+												{project.code}
+											</span>
+										</div>
+										<p className="mt-1 text-sm leading-6 text-[var(--on-surface-variant)]">
+											{project.description || "No description provided."}
+										</p>
 									</div>
-									<p className="mt-1 text-sm leading-6 text-[var(--on-surface-variant)]">
-										{project.description}
-									</p>
-								</div>
-								<span className="inline-flex items-center justify-center rounded-full bg-[var(--primary-container)] px-5 py-2 text-sm font-semibold text-[var(--on-primary)] hover:bg-[var(--primary)]">
-									Open Board
-								</span>
-							</Link>
-						))}
+									<span className="inline-flex items-center justify-center rounded-full bg-[var(--primary-container)] px-5 py-2 text-sm font-semibold text-[var(--on-primary)] hover:bg-[var(--primary)]">
+										Open Board
+									</span>
+								</Link>
+							);
+						})}
 					</div>
 
 					<div className="flex flex-col gap-3 border-t border-[var(--outline-variant)] p-5 text-sm font-semibold text-[var(--on-surface-variant)] sm:flex-row sm:items-center sm:justify-between">
-						<span>Showing 1-3 of 12</span>
-						<div className="flex items-center gap-1">
-							<button
-								type="button"
-								disabled
-								className="flex h-8 w-8 items-center justify-center rounded-full opacity-50"
-							>
-								<ChevronLeft className="h-4 w-4" />
-							</button>
-							{[1, 2, 3].map((page) => (
-								<button
-									key={page}
-									type="button"
-									className={[
-										"flex h-8 w-8 items-center justify-center rounded-full",
-										page === 1
-											? "bg-[var(--primary)] text-[var(--on-primary)]"
-											: "hover:bg-[var(--surface-container-high)]",
-									].join(" ")}
-								>
-									{page}
-								</button>
-							))}
-							<button
-								type="button"
-								className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-[var(--surface-container-high)]"
-							>
-								<ChevronRight className="h-4 w-4" />
-							</button>
-						</div>
+						<span>
+							{projectsQuery.data
+								? `${projects.length} of ${projectsQuery.data.length} projects`
+								: "Project count unavailable"}
+						</span>
 					</div>
 				</section>
 
@@ -167,58 +189,16 @@ export function ProjectsPage() {
 					</div>
 					<div className="flex max-h-[400px] flex-col gap-5 overflow-y-auto p-5">
 						<div className="flex gap-3">
-							<span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-[var(--primary-fixed)] text-xs font-semibold text-[var(--on-primary-fixed)]">
-								RS
-							</span>
-							<div>
-								<p className="text-sm leading-6">
-									<strong>Rachel Smith</strong> moved{" "}
-									<strong>Drafting Q4 Budget</strong> to{" "}
-									<span className="font-medium text-[var(--primary)]">
-										In Progress
-									</span>
-								</p>
-								<span className="text-xs font-semibold text-[var(--on-surface-variant)]">
-									2 hours ago
-								</span>
-							</div>
-						</div>
-
-						<div className="flex gap-3">
-							<span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-[#ffdbcf] text-xs font-semibold text-[#812800]">
-								AM
-							</span>
-							<div>
-								<p className="text-sm leading-6">
-									<strong>Alex Mercer</strong> attached a file to{" "}
-									<strong>Market Research</strong>
-								</p>
-								<div className="mt-2 inline-flex items-center gap-1 rounded-md border border-[var(--outline-variant)] bg-[var(--surface-container-high)] px-2 py-1 text-xs font-semibold text-[var(--on-surface-variant)]">
-									<FileText className="h-3.5 w-3.5" />
-									Q3_Analysis.pdf
-								</div>
-								<div className="mt-2 text-xs font-semibold text-[var(--on-surface-variant)]">
-									4 hours ago
-								</div>
-							</div>
-						</div>
-
-						<div className="flex gap-3">
 							<span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-[var(--primary-container)] text-xs font-semibold text-[var(--on-primary)]">
-								{accountInitials || "JD"}
+								{accountInitials || "--"}
 							</span>
 							<div>
 								<p className="text-sm leading-6">
-									<strong>You</strong> commented on{" "}
-									<strong>Security Audit Phase 1</strong>
+									Recent project activity is not available from the API yet.
 								</p>
-								<p className="mt-2 border-l-2 border-[var(--primary-fixed)] pl-3 text-sm italic leading-6 text-[var(--on-surface-variant)]">
-									Please ensure the compliance docs are updated before
-									archiving.
+								<p className="mt-2 text-sm leading-6 text-[var(--on-surface-variant)]">
+									Open a project board to view persisted tasks.
 								</p>
-								<div className="mt-2 text-xs font-semibold text-[var(--on-surface-variant)]">
-									Yesterday
-								</div>
 							</div>
 						</div>
 					</div>

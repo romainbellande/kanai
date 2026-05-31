@@ -42,14 +42,12 @@ describe("current-user client", () => {
 		});
 
 		expect(fetchSpy).toHaveBeenCalledTimes(1);
-		expect(fetchSpy).toHaveBeenCalledWith(
-			"https://api.example.test/users/me",
-			expect.objectContaining({
-				headers: expect.objectContaining({
-					Authorization: "Bearer test-access-token",
-				}),
-				method: "GET",
-			}),
+		const [url, init] = fetchSpy.mock.calls[0];
+
+		expect(url).toBe("https://api.example.test/users/me");
+		expect(init?.method).toBe("GET");
+		expect(new Headers(init?.headers).get("Authorization")).toBe(
+			"Bearer test-access-token",
 		);
 	});
 
