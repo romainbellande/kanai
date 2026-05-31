@@ -287,36 +287,42 @@ function BoardTaskCard({
 					: "cursor-grab active:cursor-grabbing",
 			].join(" ")}
 		>
-			{card.tag || card.priority ? (
-				<span
-					className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${getTagClass(card.priority)}`}
-				>
-					{card.tag || card.priority}
-				</span>
-			) : null}
-			<p
-				className={[
-					"mt-3 text-sm leading-6",
-					columnId === "done"
-						? "text-[var(--on-surface-variant)] line-through"
-						: "text-[var(--on-surface)]",
-				].join(" ")}
+			<Link
+				to="/projects/$projectId/tasks/$taskId"
+				params={{ projectId: card.projectId, taskId: card.id }}
+				className="block text-inherit no-underline"
 			>
-				{card.title}
-			</p>
-			{card.description ? (
-				<p className="mt-2 text-xs leading-5 text-[var(--on-surface-variant)]">
-					{card.description}
+				{card.tag || card.priority ? (
+					<span
+						className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${getTagClass(card.priority)}`}
+					>
+						{card.tag || card.priority}
+					</span>
+				) : null}
+				<p
+					className={[
+						"mt-3 text-sm leading-6",
+						columnId === "done"
+							? "text-[var(--on-surface-variant)] line-through"
+							: "text-[var(--on-surface)]",
+					].join(" ")}
+				>
+					{card.title}
 				</p>
-			) : null}
-			<div className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-[var(--surface-variant)] px-2 py-1 text-xs font-semibold text-[var(--on-surface-variant)]">
-				{columnId === "in-progress" ? (
-					<FileText className="h-3.5 w-3.5" />
-				) : (
-					<Calendar className="h-3.5 w-3.5" />
-				)}
-				{getTaskMeta(card)}
-			</div>
+				{card.description ? (
+					<p className="mt-2 text-xs leading-5 text-[var(--on-surface-variant)]">
+						{card.description}
+					</p>
+				) : null}
+				<div className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-[var(--surface-variant)] px-2 py-1 text-xs font-semibold text-[var(--on-surface-variant)]">
+					{columnId === "in-progress" ? (
+						<FileText className="h-3.5 w-3.5" />
+					) : (
+						<Calendar className="h-3.5 w-3.5" />
+					)}
+					{getTaskMeta(card)}
+				</div>
+			</Link>
 		</article>
 	);
 }
