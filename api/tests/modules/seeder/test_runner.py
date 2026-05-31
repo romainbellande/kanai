@@ -7,14 +7,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel
 
-from app.modules.seeder.base import BaseSeeder, SeedContext
-from app.modules.seeder.runner import (
+from app.models.user import User
+from app.services.seeder_service import (
+    BaseSeeder,
     SeederConfigurationError,
     SeederCycleError,
     SeederDependencyError,
     SeederRunner,
+    SeedContext,
 )
-from app.modules.user.user_model import User
 
 
 class RecordingSeeder(BaseSeeder):

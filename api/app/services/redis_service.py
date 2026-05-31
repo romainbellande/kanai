@@ -10,8 +10,8 @@ from pydantic import BaseModel, ValidationError
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
-from app.config import get_settings
-from app.exceptions import (
+from app.core.config import get_settings
+from app.core.exceptions import (
     RedisConnectionException,
     RedisDataValidationException,
     RedisKeyAlreadyExistsException,

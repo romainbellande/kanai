@@ -2,9 +2,9 @@ from dataclasses import dataclass
 
 import pytest
 
-import main
-from app.config import Environment, Settings
-from app.modules.seeder import startup as startup_module
+import app.main as main
+from app.core.config import Environment, Settings
+from app.services import seeder_service as startup_module
 
 
 @dataclass

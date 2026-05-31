@@ -8,9 +8,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel
 
-from app.modules.project.project_model import Project, ProjectMember, ProjectOwner, Task
-from app.modules.project.project_service import create_project
-from app.modules.user.user_model import User
+from app.models.project import Project, ProjectMember, ProjectOwner
+from app.models.task import Task
+from app.models.user import User
+from app.services.project_service import create_project
 
 
 @pytest_asyncio.fixture

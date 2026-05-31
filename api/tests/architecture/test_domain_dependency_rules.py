@@ -1,27 +1,23 @@
-from tests.architecture.helpers import iter_import_records, iter_module_directories
+from tests.architecture.helpers import MODELS_ROOT, SCHEMAS_ROOT, iter_import_records
 
 
-def test_domain_code_stays_free_of_framework_and_infrastructure_imports() -> None:
+def test_models_and_schemas_stay_free_of_api_and_service_imports() -> None:
     violations: list[str] = []
 
-    for module_dir in iter_module_directories():
-        domain_dir = module_dir / "domain"
-        if not domain_dir.is_dir():
-            continue
-
-        context_name = module_dir.name
+    for root in (MODELS_ROOT, SCHEMAS_ROOT):
         blocked_prefixes = (
             "fastapi",
             "starlette",
+            "app.api",
+            "app.integrations",
+            "app.repositories",
             "app.services",
-            f"app.modules.{context_name}.interface",
-            f"app.modules.{context_name}.infrastructure",
         )
 
-        for record in iter_import_records(domain_dir):
+        for record in iter_import_records(root):
             if record.imported_module.startswith(blocked_prefixes):
                 violations.append(
-                    f"{record.file_path}: domain code must not import '{record.imported_module}'"
+                    f"{record.file_path}: models and schemas must not import '{record.imported_module}'"
                 )
 
     assert not violations, "\n".join(violations)

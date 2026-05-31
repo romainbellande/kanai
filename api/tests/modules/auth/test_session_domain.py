@@ -4,8 +4,8 @@ import hashlib
 import pytest
 from pydantic import ValidationError
 
-from app.modules.auth.domain.session import Session
-from app.modules.auth.domain.value_objects import TokenFingerprint
+from app.core.security import TokenFingerprint
+from app.schemas.auth import Session
 
 
 def test_token_fingerprint_uses_sha256() -> None:

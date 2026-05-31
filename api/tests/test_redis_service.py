@@ -6,8 +6,8 @@ from fakeredis.aioredis import FakeRedis
 from pydantic import BaseModel
 
 import app.services.redis_service as redis_service_module
-from app.config import Settings
-from app.exceptions import (
+from app.core.config import Settings
+from app.core.exceptions import (
     RedisDataValidationException,
     RedisKeyAlreadyExistsException,
     RedisKeyNotFoundException,

@@ -1,17 +1,11 @@
-from app.config import settings
-from app.modules.auth.application.authenticate_request import AuthenticateRequest
-from app.modules.auth.bootstrap import (
+from app.core.config import settings
+from app.core.security import JoserfcTokenVerifier
+from app.repositories.session_repository import RedisSessionRepository
+from app.repositories.user_repository import DatabaseUserProvisioner
+from app.services.auth_service import (
+    AuthenticateRequest,
     build_authenticate_request,
     get_auth_whitelist_paths,
-)
-from app.modules.auth.infrastructure.joserfc_token_verifier import (
-    JoserfcTokenVerifier,
-)
-from app.modules.auth.infrastructure.database_user_provisioner import (
-    DatabaseUserProvisioner,
-)
-from app.modules.auth.infrastructure.redis_session_repository import (
-    RedisSessionRepository,
 )
 from app.services.redis_service import RedisService
 

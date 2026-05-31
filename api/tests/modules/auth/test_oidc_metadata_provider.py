@@ -2,8 +2,8 @@ import httpx
 import pytest
 from pytest_httpx import HTTPXMock
 
-from app.modules.auth.domain.exceptions import AuthenticationServiceException
-from app.modules.auth.infrastructure.oidc_metadata_provider import OidcMetadataProvider
+from app.core.exceptions import AuthenticationServiceException
+from app.integrations.oidc_metadata_provider import OidcMetadataProvider
 
 
 DISCOVERY_ENDPOINT = "https://issuer.test/.well-known/openid-configuration"

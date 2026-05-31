@@ -7,8 +7,8 @@ from sqlalchemy import inspect
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlmodel import SQLModel
 
-from app.config import Environment, Settings
-from app.services import database_service
+from app.core.config import Environment, Settings
+from app.db import session as database_service
 
 
 def build_settings(environment: Environment) -> Settings:

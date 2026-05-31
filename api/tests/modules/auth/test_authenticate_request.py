@@ -2,11 +2,10 @@ from datetime import UTC, datetime, timedelta, tzinfo
 
 import pytest
 
-from app.modules.auth.application.dto import AuthenticatedContext
-from app.modules.auth.application.authenticate_request import AuthenticateRequest
-from app.modules.auth.domain.exceptions import InvalidTokenException
-from app.modules.auth.domain.session import Session
-from app.modules.auth.domain.value_objects import TokenFingerprint
+from app.core.exceptions import InvalidTokenException
+from app.core.security import TokenFingerprint
+from app.schemas.auth import AuthenticatedContext, Session
+from app.services.auth_service import AuthenticateRequest
 
 
 class StubSessionRepository:
@@ -219,7 +218,7 @@ async def test_token_with_less_than_one_second_remaining_is_accepted_and_saved(
     fixed_now = datetime(2026, 1, 1, tzinfo=UTC)
     FixedDateTime.current = fixed_now
     monkeypatch.setattr(
-        "app.modules.auth.application.authenticate_request.datetime",
+        "app.services.auth_service.datetime",
         FixedDateTime,
     )
 

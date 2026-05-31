@@ -3,15 +3,12 @@ import sys
 
 import pytest
 
-from app.modules.auth.interface.auth_middleware import AuthMiddleware
-from app.modules.auth.infrastructure.joserfc_token_verifier import (
-    JoserfcTokenVerifier,
-)
+from app.core.security import AuthMiddleware, JoserfcTokenVerifier
 
 
 def test_authenticate_request_wires_configured_audience_into_verifier() -> None:
-    sys.modules.pop("main", None)
-    main = importlib.import_module("main")
+    sys.modules.pop("app.main", None)
+    main = importlib.import_module("app.main")
 
     verifier = main.authenticate_request._token_verifier
 
@@ -22,24 +19,24 @@ def test_authenticate_request_wires_configured_audience_into_verifier() -> None:
 def test_main_builds_auth_middleware_from_bootstrap_helpers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import app.modules.auth.bootstrap as auth_bootstrap
+    import app.services.auth_service as auth_service
 
     sentinel_authenticate_request = object()
     sentinel_whitelist_paths = {"/healthz"}
 
     monkeypatch.setattr(
-        auth_bootstrap,
+        auth_service,
         "build_authenticate_request",
         lambda *, settings, redis_service: sentinel_authenticate_request,
     )
     monkeypatch.setattr(
-        auth_bootstrap,
+        auth_service,
         "get_auth_whitelist_paths",
         lambda: sentinel_whitelist_paths,
     )
 
-    sys.modules.pop("main", None)
-    main = importlib.import_module("main")
+    sys.modules.pop("app.main", None)
+    main = importlib.import_module("app.main")
 
     middleware = next(
         item for item in main.app.user_middleware if item.cls is AuthMiddleware

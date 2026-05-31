@@ -8,7 +8,7 @@ help:
     @just --list
 
 dev:
-    uv run fastapi dev
+    uv run fastapi dev app/main.py
 
 fix-all:
     uv run ruff check . --fix && uv run ruff format .
@@ -17,7 +17,7 @@ tests:
     uv run pytest -n auto -qq --show-capture=no --color=no
 
 tests-cov:
-    uv run pytest -n auto --cov=src
+    uv run pytest -n auto --cov=app
 
 inspector server:
     npx @modelcontextprotocol/inspector --config ./mcp.json --server {{server}}

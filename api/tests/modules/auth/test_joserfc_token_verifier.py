@@ -4,9 +4,9 @@ from typing import cast
 import pytest
 from joserfc.errors import JoseError
 
-from app.modules.auth.domain.exceptions import AuthenticationServiceException
-from app.modules.auth.domain.exceptions import InvalidTokenException
-from app.modules.auth.infrastructure.joserfc_token_verifier import JoserfcTokenVerifier
+from app.core.exceptions import AuthenticationServiceException
+from app.core.exceptions import InvalidTokenException
+from app.core.security import JoserfcTokenVerifier
 
 
 class StubMetadataProvider:
@@ -59,15 +59,15 @@ async def test_verify_returns_authenticated_context(
         return stub_token
 
     monkeypatch.setattr(
-        "app.modules.auth.infrastructure.joserfc_token_verifier.KeySet.import_key_set",
+        "app.core.security.KeySet.import_key_set",
         fake_import_key_set,
     )
     monkeypatch.setattr(
-        "app.modules.auth.infrastructure.joserfc_token_verifier.jwt.decode",
+        "app.core.security.jwt.decode",
         fake_decode,
     )
     monkeypatch.setattr(
-        "app.modules.auth.infrastructure.joserfc_token_verifier.jwt.JWTClaimsRegistry",
+        "app.core.security.jwt.JWTClaimsRegistry",
         FakeJWTClaimsRegistry,
     )
 
@@ -94,11 +94,11 @@ async def test_verify_maps_jose_error_to_invalid_token_exception(
         raise JoseError("token invalid")
 
     monkeypatch.setattr(
-        "app.modules.auth.infrastructure.joserfc_token_verifier.KeySet.import_key_set",
+        "app.core.security.KeySet.import_key_set",
         fake_import_key_set,
     )
     monkeypatch.setattr(
-        "app.modules.auth.infrastructure.joserfc_token_verifier.jwt.decode",
+        "app.core.security.jwt.decode",
         fake_decode,
     )
 
@@ -126,15 +126,15 @@ async def test_verify_rejects_wrong_issuer(monkeypatch: pytest.MonkeyPatch) -> N
                 raise JoseError("invalid issuer")
 
     monkeypatch.setattr(
-        "app.modules.auth.infrastructure.joserfc_token_verifier.KeySet.import_key_set",
+        "app.core.security.KeySet.import_key_set",
         lambda _: {"imported": True},
     )
     monkeypatch.setattr(
-        "app.modules.auth.infrastructure.joserfc_token_verifier.jwt.decode",
+        "app.core.security.jwt.decode",
         lambda *_: stub_token,
     )
     monkeypatch.setattr(
-        "app.modules.auth.infrastructure.joserfc_token_verifier.jwt.JWTClaimsRegistry",
+        "app.core.security.jwt.JWTClaimsRegistry",
         FakeJWTClaimsRegistry,
     )
 
@@ -168,15 +168,15 @@ async def test_verify_rejects_wrong_audience_when_expected_audience_configured(
                 raise JoseError("invalid audience")
 
     monkeypatch.setattr(
-        "app.modules.auth.infrastructure.joserfc_token_verifier.KeySet.import_key_set",
+        "app.core.security.KeySet.import_key_set",
         lambda _: {"imported": True},
     )
     monkeypatch.setattr(
-        "app.modules.auth.infrastructure.joserfc_token_verifier.jwt.decode",
+        "app.core.security.jwt.decode",
         lambda *_: stub_token,
     )
     monkeypatch.setattr(
-        "app.modules.auth.infrastructure.joserfc_token_verifier.jwt.JWTClaimsRegistry",
+        "app.core.security.jwt.JWTClaimsRegistry",
         FakeJWTClaimsRegistry,
     )
 
@@ -205,15 +205,15 @@ async def test_verify_maps_malformed_decoded_claims_to_invalid_token_exception(
             del claims
 
     monkeypatch.setattr(
-        "app.modules.auth.infrastructure.joserfc_token_verifier.KeySet.import_key_set",
+        "app.core.security.KeySet.import_key_set",
         lambda _: {"imported": True},
     )
     monkeypatch.setattr(
-        "app.modules.auth.infrastructure.joserfc_token_verifier.jwt.decode",
+        "app.core.security.jwt.decode",
         lambda *_: stub_token,
     )
     monkeypatch.setattr(
-        "app.modules.auth.infrastructure.joserfc_token_verifier.jwt.JWTClaimsRegistry",
+        "app.core.security.jwt.JWTClaimsRegistry",
         FakeJWTClaimsRegistry,
     )
 
@@ -231,7 +231,7 @@ async def test_verify_maps_malformed_jwks_to_authentication_service_exception(
         raise ValueError("bad jwks")
 
     monkeypatch.setattr(
-        "app.modules.auth.infrastructure.joserfc_token_verifier.KeySet.import_key_set",
+        "app.core.security.KeySet.import_key_set",
         fake_import_key_set,
     )
 
@@ -252,7 +252,7 @@ async def test_verify_maps_realistic_key_import_failure_to_authentication_servic
         raise KeyError("keys")
 
     monkeypatch.setattr(
-        "app.modules.auth.infrastructure.joserfc_token_verifier.KeySet.import_key_set",
+        "app.core.security.KeySet.import_key_set",
         fake_import_key_set,
     )
 

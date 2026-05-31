@@ -7,13 +7,10 @@ import pytest_asyncio
 from fakeredis.aioredis import FakeRedis
 
 import app.services.redis_service as redis_service_module
-from app.exceptions import RedisConnectionException
-from app.modules.auth.domain.exceptions import AuthenticationServiceException
-from app.modules.auth.domain.session import Session
-from app.modules.auth.infrastructure.redis_session_repository import (
-    RedisSessionRepository,
-)
-from app.modules.auth.domain.value_objects import TokenFingerprint
+from app.core.exceptions import AuthenticationServiceException, RedisConnectionException
+from app.core.security import TokenFingerprint
+from app.repositories.session_repository import RedisSessionRepository
+from app.schemas.auth import Session
 from app.services.redis_service import RedisService
 
 

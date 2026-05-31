@@ -72,6 +72,12 @@ Before proposing a new skill:
 
 A skill proposal must have clear trigger conditions and anti-triggers.
 
+## Post-Change Drift Check
+
+When a session changes repository architecture, command entrypoints, verification workflows, agent docs, or paths referenced by existing skills, propose a skill update before ending the task.
+
+Prefer updating an existing project skill over creating a new skill.
+
 ## Proposal Template Reference
 
 When the user asks for a structured proposal, detailed review packet, or reusable proposal format, load and follow:

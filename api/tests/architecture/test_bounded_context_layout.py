@@ -1,25 +1,73 @@
 from pathlib import Path
 
-from tests.architecture.helpers import iter_module_directories
+from tests.architecture.helpers import APP_ROOT, iter_python_files
 
 
-def test_opted_in_bounded_contexts_require_all_context_packages() -> None:
-    required_packages = ("application", "infrastructure", "interface")
+def test_layered_api_layout_contains_expected_packages_and_entrypoints() -> None:
+    required_directories = (
+        "api/v1/endpoints",
+        "core",
+        "db/migrations/versions",
+        "integrations",
+        "models",
+        "repositories",
+        "schemas",
+        "services",
+        "utils",
+    )
+    required_files = (
+        "main.py",
+        "core/config.py",
+        "core/security.py",
+        "core/logging.py",
+        "core/exceptions.py",
+        "api/deps.py",
+        "api/v1/router.py",
+        "api/v1/endpoints/users.py",
+        "api/v1/endpoints/auth.py",
+        "api/v1/endpoints/products.py",
+        "schemas/user.py",
+        "schemas/auth.py",
+        "schemas/product.py",
+        "models/user.py",
+        "models/product.py",
+        "repositories/user_repository.py",
+        "repositories/product_repository.py",
+        "services/user_service.py",
+        "services/auth_service.py",
+        "services/product_service.py",
+        "db/session.py",
+        "db/base.py",
+        "integrations/email_client.py",
+        "integrations/payment_client.py",
+        "utils/pagination.py",
+    )
 
-    for module_dir in iter_module_directories():
-        if not (module_dir / "domain").is_dir():
-            continue
+    missing_directories = [
+        directory
+        for directory in required_directories
+        if not (APP_ROOT / directory).is_dir()
+    ]
+    missing_files = [
+        file_path
+        for file_path in required_files
+        if not (APP_ROOT / file_path).is_file()
+    ]
 
-        missing_packages = [
-            package_name
-            for package_name in required_packages
-            if not (module_dir / package_name).is_dir()
-        ]
-        assert not missing_packages, (
-            f"{module_dir.relative_to(Path.cwd())} opts into bounded-context layout via "
-            f"'domain/' but is missing sibling packages: {', '.join(missing_packages)}"
-        )
+    assert not missing_directories, (
+        f"Missing directories: {', '.join(missing_directories)}"
+    )
+    assert not missing_files, f"Missing files: {', '.join(missing_files)}"
 
 
-def test_flat_modules_without_domain_remain_valid() -> None:
-    assert not (Path("app/modules/user") / "domain").exists()
+def test_legacy_feature_modules_do_not_contain_python_sources() -> None:
+    legacy_modules_root = APP_ROOT / "modules"
+
+    if not legacy_modules_root.exists():
+        return
+
+    python_files = [
+        path.relative_to(Path.cwd()) for path in iter_python_files(legacy_modules_root)
+    ]
+
+    assert not python_files

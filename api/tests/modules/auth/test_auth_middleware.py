@@ -6,18 +6,17 @@ from typing import cast
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
-from app.modules.auth.application.authenticate_request import AuthenticateRequest
-from app.modules.auth.application.dto import AuthenticatedContext
-from app.modules.auth.domain.session import Session
-from app.modules.auth.domain.exceptions import (
+from app.core.exceptions import (
     AuthenticationServiceException,
     InvalidTokenException,
 )
-from app.modules.auth.domain.value_objects import TokenFingerprint
-from app.modules.auth.interface.auth_middleware import (
+from app.core.security import (
     AuthMiddleware,
     AuthenticateRequestHandler,
+    TokenFingerprint,
 )
+from app.schemas.auth import AuthenticatedContext, Session
+from app.services.auth_service import AuthenticateRequest
 
 
 class StubAuthenticateRequest:

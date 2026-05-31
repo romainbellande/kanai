@@ -16,11 +16,12 @@ This file is for coding agents working in `/home/naimor/dev/kanai/api`.
 
 ## Repository Layout
 
-- `main.py` defines the FastAPI app and mounts routers.
-- `app/config.py` holds environment-backed settings.
-- `app/services/database_service.py` creates the async engine and DB session dependency.
-- `app/modules/` is the feature area; each feature should own its router and related code.
-- `alembic/` contains migration environment files and revisions.
+- `app/main.py` defines the FastAPI app and mounts the versioned API router.
+- `app/core/config.py` holds environment-backed settings.
+- `app/db/session.py` creates the async engine and DB session dependency.
+- `app/api/v1/endpoints/` contains route handlers; `app/api/deps.py` contains shared FastAPI dependencies.
+- `app/models/`, `app/schemas/`, `app/repositories/`, and `app/services/` hold persistence models, API contracts, persistence adapters, and business logic.
+- `app/db/migrations/` contains Alembic migration environment files and revisions.
 - `Justfile` is the main command entrypoint for local workflows.
 - `pyproject.toml` currently defines dependencies only; there is no tool-specific config block yet.
 
@@ -28,7 +29,7 @@ This file is for coding agents working in `/home/naimor/dev/kanai/api`.
 
 - Install runtime + dev dependencies: `uv sync --group dev`
 - Start the dev server: `just dev`
-- Direct dev server command: `uv run fastapi dev`
+- Direct dev server command: `uv run fastapi dev app/main.py`
 - Show available Just commands: `just --list`
 
 ## Build / Lint / Test Commands
@@ -48,7 +49,7 @@ This file is for coding agents working in `/home/naimor/dev/kanai/api`.
 - Full test suite: `just tests`
 - Direct full test command: `uv run pytest -n auto -qq --show-capture=no --color=no`
 - Coverage recipe in `Justfile`: `just tests-cov`
-- Note: `just tests-cov` currently runs `--cov=src`, but the code lives under `app/`; prefer `uv run pytest -n auto --cov=app` unless the layout changes.
+- Coverage uses `uv run pytest -n auto --cov=app`.
 
 ## Running A Single Test
 
@@ -103,8 +104,8 @@ This file is for coding agents working in `/home/naimor/dev/kanai/api`.
 
 ## FastAPI Conventions
 
-- Keep route definitions inside feature modules under `app/modules/`.
-- Mount routers centrally from `main.py`.
+- Keep route definitions inside endpoint modules under `app/api/v1/endpoints/`.
+- Mount routers centrally from `app/main.py` through `app/api/v1/router.py`.
 - Use `async def` for request handlers unless there is a clear sync-only reason.
 - Return JSON-serializable data or response models, not raw ORM objects.
 - Use dependency injection for DB sessions and request-scoped resources.
@@ -113,14 +114,14 @@ This file is for coding agents working in `/home/naimor/dev/kanai/api`.
 ## Database Conventions
 
 - This repo uses SQLAlchemy async APIs; keep new DB access async.
-- Reuse the shared engine/session pattern from `app/services/database_service.py`.
+- Reuse the shared engine/session pattern from `app/db/session.py`.
 - Expose DB sessions through FastAPI dependencies rather than creating ad hoc sessions in handlers.
 - Close or dispose resources correctly in `finally` blocks or lifespan hooks.
 - Avoid mixing sync and async SQLAlchemy patterns in the same path.
 
 ## Configuration Conventions
 
-- Centralize environment-backed settings in `app/config.py`.
+- Centralize environment-backed settings in `app/core/config.py`.
 - Local development reads from `.env` through Pydantic Settings.
 - Required settings should fail fast during startup rather than silently defaulting.
 - The settings model enables nested env keys with `__`; keep that convention if nested settings are added.

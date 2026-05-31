@@ -5,8 +5,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-MODULES_ROOT = REPO_ROOT / "app" / "modules"
+APP_ROOT = REPO_ROOT / "app"
+API_ROOT = APP_ROOT / "api"
+CORE_ROOT = APP_ROOT / "core"
+MODELS_ROOT = APP_ROOT / "models"
+SCHEMAS_ROOT = APP_ROOT / "schemas"
 SERVICES_ROOT = REPO_ROOT / "app" / "services"
+REPOSITORIES_ROOT = APP_ROOT / "repositories"
 
 
 @dataclass(frozen=True)
@@ -16,7 +21,7 @@ class ImportRecord:
 
 
 def iter_module_directories() -> list[Path]:
-    return sorted(path for path in MODULES_ROOT.iterdir() if path.is_dir())
+    return sorted(path for path in APP_ROOT.iterdir() if path.is_dir())
 
 
 def iter_python_files(root: Path) -> list[Path]:

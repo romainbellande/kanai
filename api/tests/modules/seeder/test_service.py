@@ -7,10 +7,8 @@ from sqlalchemy import Column, String, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlmodel import Field, SQLModel
 
-from app.modules.seeder.registry import get_seeders
-from app.modules.seeder.runner import SeederRunner
-from app.modules.seeder.service import SeedService
-from app.modules.user.user_model import User
+from app.models.user import User
+from app.services.seeder_service import SeedService, SeederRunner, get_seeders
 
 
 class SeederTestItem(SQLModel, table=True):

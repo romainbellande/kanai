@@ -9,7 +9,7 @@ from sqlalchemy import Uuid
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel
 
-from app.modules.user.user_model import User
+from app.models.user import User
 
 
 @pytest_asyncio.fixture

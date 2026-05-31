@@ -9,12 +9,10 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel
 
-from app.modules.auth.application.dto import AuthenticatedContext
-from app.modules.auth.domain.exceptions import AuthenticationServiceException
-from app.modules.auth.infrastructure.database_user_provisioner import (
-    DatabaseUserProvisioner,
-)
-from app.modules.user.user_model import User
+from app.core.exceptions import AuthenticationServiceException
+from app.models.user import User
+from app.repositories.user_repository import DatabaseUserProvisioner
+from app.schemas.auth import AuthenticatedContext
 
 
 @pytest_asyncio.fixture

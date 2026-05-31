@@ -11,12 +11,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel
 
-from app.modules.auth.application.dto import AuthenticatedContext
-from app.modules.auth.interface.auth_middleware import AuthMiddleware
-from app.modules.project.project_model import Project, ProjectMember, ProjectOwner, Task
-from app.modules.project.project_router import project_router
-from app.modules.user.user_model import User
-from app.services.database_service import get_db
+from app.api.v1.endpoints.projects import project_router
+from app.core.security import AuthMiddleware
+from app.db.session import get_db
+from app.models.project import Project, ProjectMember, ProjectOwner
+from app.models.task import Task
+from app.models.user import User
+from app.schemas.auth import AuthenticatedContext
 
 
 class StubAuthenticateRequest:
