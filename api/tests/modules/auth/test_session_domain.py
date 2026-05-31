@@ -1,5 +1,6 @@
 from datetime import UTC, datetime, timedelta
 import hashlib
+from typing import Any
 
 import pytest
 from pydantic import ValidationError
@@ -75,7 +76,7 @@ def test_session_is_expired_handles_naive_now_input() -> None:
 
 @pytest.mark.parametrize("field_name", ["subject", "issuer"])
 def test_session_rejects_blank_required_fields(field_name: str) -> None:
-    payload = {
+    payload: dict[str, Any] = {
         "subject": "user-1",
         "issuer": "https://issuer.test",
         "expires_at": datetime.now(UTC) + timedelta(minutes=5),

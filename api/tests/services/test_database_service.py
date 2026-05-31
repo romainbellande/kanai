@@ -7,7 +7,7 @@ from sqlalchemy import inspect
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlmodel import SQLModel
 
-from app.core.config import Environment, Settings
+from app.core.config import AuthSettings, Environment, Settings
 from app.db import session as database_service
 
 
@@ -16,10 +16,11 @@ def build_settings(environment: Environment) -> Settings:
         database_url="sqlite+aiosqlite:///./test.db",
         redis_url="redis://localhost:6379/0",
         environment=environment,
-        auth={
-            "discovery_endpoint": "https://example.test/.well-known/openid-configuration",
-            "audience": "kanai-api",
-        },
+        auth=AuthSettings(
+            discovery_endpoint="https://example.test/.well-known/openid-configuration",
+            audience="kanai-api",
+        ),
+        client_origin="http://localhost:5173",
     )
 
 

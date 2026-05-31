@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import pytest
 
 import app.main as main
-from app.core.config import Environment, Settings
+from app.core.config import AuthSettings, Environment, Settings
 from app.services import seeder_service as startup_module
 
 
@@ -51,10 +51,11 @@ def build_settings(environment: Environment) -> Settings:
         database_url="sqlite+aiosqlite:///./test.db",
         redis_url="redis://localhost:6379/0",
         environment=environment,
-        auth={
-            "discovery_endpoint": "https://example.test/.well-known/openid-configuration",
-            "audience": "kanai-api",
-        },
+        auth=AuthSettings(
+            discovery_endpoint="https://example.test/.well-known/openid-configuration",
+            audience="kanai-api",
+        ),
+        client_origin="http://localhost:5173",
     )
 
 

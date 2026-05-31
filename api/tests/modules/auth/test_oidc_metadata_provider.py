@@ -1,6 +1,7 @@
 import httpx
 import pytest
 from pytest_httpx import HTTPXMock
+from typing import cast
 
 from app.core.exceptions import AuthenticationServiceException
 from app.integrations.oidc_metadata_provider import OidcMetadataProvider
@@ -52,7 +53,7 @@ async def test_cached_metadata_is_not_shared_mutable_state(
     jwks = await provider.get_jwks()
 
     discovery_document["issuer"] = "https://mutated.test"
-    cast_keys = jwks["keys"]
+    cast_keys = cast("list[dict[str, str]]", jwks["keys"])
     assert isinstance(cast_keys, list)
     cast_keys.append({"kid": "kid-2", "kty": "EC"})
 

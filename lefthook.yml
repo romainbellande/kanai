@@ -21,7 +21,7 @@ pre-commit:
   parallel: true
   jobs:
     - name: api - typecheck
-      run: uv run pyrefly check --summarize-errors
+      run: uvx ty check
       glob: "*.py"
       root: ./api
 

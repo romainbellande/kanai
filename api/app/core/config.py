@@ -2,6 +2,7 @@
 
 from enum import StrEnum
 from functools import cache
+from typing import Any, cast
 
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -94,7 +95,7 @@ def get_settings() -> Settings:
         The configured application settings instance.
     """
 
-    return Settings()  # type: ignore[call-arg]
+    return cast("Settings", cast("Any", Settings)())
 
 
 settings = get_settings()
