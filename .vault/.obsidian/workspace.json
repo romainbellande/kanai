@@ -11,14 +11,10 @@
             "id": "3d85e3f5d6af2217",
             "type": "leaf",
             "state": {
-              "type": "markdown",
-              "state": {
-                "file": "memories/2026-05-30T11-56-24-971Z.md",
-                "mode": "source",
-                "source": false
-              },
-              "icon": "lucide-file",
-              "title": "2026-05-30T11-56-24-971Z"
+              "type": "graph",
+              "state": {},
+              "icon": "lucide-git-fork",
+              "title": "Graph view"
             }
           }
         ]
@@ -185,8 +181,8 @@
   },
   "active": "3d85e3f5d6af2217",
   "lastOpenFiles": [
-    "memories/2026-05-30T12-37-12-526Z.md",
     "memories/2026-05-30T11-56-24-971Z.md",
+    "memories/2026-05-30T12-37-12-526Z.md",
     "memories/2026-05-30T11-45-48-848Z.md"
   ]
 }
