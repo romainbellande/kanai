@@ -21,6 +21,7 @@ import { mapValues } from '../runtime';
  *     title: Task title.
  *     status: Workflow status for the task. Defaults to "todo".
  *     priority: Priority level for the task. Defaults to "medium".
+ *     rank: Optional sortable LexoRank-style position. If omitted, appends to status.
  *     assignee_id: Optional user ID assigned to the task.
  *     description: Optional task details.
  *     acceptance_criteria: Optional criteria required to complete the task.
@@ -30,7 +31,7 @@ import { mapValues } from '../runtime';
  */
 export interface TaskCreate {
     /**
-     *
+     * 
      * @type {string}
      * @memberof TaskCreate
      */
@@ -54,7 +55,7 @@ export interface TaskCreate {
      */
     rank?: string | null;
     /**
-     *
+     * 
      * @type {string}
      * @memberof TaskCreate
      */
@@ -129,3 +130,4 @@ export function TaskCreateToJSONTyped(value?: TaskCreate | null, ignoreDiscrimin
         'tag': value['tag'],
     };
 }
+

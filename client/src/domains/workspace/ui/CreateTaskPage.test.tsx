@@ -62,6 +62,14 @@ function renderWithQueryClient(ui: ReactNode) {
 	queryClient.setQueryData(projectQueryOptions("project-1").queryKey, {
 		id: "project-1",
 		name: "API Project",
+		code: "API",
+		priority: "medium",
+		description: null,
+		status: null,
+		ownerIds: [],
+		memberIds: [],
+		createdAt: null,
+		updatedAt: null,
 	});
 
 	return render(
@@ -83,7 +91,20 @@ describe("CreateTaskPage", () => {
 		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
 		const createTask = vi
 			.spyOn(TasksApi.prototype, "createTaskEndpointProjectsProjectIdTasksPost")
-			.mockResolvedValue({ id: "task-1" });
+			.mockResolvedValue({
+				id: "task-1",
+				projectId: "project-1",
+				title: "Persist task",
+				status: "todo",
+				priority: "medium",
+				rank: "0|hzzzzz:",
+				assigneeId: null,
+				description: "Task notes",
+				acceptanceCriteria: "Done means done",
+				tag: null,
+				createdAt: null,
+				updatedAt: null,
+			});
 
 		renderWithQueryClient(<CreateTaskPage />);
 		fireEvent.change(screen.getByLabelText(/task title/i), {

@@ -90,7 +90,8 @@ async def create_task(
         title=payload.title,
         status=payload.status,
         priority=payload.priority,
-        rank=payload.rank or await next_task_rank(repository, project_id, payload.status),
+        rank=payload.rank
+        or await next_task_rank(repository, project_id, payload.status),
         assignee_id=payload.assignee_id,
         description=payload.description,
         acceptance_criteria=payload.acceptance_criteria,

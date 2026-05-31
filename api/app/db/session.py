@@ -29,7 +29,9 @@ def _repair_task_rank_column(connection: Connection) -> None:
 
     column_names = {column["name"] for column in inspector.get_columns("tasks")}
     if "rank" in column_names and "task_rank" not in column_names:
-        connection.exec_driver_sql('ALTER TABLE tasks RENAME COLUMN "rank" TO task_rank')
+        connection.exec_driver_sql(
+            'ALTER TABLE tasks RENAME COLUMN "rank" TO task_rank'
+        )
     elif "task_rank" not in column_names:
         connection.exec_driver_sql(
             "ALTER TABLE tasks ADD COLUMN task_rank VARCHAR NOT NULL DEFAULT 'U'"
