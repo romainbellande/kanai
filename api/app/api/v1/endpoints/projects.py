@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, status
 
 from app.api.deps import CurrentUser, DatabaseSession
-from app.api.v1.endpoints.tasks import task_router
+from app.features.tasks import task_router
 from app.schemas.project import ProjectCreate, ProjectMemberCreate, ProjectRead, ProjectUpdate
 from app.services.project_service import (
     add_project_member_for_user,

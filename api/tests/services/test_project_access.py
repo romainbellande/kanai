@@ -14,8 +14,8 @@ from sqlmodel import SQLModel
 from app.models.project import Project, ProjectMember, ProjectOwner
 from app.models.user import User
 from app.schemas.task import TaskCreate
+from app.features.tasks import TaskService
 from app.services.project_access import ProjectAccess, ProjectRole
-from app.services.task_service import create_task
 
 
 @pytest_asyncio.fixture
@@ -198,8 +198,7 @@ async def test_task_service_uses_project_access_for_denial(
     project_context: dict[str, UUID],
 ) -> None:
     with pytest.raises(HTTPException) as error:
-        await create_task(
-            session,
+        await TaskService(session).create(
             project_id=project_context["project_id"],
             user_id=project_context["stranger_id"],
             payload=TaskCreate(title="Hidden task"),
