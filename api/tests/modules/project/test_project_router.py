@@ -604,6 +604,96 @@ async def test_project_column_reorder_is_owner_only_and_requires_complete_projec
 
 
 @pytest.mark.asyncio
+async def test_project_owner_can_delete_empty_column_and_positions_are_normalized(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Enterprise Launch", "code": "ENT", "priority": "medium"},
+    )
+    project_id = project_response.json()["id"]
+
+    columns_response = await client.get(
+        f"/projects/{project_id}/columns",
+        headers={"Authorization": "Bearer token"},
+    )
+    column_id = columns_response.json()[1]["id"]
+
+    response = await client.delete(
+        f"/projects/{project_id}/columns/{column_id}",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert response.status_code == 204
+
+    list_response = await client.get(
+        f"/projects/{project_id}/columns",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert [(column["name"], column["position"]) for column in list_response.json()] == [
+        ("To Do", 0),
+        ("Done", 1),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_project_column_delete_is_owner_only_and_rejects_final_column(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    member_id = users["member"].id
+    assert member_id is not None
+
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "name": "Enterprise Launch",
+            "code": "ENT",
+            "priority": "medium",
+            "member_ids": [str(member_id)],
+        },
+    )
+    project_id = project_response.json()["id"]
+
+    columns_response = await client.get(
+        f"/projects/{project_id}/columns",
+        headers={"Authorization": "Bearer token"},
+    )
+    column_ids = [column["id"] for column in columns_response.json()]
+
+    unauthorized_response = await client.delete(
+        f"/projects/{project_id}/columns/{column_ids[0]}",
+        headers={"Authorization": "Bearer member-token"},
+    )
+    first_delete_response = await client.delete(
+        f"/projects/{project_id}/columns/{column_ids[0]}",
+        headers={"Authorization": "Bearer token"},
+    )
+    second_delete_response = await client.delete(
+        f"/projects/{project_id}/columns/{column_ids[1]}",
+        headers={"Authorization": "Bearer token"},
+    )
+    final_delete_response = await client.delete(
+        f"/projects/{project_id}/columns/{column_ids[2]}",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert unauthorized_response.status_code == 404
+    assert unauthorized_response.json() == {"detail": "Project not found"}
+    assert first_delete_response.status_code == 204
+    assert second_delete_response.status_code == 204
+    assert final_delete_response.status_code == 409
+    assert final_delete_response.json() == {
+        "detail": "Cannot delete the final project column"
+    }
+
+
+@pytest.mark.asyncio
 async def test_project_create_rejects_duplicate_global_code(
     client: AsyncClient,
     users: dict[str, User],

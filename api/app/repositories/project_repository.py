@@ -118,6 +118,10 @@ class ProjectRepository:
         """Delete a project without committing."""
         await self._session.delete(project)
 
+    async def delete_column(self, column: ProjectColumn) -> None:
+        """Delete a project workflow column without committing."""
+        await self._session.delete(column)
+
     async def commit(self) -> None:
         """Commit pending changes."""
         await self._session.commit()
