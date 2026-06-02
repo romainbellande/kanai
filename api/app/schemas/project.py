@@ -108,6 +108,12 @@ class ProjectColumnUpdate(BaseModel):
     name: str = Field(max_length=80)
 
 
+class ProjectColumnReorder(BaseModel):
+    """Request payload for reordering all project workflow columns."""
+
+    column_ids: list[UUID]
+
+
 class ProjectMemberCreate(BaseModel):
     """Request payload for adding a project member."""
 

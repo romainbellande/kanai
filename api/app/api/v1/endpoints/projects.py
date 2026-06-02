@@ -9,6 +9,7 @@ from app.features.tasks import task_router
 from app.schemas.project import (
     ProjectColumnCreate,
     ProjectColumnRead,
+    ProjectColumnReorder,
     ProjectColumnUpdate,
     ProjectCreate,
     ProjectMemberCreate,
@@ -130,6 +131,24 @@ async def update_project_column(
         column_id,
         require_current_user_id(current_user.id),
         name=payload.name,
+    )
+
+
+@project_router.put(
+    "/{project_id}/columns/reorder",
+    response_model=list[ProjectColumnRead],
+)
+async def reorder_project_columns(
+    project_id: UUID,
+    payload: ProjectColumnReorder,
+    session: DatabaseSession,
+    current_user: CurrentUser,
+) -> list[ProjectColumnRead]:
+    """Reorder all workflow columns for a project owned by the current user."""
+    return await ProjectColumnService(session).reorder(
+        project_id,
+        require_current_user_id(current_user.id),
+        column_ids=payload.column_ids,
     )
 
 
