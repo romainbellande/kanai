@@ -490,6 +490,120 @@ async def test_project_column_rename_rejects_empty_names(
 
 
 @pytest.mark.asyncio
+async def test_project_owner_can_reorder_columns(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Enterprise Launch", "code": "ENT", "priority": "medium"},
+    )
+    project_id = project_response.json()["id"]
+
+    columns_response = await client.get(
+        f"/projects/{project_id}/columns",
+        headers={"Authorization": "Bearer token"},
+    )
+    column_ids = [column["id"] for column in columns_response.json()]
+
+    response = await client.put(
+        f"/projects/{project_id}/columns/reorder",
+        headers={"Authorization": "Bearer token"},
+        json={"column_ids": [column_ids[2], column_ids[0], column_ids[1]]},
+    )
+
+    assert response.status_code == 200
+    assert [(column["name"], column["position"]) for column in response.json()] == [
+        ("Done", 0),
+        ("To Do", 1),
+        ("In Progress", 2),
+    ]
+
+    list_response = await client.get(
+        f"/projects/{project_id}/columns",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert [(column["name"], column["position"]) for column in list_response.json()] == [
+        ("Done", 0),
+        ("To Do", 1),
+        ("In Progress", 2),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_project_column_reorder_is_owner_only_and_requires_complete_project_ids(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    member_id = users["member"].id
+    assert member_id is not None
+
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "name": "Enterprise Launch",
+            "code": "ENT",
+            "priority": "medium",
+            "member_ids": [str(member_id)],
+        },
+    )
+    project_id = project_response.json()["id"]
+    other_project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Platform Launch", "code": "PLT", "priority": "medium"},
+    )
+    other_project_id = other_project_response.json()["id"]
+
+    columns_response = await client.get(
+        f"/projects/{project_id}/columns",
+        headers={"Authorization": "Bearer token"},
+    )
+    column_ids = [column["id"] for column in columns_response.json()]
+    other_columns_response = await client.get(
+        f"/projects/{other_project_id}/columns",
+        headers={"Authorization": "Bearer token"},
+    )
+    foreign_column_id = other_columns_response.json()[0]["id"]
+
+    unauthorized_response = await client.put(
+        f"/projects/{project_id}/columns/reorder",
+        headers={"Authorization": "Bearer member-token"},
+        json={"column_ids": column_ids},
+    )
+    duplicate_response = await client.put(
+        f"/projects/{project_id}/columns/reorder",
+        headers={"Authorization": "Bearer token"},
+        json={"column_ids": [column_ids[0], column_ids[0], column_ids[1]]},
+    )
+    missing_response = await client.put(
+        f"/projects/{project_id}/columns/reorder",
+        headers={"Authorization": "Bearer token"},
+        json={"column_ids": column_ids[:2]},
+    )
+    foreign_response = await client.put(
+        f"/projects/{project_id}/columns/reorder",
+        headers={"Authorization": "Bearer token"},
+        json={"column_ids": [column_ids[0], column_ids[1], foreign_column_id]},
+    )
+
+    assert unauthorized_response.status_code == 404
+    assert unauthorized_response.json() == {"detail": "Project not found"}
+    assert duplicate_response.status_code == 422
+    assert missing_response.status_code == 422
+    assert foreign_response.status_code == 422
+    assert duplicate_response.json() == {
+        "detail": "Column reorder must include each project column exactly once"
+    }
+    assert missing_response.json() == duplicate_response.json()
+    assert foreign_response.json() == duplicate_response.json()
+
+
+@pytest.mark.asyncio
 async def test_project_create_rejects_duplicate_global_code(
     client: AsyncClient,
     users: dict[str, User],

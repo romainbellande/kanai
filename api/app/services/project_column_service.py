@@ -1,6 +1,8 @@
 """Service boundary for project workflow columns."""
 
-from typing import NoReturn
+from __future__ import annotations
+
+from typing import List, NoReturn
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -30,7 +32,7 @@ class ProjectColumnService:
                 ProjectColumn(project_id=project_id, name=name, position=position)
             )
 
-    async def list(self, project_id: UUID, user_id: UUID) -> list[ProjectColumnRead]:
+    async def list(self, project_id: UUID, user_id: UUID) -> List[ProjectColumnRead]:
         """List ordered columns for a project accessible to the user."""
         await self._access.require_project(project_id, user_id)
         columns = await self._repository.list_columns_by_project(project_id)
@@ -107,6 +109,33 @@ class ProjectColumnService:
         await self._repository.commit()
         await self._repository.refresh_column(column)
         return self._to_read(column)
+
+    async def reorder(
+        self,
+        project_id: UUID,
+        user_id: UUID,
+        *,
+        column_ids: List[UUID],
+    ) -> List[ProjectColumnRead]:
+        """Rewrite workflow column positions from a complete ordered ID list."""
+        await self._access.require_project(project_id, user_id, role=ProjectRole.OWNER)
+        columns = await self._repository.list_columns_by_project(project_id)
+        columns_by_id = {column.id: column for column in columns}
+
+        if len(column_ids) != len(columns_by_id) or set(column_ids) != set(columns_by_id):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Column reorder must include each project column exactly once",
+            )
+
+        reordered_columns = [columns_by_id[column_id] for column_id in column_ids]
+        for position, column in enumerate(reordered_columns):
+            column.position = position
+
+        await self._repository.commit()
+        for column in reordered_columns:
+            await self._repository.refresh_column(column)
+        return [self._to_read(column) for column in reordered_columns]
 
     @staticmethod
     def _raise_column_not_found() -> NoReturn:
