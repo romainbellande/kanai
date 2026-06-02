@@ -1,5 +1,6 @@
 """Service boundary for project workflow columns."""
 
+from typing import NoReturn
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -68,6 +69,51 @@ class ProjectColumnService:
         await self._repository.commit()
         await self._repository.refresh_column(column)
         return self._to_read(column)
+
+    async def update(
+        self,
+        project_id: UUID,
+        column_id: UUID,
+        user_id: UUID,
+        *,
+        name: str,
+    ) -> ProjectColumnRead:
+        """Rename a workflow column for a project owned by the current user."""
+        await self._access.require_project(project_id, user_id, role=ProjectRole.OWNER)
+        column = await self._repository.get_column(column_id)
+        if column is None or column.project_id != project_id:
+            self._raise_column_not_found()
+
+        column_name = name.strip()
+        if column_name == "":
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Column name is required",
+            )
+
+        existing_columns = await self._repository.list_columns_by_project(project_id)
+        duplicate_names = {
+            existing_column.name.casefold()
+            for existing_column in existing_columns
+            if existing_column.id != column_id
+        }
+        if column_name.casefold() in duplicate_names:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Column name already exists",
+            )
+
+        column.name = column_name
+        await self._repository.commit()
+        await self._repository.refresh_column(column)
+        return self._to_read(column)
+
+    @staticmethod
+    def _raise_column_not_found() -> NoReturn:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Column not found",
+        )
 
     @staticmethod
     def _to_read(column: ProjectColumn) -> ProjectColumnRead:

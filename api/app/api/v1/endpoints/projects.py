@@ -9,6 +9,7 @@ from app.features.tasks import task_router
 from app.schemas.project import (
     ProjectColumnCreate,
     ProjectColumnRead,
+    ProjectColumnUpdate,
     ProjectCreate,
     ProjectMemberCreate,
     ProjectRead,
@@ -107,6 +108,26 @@ async def create_project_column(
     """Create a workflow column for a project owned by the current user."""
     return await ProjectColumnService(session).create(
         project_id,
+        require_current_user_id(current_user.id),
+        name=payload.name,
+    )
+
+
+@project_router.patch(
+    "/{project_id}/columns/{column_id}",
+    response_model=ProjectColumnRead,
+)
+async def update_project_column(
+    project_id: UUID,
+    column_id: UUID,
+    payload: ProjectColumnUpdate,
+    session: DatabaseSession,
+    current_user: CurrentUser,
+) -> ProjectColumnRead:
+    """Rename a workflow column for a project owned by the current user."""
+    return await ProjectColumnService(session).update(
+        project_id,
+        column_id,
         require_current_user_id(current_user.id),
         name=payload.name,
     )

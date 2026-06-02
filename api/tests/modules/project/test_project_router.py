@@ -367,6 +367,129 @@ async def test_project_column_create_is_owner_only_and_rejects_duplicate_names(
 
 
 @pytest.mark.asyncio
+async def test_project_owner_can_rename_column_without_reordering(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    member_id = users["member"].id
+    assert member_id is not None
+
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "name": "Enterprise Launch",
+            "code": "ENT",
+            "priority": "medium",
+            "member_ids": [str(member_id)],
+        },
+    )
+    project_id = project_response.json()["id"]
+
+    columns_response = await client.get(
+        f"/projects/{project_id}/columns",
+        headers={"Authorization": "Bearer token"},
+    )
+    column_id = columns_response.json()[1]["id"]
+
+    response = await client.patch(
+        f"/projects/{project_id}/columns/{column_id}",
+        headers={"Authorization": "Bearer token"},
+        json={"name": " Active "},
+    )
+
+    assert response.status_code == 200
+    renamed_column = response.json()
+    assert renamed_column["id"] == column_id
+    assert renamed_column["project_id"] == project_id
+    assert renamed_column["name"] == "Active"
+    assert renamed_column["position"] == 1
+
+    list_response = await client.get(
+        f"/projects/{project_id}/columns",
+        headers={"Authorization": "Bearer member-token"},
+    )
+
+    assert [(column["name"], column["position"]) for column in list_response.json()] == [
+        ("To Do", 0),
+        ("Active", 1),
+        ("Done", 2),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_project_column_rename_is_owner_only_and_rejects_duplicate_names(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    member_id = users["member"].id
+    assert member_id is not None
+
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "name": "Enterprise Launch",
+            "code": "ENT",
+            "priority": "medium",
+            "member_ids": [str(member_id)],
+        },
+    )
+    project_id = project_response.json()["id"]
+
+    columns_response = await client.get(
+        f"/projects/{project_id}/columns",
+        headers={"Authorization": "Bearer token"},
+    )
+    column_id = columns_response.json()[1]["id"]
+
+    unauthorized_response = await client.patch(
+        f"/projects/{project_id}/columns/{column_id}",
+        headers={"Authorization": "Bearer member-token"},
+        json={"name": "Active"},
+    )
+    duplicate_response = await client.patch(
+        f"/projects/{project_id}/columns/{column_id}",
+        headers={"Authorization": "Bearer token"},
+        json={"name": " done "},
+    )
+
+    assert unauthorized_response.status_code == 404
+    assert unauthorized_response.json() == {"detail": "Project not found"}
+    assert duplicate_response.status_code == 409
+    assert duplicate_response.json() == {"detail": "Column name already exists"}
+
+
+@pytest.mark.asyncio
+async def test_project_column_rename_rejects_empty_names(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Enterprise Launch", "code": "ENT", "priority": "medium"},
+    )
+    project_id = project_response.json()["id"]
+
+    columns_response = await client.get(
+        f"/projects/{project_id}/columns",
+        headers={"Authorization": "Bearer token"},
+    )
+    column_id = columns_response.json()[0]["id"]
+
+    response = await client.patch(
+        f"/projects/{project_id}/columns/{column_id}",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "   "},
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Column name is required"}
+
+
+@pytest.mark.asyncio
 async def test_project_create_rejects_duplicate_global_code(
     client: AsyncClient,
     users: dict[str, User],
