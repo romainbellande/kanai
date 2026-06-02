@@ -95,6 +95,14 @@ class TaskUpdate(BaseModel):
         return self.model_dump(exclude_unset=True)
 
 
+class TaskDestination(BaseModel):
+    """Destination for moving a task on the project board."""
+
+    status: str
+    before_task_id: UUID | None = None
+    after_task_id: UUID | None = None
+
+
 class TaskRead(BaseModel):
     """Response payload for reading a project task.
 

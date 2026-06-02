@@ -8,7 +8,7 @@ import {
 	attachClosestEdge,
 	extractClosestEdge,
 } from "@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import {
 	Bell,
@@ -29,7 +29,7 @@ import {
 	User,
 	UserPlus,
 } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 
 import {
 	CurrentUserAuthError,
@@ -39,29 +39,26 @@ import {
 } from "#/api/client";
 import { getAuthLogoutUrl } from "#/domains/auth/model/auth-client";
 import { clearAuthSession } from "#/domains/auth/model/openid-client";
+import {
+	type BoardColumn,
+	type ColumnId,
+	getColumnId,
+	getRankForDestination,
+	groupTasksByColumn,
+	rankBetween,
+	useProjectTaskBoard,
+} from "#/domains/workspace/model/useProjectTaskBoard";
 import { WorkspaceIconButton } from "#/domains/workspace/ui/atoms/WorkspaceIconButton";
 import { SidebarNavItem } from "#/domains/workspace/ui/molecules/SidebarNavItem";
 import type { SidebarItem } from "#/domains/workspace/ui/types";
+
+export { getRankForDestination, groupTasksByColumn, rankBetween };
 
 const sidebarItems: SidebarItem[] = [
 	{ label: "Projects", icon: LayoutDashboard, active: true, to: "/" },
 	{ label: "Team Goals", icon: Target },
 	{ label: "Analytics", icon: TrendingUp },
 ];
-
-const columnDefinitions = [
-	{ id: "todo", title: "To Do" },
-	{ id: "in-progress", title: "In Progress" },
-	{ id: "done", title: "Done" },
-] as const;
-
-type ColumnId = (typeof columnDefinitions)[number]["id"];
-
-type BoardColumn = {
-	id: ColumnId;
-	title: string;
-	cards: Task[];
-};
 
 type CardDropTargetData = {
 	type: "card";
@@ -73,92 +70,6 @@ type ColumnDropTargetData = {
 	type: "column";
 	columnId: ColumnId;
 };
-
-const rankAlphabet =
-	"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-
-export function rankBetween(
-	before: string | null,
-	after: string | null,
-): string {
-	if (before !== null && after !== null && before >= after) {
-		throw new Error("before rank must sort before after rank");
-	}
-
-	const base = rankAlphabet.length;
-	let prefix = "";
-	let index = 0;
-
-	while (true) {
-		const beforeDigit =
-			before !== null && index < before.length
-				? rankAlphabet.indexOf(before[index])
-				: 0;
-		const afterDigit =
-			after !== null && index < after.length
-				? rankAlphabet.indexOf(after[index])
-				: base - 1;
-
-		if (afterDigit - beforeDigit > 1) {
-			return `${prefix}${rankAlphabet[Math.floor((beforeDigit + afterDigit) / 2)]}`;
-		}
-
-		prefix = `${prefix}${rankAlphabet[beforeDigit]}`;
-		index += 1;
-	}
-}
-
-function compareTasksByRank(first: Task, second: Task): number {
-	if (first.rank !== second.rank) {
-		return first.rank < second.rank ? -1 : 1;
-	}
-
-	return (
-		(first.createdAt?.getTime() ?? 0) - (second.createdAt?.getTime() ?? 0) ||
-		first.id.localeCompare(second.id)
-	);
-}
-
-function getColumnId(status: string): ColumnId {
-	const normalizedStatus = status.trim().toLowerCase();
-
-	if (["done", "complete", "completed", "closed"].includes(normalizedStatus)) {
-		return "done";
-	}
-
-	if (
-		["in-progress", "in progress", "doing", "active"].includes(normalizedStatus)
-	) {
-		return "in-progress";
-	}
-
-	return "todo";
-}
-
-export function groupTasksByColumn(
-	tasks: Task[],
-	projectId: string,
-): BoardColumn[] {
-	const columns: BoardColumn[] = columnDefinitions.map((column) => ({
-		...column,
-		cards: [],
-	}));
-
-	for (const task of tasks) {
-		if (task.projectId !== projectId) {
-			continue;
-		}
-
-		const column = columns.find(({ id }) => id === getColumnId(task.status));
-
-		column?.cards.push(task);
-	}
-
-	return columns.map((column) => ({
-		...column,
-		cards: column.cards.sort(compareTasksByRank),
-	}));
-}
 
 function getTagClass(priority: string): string {
 	return /urgent|high/i.test(priority)
@@ -207,16 +118,6 @@ function getDestinationIndex({
 	}
 
 	return Math.max(0, Math.min(destinationIndex, cards.length));
-}
-
-export function getRankForDestination(
-	cards: Task[],
-	destinationIndex: number,
-): string {
-	return rankBetween(
-		cards[destinationIndex - 1]?.rank ?? null,
-		cards[destinationIndex]?.rank ?? null,
-	);
 }
 
 function getDropColumnId(
@@ -397,17 +298,11 @@ export function ProjectBoardPage() {
 	const api = useKanaiApi();
 	const { data: currentUser } = useCurrentUserQuery();
 	const projectQuery = useQuery(api.projects.get(projectId));
-	const tasksQuery = useQuery(api.tasks.list(projectId));
-	const updateTaskMutation = useMutation({
-		mutationFn: (input: Parameters<typeof api.tasks.update>[1]) =>
-			api.tasks.update(projectId, input),
-	});
-	const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
-	const [activeDropColumnId, setActiveDropColumnId] = useState<ColumnId | null>(
-		null,
-	);
+	const board = useProjectTaskBoard(projectId);
+	const { tasksQuery } = board;
+	const { draggingTaskId, activeDropColumnId } = board.dragState;
 	const projectName = projectQuery.data?.name ?? "Project";
-	const columns = groupTasksByColumn(tasksQuery.data ?? [], projectId);
+	const { columns } = board;
 	const isProjectAuthError = projectQuery.error instanceof CurrentUserAuthError;
 	const isTasksAuthError = tasksQuery.error instanceof CurrentUserAuthError;
 	const accountInitials = [
@@ -433,13 +328,13 @@ export function ProjectBoardPage() {
 		return monitorForElements({
 			canMonitor: ({ source }) => source.data.type === "card",
 			onDropTargetChange: ({ location }) => {
-				setActiveDropColumnId(
+				board.dragState.setActiveDropColumnId(
 					getDropColumnId(location.current.dropTargets[0]?.data),
 				);
 			},
 			onDrop: ({ source, location }) => {
-				setActiveDropColumnId(null);
-				setDraggingTaskId(null);
+				board.dragState.setActiveDropColumnId(null);
+				board.dragState.setDraggingTaskId(null);
 
 				if (source.data.type !== "card") {
 					return;
@@ -491,39 +386,16 @@ export function ProjectBoardPage() {
 				const cardsWithoutSource = destinationColumn.cards.filter(
 					(card) => card.id !== sourceTaskId,
 				);
-				const rank = getRankForDestination(
-					cardsWithoutSource,
-					destinationIndex,
-				);
-				if (
-					sourceTask.status === destinationColumnId &&
-					sourceTask.rank === rank
-				) {
-					return;
-				}
 
-				const previousTasks = api.tasks.patchCached(projectId, sourceTaskId, {
-					status: destinationColumnId,
-					rank,
+				board.moveTask({
+					taskId: sourceTaskId,
+					toColumnId: destinationColumnId,
+					beforeTaskId: cardsWithoutSource[destinationIndex - 1]?.id,
+					afterTaskId: cardsWithoutSource[destinationIndex]?.id,
 				});
-
-				updateTaskMutation.mutate(
-					{
-						taskId: sourceTaskId,
-						values: { status: destinationColumnId, rank },
-					},
-					{
-						onError: () => {
-							api.tasks.replaceCached(projectId, previousTasks);
-						},
-						onSettled: () => {
-							void api.tasks.invalidateProjectTasks(projectId);
-						},
-					},
-				);
 			},
 		});
-	}, [api.tasks, columns, projectId, tasksQuery.data, updateTaskMutation]);
+	}, [board, columns, tasksQuery.data]);
 
 	function handleLogout() {
 		if (!logoutUrl) {
@@ -741,7 +613,7 @@ export function ProjectBoardPage() {
 											card={card}
 											columnId={column.id}
 											isDragging={draggingTaskId === card.id}
-											onDragStateChange={setDraggingTaskId}
+											onDragStateChange={board.dragState.setDraggingTaskId}
 										/>
 									))}
 								</BoardColumnView>
