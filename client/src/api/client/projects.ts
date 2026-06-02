@@ -6,15 +6,53 @@ import {
 	ProjectsApi,
 } from "#/api/openapi-client";
 
-import { createAuthenticatedConfiguration } from "./utils";
+import {
+	createAuthenticatedConfiguration,
+	getAccessToken,
+	getApiBaseUrl,
+} from "./utils";
 
 export type Project = ProjectRead;
 export type CreateProjectInput = ProjectCreate;
+
+export type ProjectColumn = {
+	id: string;
+	projectId: string;
+	name: string;
+	position: number;
+	createdAt: Date | null;
+	updatedAt: Date | null;
+};
+
+export type CreateProjectColumnInput = {
+	name: string;
+};
+
+export type UpdateProjectColumnInput = {
+	name: string;
+};
+
+export type ReorderProjectColumnsInput = {
+	columnIds: string[];
+};
+
+type ProjectColumnJson = {
+	id: string;
+	project_id: string;
+	name: string;
+	position: number;
+	created_at: string | null;
+	updated_at: string | null;
+};
 
 export const projectsQueryKey = ["projects"] as const;
 
 export function projectQueryKey(projectId: string) {
 	return [...projectsQueryKey, projectId] as const;
+}
+
+export function projectColumnsQueryKey(projectId: string) {
+	return [...projectQueryKey(projectId), "columns"] as const;
 }
 
 function createProjectsApi(): ProjectsApi {
@@ -37,6 +75,106 @@ export async function createProject(
 	});
 }
 
+function mapProjectColumn(column: ProjectColumnJson): ProjectColumn {
+	return {
+		id: column.id,
+		projectId: column.project_id,
+		name: column.name,
+		position: column.position,
+		createdAt: column.created_at === null ? null : new Date(column.created_at),
+		updatedAt: column.updated_at === null ? null : new Date(column.updated_at),
+	};
+}
+
+async function requestProjectColumns<T>(
+	path: string,
+	init: RequestInit = {},
+): Promise<T> {
+	const token = await getAccessToken();
+	const headers = new Headers(init.headers);
+
+	headers.set("Authorization", `Bearer ${token}`);
+	if (init.body !== undefined) {
+		headers.set("Content-Type", "application/json");
+	}
+
+	const response = await fetch(`${getApiBaseUrl()}${path}`, {
+		...init,
+		headers,
+	});
+
+	if (!response.ok) {
+		throw new Error(`Project column request failed with ${response.status}.`);
+	}
+
+	if (response.status === 204) {
+		return undefined as T;
+	}
+
+	return response.json() as Promise<T>;
+}
+
+export async function listProjectColumns(
+	projectId: string,
+): Promise<ProjectColumn[]> {
+	const columns = await requestProjectColumns<ProjectColumnJson[]>(
+		`/projects/${projectId}/columns`,
+		{ method: "GET" },
+	);
+
+	return columns.map(mapProjectColumn);
+}
+
+export async function createProjectColumn(
+	projectId: string,
+	values: CreateProjectColumnInput,
+): Promise<ProjectColumn> {
+	const column = await requestProjectColumns<ProjectColumnJson>(
+		`/projects/${projectId}/columns`,
+		{ method: "POST", body: JSON.stringify(values) },
+	);
+
+	return mapProjectColumn(column);
+}
+
+export async function updateProjectColumn(
+	projectId: string,
+	columnId: string,
+	values: UpdateProjectColumnInput,
+): Promise<ProjectColumn> {
+	const column = await requestProjectColumns<ProjectColumnJson>(
+		`/projects/${projectId}/columns/${columnId}`,
+		{ method: "PATCH", body: JSON.stringify(values) },
+	);
+
+	return mapProjectColumn(column);
+}
+
+export async function reorderProjectColumns(
+	projectId: string,
+	values: ReorderProjectColumnsInput,
+): Promise<ProjectColumn[]> {
+	const columns = await requestProjectColumns<ProjectColumnJson[]>(
+		`/projects/${projectId}/columns/reorder`,
+		{
+			method: "PUT",
+			body: JSON.stringify({ column_ids: values.columnIds }),
+		},
+	);
+
+	return columns.map(mapProjectColumn);
+}
+
+export async function deleteProjectColumn(
+	projectId: string,
+	columnId: string,
+): Promise<void> {
+	await requestProjectColumns<void>(
+		`/projects/${projectId}/columns/${columnId}`,
+		{ method: "DELETE" },
+	);
+}
+
 export function projectsQueryOptions() {
 	return queryOptions({
 		queryKey: projectsQueryKey,
@@ -51,12 +189,23 @@ export function projectQueryOptions(projectId: string) {
 	});
 }
 
+export function projectColumnsQueryOptions(projectId: string) {
+	return queryOptions({
+		queryKey: projectColumnsQueryKey(projectId),
+		queryFn: () => listProjectColumns(projectId),
+	});
+}
+
 export function useProjectsQuery() {
 	return useQuery(projectsQueryOptions());
 }
 
 export function useProjectQuery(projectId: string) {
 	return useQuery(projectQueryOptions(projectId));
+}
+
+export function useProjectColumnsQuery(projectId: string) {
+	return useQuery(projectColumnsQueryOptions(projectId));
 }
 
 export function useCreateProjectMutation() {
