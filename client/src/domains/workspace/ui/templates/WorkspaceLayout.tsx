@@ -7,8 +7,7 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { getAuthLogoutUrl } from "#/domains/auth/model/auth-client";
-import { clearAuthSession } from "#/domains/auth/model/openid-client";
+import { useAuthBoundary } from "#/domains/auth/model/auth-boundary";
 import { WorkspaceHeader } from "#/domains/workspace/ui/organisms/WorkspaceHeader";
 import { WorkspaceSidebar } from "#/domains/workspace/ui/organisms/WorkspaceSidebar";
 import type { SidebarItem } from "#/domains/workspace/ui/types";
@@ -37,18 +36,6 @@ type WorkspaceBreadcrumbItem = {
 	| { to: "/projects/$projectId"; params: { projectId: string } }
 );
 
-function getLogoutUrl() {
-	if (typeof window === "undefined") {
-		return null;
-	}
-
-	try {
-		return getAuthLogoutUrl(window.location.origin);
-	} catch {
-		return null;
-	}
-}
-
 export function WorkspaceLayout({
 	breadcrumbItems,
 	children,
@@ -59,23 +46,18 @@ export function WorkspaceLayout({
 	sectionClassName = "",
 	sidebarItems = defaultSidebarItems,
 }: WorkspaceLayoutProps) {
-	const logoutUrl = getLogoutUrl();
+	const auth = useAuthBoundary();
 
 	function handleLogout() {
-		if (!logoutUrl) {
-			return;
-		}
-
-		clearAuthSession();
-		window.location.assign(logoutUrl);
+		auth.logout();
 	}
 
 	return (
 		<main className="min-h-screen bg-[var(--background)] text-[var(--on-surface)]">
 			<div className="flex min-h-screen flex-col lg:flex-row">
 				<WorkspaceSidebar
-					logoutUrl={logoutUrl}
 					onLogout={handleLogout}
+					showLogout={auth.status === "authenticated"}
 					sidebarItems={sidebarItems}
 				/>
 

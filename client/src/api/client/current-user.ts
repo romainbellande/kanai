@@ -1,6 +1,6 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
 
-import { UsersApi } from "#/api/openapi-client";
+import { type UserRead, UsersApi } from "#/api/openapi-client";
 
 import { createAuthenticatedConfiguration } from "./utils";
 
@@ -20,7 +20,13 @@ function createUsersApi(): UsersApi {
 
 export async function getCurrentUser(): Promise<CurrentUser> {
 	const usersApi = createUsersApi();
-	return (await usersApi.getUsersMeUsersMeGet()) as CurrentUser;
+	const user = (await usersApi.getUsersMeUsersMeGet()) as UserRead;
+
+	return {
+		first_name: user.firstName ?? undefined,
+		id: user.id,
+		last_name: user.lastName ?? undefined,
+	};
 }
 
 export function currentUserQueryOptions() {

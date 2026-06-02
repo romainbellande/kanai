@@ -37,8 +37,7 @@ import {
 	useCurrentUserQuery,
 	useKanaiApi,
 } from "#/api/client";
-import { getAuthLogoutUrl } from "#/domains/auth/model/auth-client";
-import { clearAuthSession } from "#/domains/auth/model/openid-client";
+import { useAuthBoundary } from "#/domains/auth/model/auth-boundary";
 import {
 	type BoardColumn,
 	type ColumnId,
@@ -294,6 +293,7 @@ function BoardColumnView({
 }
 
 export function ProjectBoardPage() {
+	const auth = useAuthBoundary();
 	const { projectId } = useParams({ from: "/projects/$projectId" });
 	const api = useKanaiApi();
 	const { data: currentUser } = useCurrentUserQuery();
@@ -311,18 +311,6 @@ export function ProjectBoardPage() {
 	]
 		.join("")
 		.trim();
-
-	const logoutUrl = (() => {
-		if (typeof window === "undefined") {
-			return null;
-		}
-
-		try {
-			return getAuthLogoutUrl(window.location.origin);
-		} catch {
-			return null;
-		}
-	})();
 
 	useEffect(() => {
 		return monitorForElements({
@@ -398,12 +386,7 @@ export function ProjectBoardPage() {
 	}, [board, columns, tasksQuery.data]);
 
 	function handleLogout() {
-		if (!logoutUrl) {
-			return;
-		}
-
-		clearAuthSession();
-		window.location.assign(logoutUrl);
+		auth.logout();
 	}
 
 	return (
@@ -450,24 +433,14 @@ export function ProjectBoardPage() {
 									<CircleHelp className="h-4 w-4" />
 									Help
 								</Link>
-								{logoutUrl ? (
-									<button
-										type="button"
-										onClick={handleLogout}
-										className="flex items-center gap-3 rounded-full px-4 py-3 text-left text-sm font-medium text-[var(--on-surface-variant)] hover:bg-[var(--surface-bright)]"
-									>
-										<LogOut className="h-4 w-4" />
-										Logout
-									</button>
-								) : (
-									<Link
-										to="/login"
-										className="flex items-center gap-3 rounded-full px-4 py-3 text-sm font-medium text-[var(--on-surface-variant)] no-underline hover:bg-[var(--surface-bright)]"
-									>
-										<LogOut className="h-4 w-4" />
-										Login
-									</Link>
-								)}
+								<button
+									type="button"
+									onClick={handleLogout}
+									className="flex items-center gap-3 rounded-full px-4 py-3 text-left text-sm font-medium text-[var(--on-surface-variant)] hover:bg-[var(--surface-bright)]"
+								>
+									<LogOut className="h-4 w-4" />
+									Logout
+								</button>
 							</nav>
 							<button
 								type="button"

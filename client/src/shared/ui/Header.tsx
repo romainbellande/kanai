@@ -1,22 +1,11 @@
 import { Link } from "@tanstack/react-router";
 
-import { getAuthLogoutUrl } from "#/domains/auth/model/auth-client";
-import { clearAuthSession } from "#/domains/auth/model/openid-client";
+import { useAuthBoundary } from "#/domains/auth/model/auth-boundary";
 
 import ThemeToggle from "#/shared/ui/ThemeToggle";
 
 export default function Header() {
-	const logoutUrl = (() => {
-		if (typeof window === "undefined") {
-			return null;
-		}
-
-		try {
-			return getAuthLogoutUrl(window.location.origin);
-		} catch {
-			return null;
-		}
-	})();
+	const auth = useAuthBoundary();
 
 	return (
 		<header className="sticky top-0 z-50 border-b border-[var(--line)] bg-[var(--header-bg)] px-4 backdrop-blur-lg">
@@ -34,14 +23,9 @@ export default function Header() {
 				<div className="ml-auto flex items-center gap-1.5 sm:ml-0 sm:gap-2">
 					<button
 						type="button"
-						disabled={!logoutUrl}
+						disabled={auth.status === "anonymous"}
 						onClick={() => {
-							if (!logoutUrl) {
-								return;
-							}
-
-							clearAuthSession();
-							window.location.assign(logoutUrl);
+							auth.logout();
 						}}
 						className="inline-flex items-center justify-center rounded-full border border-[rgba(23,58,64,0.14)] bg-[var(--chip-bg)] px-3 py-2 text-sm font-semibold text-[var(--sea-ink)] shadow-[0_8px_24px_rgba(30,90,72,0.06)] transition hover:-translate-y-0.5 hover:border-[rgba(168,67,54,0.24)] hover:bg-[rgba(168,67,54,0.08)] disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50"
 					>
