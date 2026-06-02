@@ -6,14 +6,14 @@ import { SidebarNavItem } from "#/domains/workspace/ui/molecules/SidebarNavItem"
 import type { SidebarItem } from "#/domains/workspace/ui/types";
 
 type WorkspaceSidebarProps = {
-	logoutUrl: string | null;
 	onLogout: () => void;
+	showLogout: boolean;
 	sidebarItems: SidebarItem[];
 };
 
 export function WorkspaceSidebar({
-	logoutUrl,
 	onLogout,
+	showLogout,
 	sidebarItems,
 }: WorkspaceSidebarProps) {
 	return (
@@ -60,7 +60,7 @@ export function WorkspaceSidebar({
 							<CircleHelp className="h-4 w-4" />
 							Help
 						</Link>
-						{logoutUrl ? (
+						{showLogout ? (
 							<button
 								type="button"
 								onClick={onLogout}

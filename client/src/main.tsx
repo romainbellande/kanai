@@ -2,13 +2,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import ReactDOM from "react-dom/client";
 
-import {
-	getAuthErrorUrl,
-	hasActiveAuthSession,
-	initOpenIdClient,
-	isAuthenticationBypassPath,
-	loginWithOpenIdClient,
-} from "#/domains/auth/model/openid-client";
+import { createAuthBoundary } from "#/domains/auth/model/auth-boundary";
+import { getAuthErrorUrl } from "#/domains/auth/model/openid-client";
 
 import { getRouter } from "./router";
 
@@ -26,19 +21,17 @@ const rootElement = getRootElement();
 const queryClient = new QueryClient();
 
 async function bootstrap() {
+	const auth = createAuthBoundary();
+
 	try {
-		await initOpenIdClient();
+		await auth.completeCallback();
 
 		if (
 			typeof window !== "undefined" &&
-			!isAuthenticationBypassPath(
-				window.location.pathname,
-				window.location.origin,
-			) &&
-			!hasActiveAuthSession()
+			!auth.isBypassPath(window.location.pathname) &&
+			auth.status === "anonymous"
 		) {
-			await loginWithOpenIdClient(
-				window.location.origin,
+			await auth.requirePage(
 				`${window.location.pathname}${window.location.search}${window.location.hash}`,
 			);
 			return;

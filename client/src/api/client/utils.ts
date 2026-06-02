@@ -1,5 +1,5 @@
 import { Configuration } from "#/api/openapi-client";
-import { getStoredAuthSession } from "#/domains/auth/model/openid-client";
+import { createAuthBoundary } from "#/domains/auth/model/auth-boundary";
 
 const missingAccessTokenErrorMessage =
 	"Missing authenticated session access token.";
@@ -22,13 +22,11 @@ export function getApiBaseUrl(): string {
 }
 
 export async function getAccessToken(): Promise<string> {
-	const accessToken = getStoredAuthSession()?.accessToken?.trim();
-
-	if (!accessToken) {
+	try {
+		return await createAuthBoundary().accessToken();
+	} catch {
 		throw new CurrentUserAuthError();
 	}
-
-	return accessToken;
 }
 
 export function createAuthenticatedConfiguration(): Configuration {

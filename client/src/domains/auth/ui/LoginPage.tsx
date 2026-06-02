@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { useAuthBoundary } from "#/domains/auth/model/auth-boundary";
 import {
 	authClientId,
 	authIssuer,
@@ -10,10 +11,6 @@ import {
 	authServerUrl,
 	authSuccessPath,
 } from "#/domains/auth/model/auth-client";
-import {
-	hasActiveAuthSession,
-	loginWithOpenIdClient,
-} from "#/domains/auth/model/openid-client";
 import { LoginGuides } from "#/domains/auth/ui/organisms/LoginGuides";
 import { LoginHero } from "#/domains/auth/ui/organisms/LoginHero";
 
@@ -24,6 +21,7 @@ type LoginPageProps = {
 };
 
 export function LoginPage({ error, message, reason }: LoginPageProps) {
+	const auth = useAuthBoundary();
 	const [isSigningIn, setIsSigningIn] = useState(false);
 	const [clientError, setClientError] = useState<string | null>(null);
 
@@ -39,7 +37,7 @@ export function LoginPage({ error, message, reason }: LoginPageProps) {
 		setIsSigningIn(true);
 
 		try {
-			await loginWithOpenIdClient(currentOrigin, "/");
+			await auth.requirePage("/");
 		} catch (signInError) {
 			setClientError(
 				signInError instanceof Error
@@ -55,7 +53,7 @@ export function LoginPage({ error, message, reason }: LoginPageProps) {
 			return;
 		}
 
-		if (hasActiveAuthSession()) {
+		if (auth.status === "authenticated") {
 			window.location.replace("/");
 			return;
 		}
@@ -67,7 +65,7 @@ export function LoginPage({ error, message, reason }: LoginPageProps) {
 		setClientError(null);
 		setIsSigningIn(true);
 
-		void loginWithOpenIdClient(currentOrigin, "/").catch((signInError) => {
+		void auth.requirePage("/").catch((signInError) => {
 			setClientError(
 				signInError instanceof Error
 					? signInError.message
@@ -75,7 +73,7 @@ export function LoginPage({ error, message, reason }: LoginPageProps) {
 			);
 			setIsSigningIn(false);
 		});
-	}, [currentError, currentOrigin, isSigningIn]);
+	}, [auth, currentError, isSigningIn]);
 
 	return (
 		<main className="min-h-screen px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
