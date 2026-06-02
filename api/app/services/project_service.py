@@ -10,8 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.project import Project
 from app.repositories.project_repository import ProjectRepository
 from app.repositories.task_repository import TaskRepository
-from app.repositories.user_repository import UserRepository
 from app.schemas.project import ProjectRead, ProjectUpdate
+from app.services.project_access import ProjectAccess, ProjectRole
 
 
 def require_current_user_id(user_id: UUID | None) -> UUID:
@@ -23,13 +23,7 @@ def require_current_user_id(user_id: UUID | None) -> UUID:
 
 async def validate_user_ids(session: AsyncSession, user_ids: set[UUID]) -> None:
     """Validate that every user ID exists."""
-    user_repository = UserRepository(session)
-    for user_id in user_ids:
-        if await user_repository.get(user_id) is None:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=f"Unknown user id: {user_id}",
-            )
+    await ProjectAccess(session).validate_users_exist(user_ids)
 
 
 async def get_project_or_404(session: AsyncSession, project_id: UUID) -> Project:
@@ -49,16 +43,7 @@ async def require_project_access(
     user_id: UUID,
 ) -> Project:
     """Require a user to have owner or member access to a project."""
-    repository = ProjectRepository(session)
-    project = await get_project_or_404(session, project_id)
-    owner = await repository.get_owner(project_id, user_id)
-    member = await repository.get_member(project_id, user_id)
-    if owner is None and member is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found",
-        )
-    return project
+    return await ProjectAccess(session).require_project(project_id, user_id)
 
 
 async def require_project_owner(
@@ -67,14 +52,9 @@ async def require_project_owner(
     user_id: UUID,
 ) -> Project:
     """Require a user to own a project."""
-    repository = ProjectRepository(session)
-    project = await get_project_or_404(session, project_id)
-    if await repository.get_owner(project_id, user_id) is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found",
-        )
-    return project
+    return await ProjectAccess(session).require_project(
+        project_id, user_id, role=ProjectRole.OWNER
+    )
 
 
 async def project_to_read(session: AsyncSession, project: Project) -> ProjectRead:
