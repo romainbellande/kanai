@@ -1,60 +1,30 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { CirclePlus } from "lucide-react";
-import { type FormEvent, useState } from "react";
+import type { FormEvent } from "react";
 
 import { useKanaiApi } from "#/api/client";
+import { useTaskForm } from "#/domains/workspace/model/useTaskForm";
 import { WorkspaceLayout } from "#/domains/workspace/ui/templates/WorkspaceLayout";
-
-const taskStatuses = ["todo", "in-progress", "done"] as const;
-
-type TaskStatus = (typeof taskStatuses)[number];
-
-function getInitialTaskStatus(status: string | undefined): TaskStatus {
-	return taskStatuses.find((taskStatus) => taskStatus === status) ?? "todo";
-}
 
 export function CreateTaskPage({ initialStatus }: { initialStatus?: string }) {
 	const { projectId } = useParams({ from: "/projects_/$projectId/tasks/new" });
 	const navigate = useNavigate();
 	const api = useKanaiApi();
 	const projectQuery = useQuery(api.projects.get(projectId));
-	const createTaskMutation = useMutation({
-		mutationFn: (values: Parameters<typeof api.tasks.create>[1]) =>
-			api.tasks.create(projectId, values),
+	const form = useTaskForm({
+		projectId,
+		mode: "create",
+		initialStatus,
+		onSaved: () => {
+			void navigate({ to: "/projects/$projectId", params: { projectId } });
+		},
 	});
-	const [formError, setFormError] = useState<string | null>(null);
 	const projectName = projectQuery.data?.name ?? "Project";
-	const defaultStatus = getInitialTaskStatus(initialStatus);
 
 	async function handleSubmit(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
-		setFormError(null);
-
-		const formData = new FormData(event.currentTarget);
-		const title = String(formData.get("taskTitle") ?? "").trim();
-		const description = String(formData.get("taskDescription") ?? "").trim();
-		const acceptanceCriteria = String(
-			formData.get("taskAcceptanceCriteria") ?? "",
-		).trim();
-
-		if (!title) {
-			setFormError("Task title is required.");
-			return;
-		}
-
-		try {
-			await createTaskMutation.mutateAsync({
-				title,
-				status: String(formData.get("taskStatus") ?? "todo"),
-				priority: String(formData.get("taskPriority") ?? "medium"),
-				description: description || undefined,
-				acceptanceCriteria: acceptanceCriteria || undefined,
-			});
-			void navigate({ to: "/projects/$projectId", params: { projectId } });
-		} catch {
-			setFormError("Task could not be created. Please try again.");
-		}
+		await form.submit();
 	}
 
 	return (
@@ -107,6 +77,10 @@ export function CreateTaskPage({ initialStatus }: { initialStatus?: string }) {
 									placeholder="e.g., Finalize launch readiness checklist"
 									required
 									type="text"
+									value={form.values.title}
+									onChange={(event) =>
+										form.setField("title", event.target.value)
+									}
 								/>
 							</div>
 						</section>
@@ -130,9 +104,12 @@ export function CreateTaskPage({ initialStatus }: { initialStatus?: string }) {
 								</label>
 								<select
 									className="w-full rounded-lg border border-[var(--outline-variant)] bg-[var(--surface)] px-4 py-3 text-base text-[var(--on-surface)] outline-none transition focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]"
-									defaultValue={defaultStatus}
 									id="taskStatus"
 									name="taskStatus"
+									value={form.values.status}
+									onChange={(event) =>
+										form.setField("status", event.target.value)
+									}
 								>
 									<option value="todo">To Do</option>
 									<option value="in-progress">In Progress</option>
@@ -149,9 +126,12 @@ export function CreateTaskPage({ initialStatus }: { initialStatus?: string }) {
 								</label>
 								<select
 									className="w-full rounded-lg border border-[var(--outline-variant)] bg-[var(--surface)] px-4 py-3 text-base text-[var(--on-surface)] outline-none transition focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]"
-									defaultValue="medium"
 									id="taskPriority"
 									name="taskPriority"
+									value={form.values.priority}
+									onChange={(event) =>
+										form.setField("priority", event.target.value)
+									}
 								>
 									<option value="low">Low</option>
 									<option value="medium">Medium</option>
@@ -190,6 +170,10 @@ export function CreateTaskPage({ initialStatus }: { initialStatus?: string }) {
 									name="taskDescription"
 									placeholder="Add context, background, or handoff notes..."
 									rows={5}
+									value={form.values.description}
+									onChange={(event) =>
+										form.setField("description", event.target.value)
+									}
 								/>
 							</div>
 
@@ -206,14 +190,18 @@ export function CreateTaskPage({ initialStatus }: { initialStatus?: string }) {
 									name="taskAcceptanceCriteria"
 									placeholder="List the conditions that must be met for this task to be complete..."
 									rows={4}
+									value={form.values.acceptanceCriteria}
+									onChange={(event) =>
+										form.setField("acceptanceCriteria", event.target.value)
+									}
 								/>
 							</div>
 						</section>
 					</div>
 
-					{formError ? (
+					{form.errorMessage ? (
 						<p className="rounded-xl border border-[var(--outline-variant)] bg-[var(--error-container)] px-4 py-3 text-sm font-semibold text-[var(--on-error-container)]">
-							{formError}
+							{form.errorMessage}
 						</p>
 					) : null}
 
@@ -226,12 +214,12 @@ export function CreateTaskPage({ initialStatus }: { initialStatus?: string }) {
 							Cancel
 						</Link>
 						<button
-							disabled={createTaskMutation.isPending}
+							disabled={form.isSaving}
 							type="submit"
 							className="inline-flex items-center justify-center gap-2 rounded-full bg-[var(--primary)] px-5 py-2.5 text-sm font-semibold text-[var(--on-primary)] shadow-[0_12px_28px_rgba(0,61,155,0.18)] transition hover:bg-[var(--primary-container)]"
 						>
 							<CirclePlus className="h-4 w-4" />
-							{createTaskMutation.isPending ? "Creating..." : "Create Task"}
+							{form.isSaving ? "Creating..." : "Create Task"}
 						</button>
 					</div>
 				</form>
