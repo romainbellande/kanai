@@ -4,8 +4,9 @@ from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import SQLModel
 
-from app.models.project import Project, ProjectMember, ProjectOwner
+from app.models.project import Project, ProjectColumn, ProjectMember, ProjectOwner
 
 
 class ProjectRepository:
@@ -40,6 +41,19 @@ class ProjectRepository:
     def add_member(self, project_id: UUID, user_id: UUID) -> None:
         """Add a project member row."""
         self._session.add(ProjectMember(project_id=project_id, user_id=user_id))
+
+    def add_column(self, column: ProjectColumn) -> None:
+        """Add a project workflow column row."""
+        self._session.add(column)
+
+    async def list_columns_by_project(self, project_id: UUID) -> list[ProjectColumn]:
+        """Return project columns ordered by board position."""
+        columns = await self._session.scalars(
+            select(ProjectColumn)
+            .filter_by(project_id=project_id)
+            .order_by(SQLModel.metadata.tables["project_columns"].c.position)
+        )
+        return list(columns.all())
 
     async def list_owner_rows_by_project(self, project_id: UUID) -> list[ProjectOwner]:
         """Return owners for a project."""

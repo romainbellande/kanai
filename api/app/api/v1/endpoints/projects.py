@@ -6,7 +6,14 @@ from fastapi import APIRouter, status
 
 from app.api.deps import CurrentUser, DatabaseSession
 from app.features.tasks import task_router
-from app.schemas.project import ProjectCreate, ProjectMemberCreate, ProjectRead, ProjectUpdate
+from app.schemas.project import (
+    ProjectColumnRead,
+    ProjectCreate,
+    ProjectMemberCreate,
+    ProjectRead,
+    ProjectUpdate,
+)
+from app.services.project_column_service import ProjectColumnService
 from app.services.project_service import (
     add_project_member_for_user,
     create_project_for_user,
@@ -70,6 +77,19 @@ async def get_project(
         require_current_user_id(current_user.id),
     )
     return await project_to_read(session, project)
+
+
+@project_router.get("/{project_id}/columns", response_model=list[ProjectColumnRead])
+async def list_project_columns(
+    project_id: UUID,
+    session: DatabaseSession,
+    current_user: CurrentUser,
+) -> list[ProjectColumnRead]:
+    """List workflow columns for a project accessible to the current user."""
+    return await ProjectColumnService(session).list(
+        project_id,
+        require_current_user_id(current_user.id),
+    )
 
 
 @project_router.post("/{project_id}/members", response_model=ProjectRead)
