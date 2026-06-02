@@ -16,7 +16,7 @@ from app.core.security import (
     TokenFingerprint,
 )
 from app.schemas.auth import AuthenticatedContext, Session
-from app.services.auth_service import AuthenticateRequest
+from app.services.auth_service import AuthenticateRequest, RequestAuthBoundary
 
 
 class StubAuthenticateRequest:
@@ -75,8 +75,10 @@ def build_app(authenticate_request: AuthenticateRequestHandler) -> FastAPI:
     app = FastAPI()
     app.add_middleware(
         AuthMiddleware,
-        authenticate_request=authenticate_request,
-        whitelist_paths={"/health"},
+        auth_boundary=RequestAuthBoundary(
+            authenticate_request,
+            whitelist_paths={"/health"},
+        ),
     )
 
     @app.get("/health")

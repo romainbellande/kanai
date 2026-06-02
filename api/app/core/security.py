@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Protocol, cast
@@ -12,7 +11,6 @@ from fastapi import HTTPException, status
 from joserfc import jwt
 from joserfc.errors import JoseError
 from joserfc.jwk import KeySet
-from starlette.datastructures import Headers
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
@@ -69,6 +67,14 @@ class AuthenticateRequestHandler(Protocol):
         ...
 
 
+class RequestAuthBoundaryHandler(Protocol):
+    """Defines request authentication behavior required by middleware."""
+
+    async def authenticate_scope(self, scope: Scope) -> AuthenticatedContext | None:
+        """Authenticate a scope and return its context when auth is required."""
+        ...
+
+
 class AuthMiddleware:
     """Authenticates HTTP requests before passing them to the ASGI app.
 
@@ -80,20 +86,16 @@ class AuthMiddleware:
     def __init__(
         self,
         app: ASGIApp,
-        authenticate_request: AuthenticateRequestHandler,
-        whitelist_paths: Iterable[str] | None = None,
+        auth_boundary: RequestAuthBoundaryHandler,
     ) -> None:
         """Initialize the authentication middleware.
 
         Args:
             app: Downstream ASGI application to call after authentication.
-            authenticate_request: Handler used to authenticate bearer tokens.
-            whitelist_paths: Paths that bypass authentication. Defaults to no
-                whitelisted paths.
+            auth_boundary: Boundary used to authenticate request scopes.
         """
         self.app = app
-        self.authenticate_request = authenticate_request
-        self.whitelist_paths = set(whitelist_paths or ())
+        self.auth_boundary = auth_boundary
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         """Authenticate a request scope and call the downstream application.
@@ -103,13 +105,8 @@ class AuthMiddleware:
             receive: ASGI callable for receiving request events.
             send: ASGI callable for sending response events.
         """
-        if scope["type"] != "http" or self._is_whitelisted_path(scope["path"]):
-            await self.app(scope, receive, send)
-            return
-
         try:
-            bearer_token = self._extract_bearer_token(scope)
-            scope["auth"] = await self.authenticate_request.execute(bearer_token)
+            await self.auth_boundary.authenticate_scope(scope)
         except AuthHTTPException as exc:
             await self._send_exception(exc, scope, receive, send)
             return
@@ -144,23 +141,6 @@ class AuthMiddleware:
             content={"detail": exc.detail},
             headers=exc.headers,
         )(scope, receive, send)
-
-    def _is_whitelisted_path(self, path: str) -> bool:
-        normalized_path = path.rstrip("/") or "/"
-        return normalized_path in self.whitelist_paths
-
-    def _extract_bearer_token(self, scope: Scope) -> str:
-        authorization = Headers(scope=scope).get("Authorization")
-        if authorization is None:
-            raise AuthUnauthorizedHTTPException("Missing Authorization header")
-
-        scheme, _, token = authorization.partition(" ")
-        if scheme.lower() != "bearer" or not token.strip():
-            raise AuthUnauthorizedHTTPException(
-                "Authorization header must use Bearer scheme"
-            )
-
-        return token.strip()
 
 
 @dataclass(frozen=True, slots=True)

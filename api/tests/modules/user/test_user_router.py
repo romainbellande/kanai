@@ -14,6 +14,7 @@ from app.core.security import AuthMiddleware
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.auth import AuthenticatedContext
+from app.services.auth_service import RequestAuthBoundary
 
 
 class StubAuthenticateRequest:
@@ -51,8 +52,7 @@ async def client(
     app = FastAPI()
     app.add_middleware(
         AuthMiddleware,
-        authenticate_request=StubAuthenticateRequest(),
-        whitelist_paths=set(),
+        auth_boundary=RequestAuthBoundary(StubAuthenticateRequest()),
     )
     app.include_router(user_router)
 
