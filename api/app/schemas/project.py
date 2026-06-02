@@ -83,6 +83,19 @@ class ProjectRead(BaseModel):
     updated_at: datetime | None
 
 
+class ProjectColumnRead(BaseModel):
+    """Defines a project workflow column response payload."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    project_id: UUID
+    name: str
+    position: int
+    created_at: datetime | None
+    updated_at: datetime | None
+
+
 class ProjectMemberCreate(BaseModel):
     """Request payload for adding a project member."""
 

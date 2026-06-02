@@ -250,6 +250,41 @@ async def test_project_add_member_validates_user_exists(
 
 
 @pytest.mark.asyncio
+async def test_project_members_can_list_default_columns(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    member_id = users["member"].id
+    assert member_id is not None
+
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "name": "Enterprise Launch",
+            "code": "ENT",
+            "priority": "medium",
+            "member_ids": [str(member_id)],
+        },
+    )
+    project_id = project_response.json()["id"]
+
+    response = await client.get(
+        f"/projects/{project_id}/columns",
+        headers={"Authorization": "Bearer member-token"},
+    )
+
+    assert response.status_code == 200
+    assert [(column["name"], column["position"]) for column in response.json()] == [
+        ("To Do", 0),
+        ("In Progress", 1),
+        ("Done", 2),
+    ]
+    assert all(column["id"] for column in response.json())
+    assert all(column["project_id"] == project_id for column in response.json())
+
+
+@pytest.mark.asyncio
 async def test_project_create_rejects_duplicate_global_code(
     client: AsyncClient,
     users: dict[str, User],

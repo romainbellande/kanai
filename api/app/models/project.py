@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import Column, DateTime, ForeignKey, String, Uuid, func
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Uuid, func
 from sqlmodel import Field, SQLModel
 
 
@@ -38,6 +38,43 @@ class Project(SQLModel, table=True):
         default=None,
         sa_column=Column(String(), nullable=True),
     )
+    updated_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(
+            DateTime(timezone=True),
+            server_default=func.now(),
+            onupdate=func.now(),
+            nullable=False,
+        ),
+    )
+    created_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(
+            DateTime(timezone=True),
+            server_default=func.now(),
+            nullable=False,
+        ),
+    )
+
+
+class ProjectColumn(SQLModel, table=True):
+    """Represents an ordered workflow column owned by a project."""
+
+    __tablename__ = "project_columns"  # type: ignore[bad-override]
+
+    id: UUID | None = Field(
+        default=None,
+        sa_column=Column(Uuid(), primary_key=True, nullable=False, default=uuid4),
+    )
+    project_id: UUID = Field(
+        sa_column=Column(
+            Uuid(),
+            ForeignKey("projects.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+    )
+    name: str = Field(sa_column=Column(String(length=80), nullable=False))
+    position: int = Field(sa_column=Column(Integer(), nullable=False))
     updated_at: datetime | None = Field(
         default=None,
         sa_column=Column(

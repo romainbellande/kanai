@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel
 
-from app.models.project import Project, ProjectMember, ProjectOwner
+from app.models.project import Project, ProjectColumn, ProjectMember, ProjectOwner
 from app.models.task import Task
 from app.models.user import User
 from app.services.project_service import create_project
@@ -54,6 +54,18 @@ def test_project_owners_and_members_are_separate_tables() -> None:
     assert owner_columns.user_id.primary_key is True
     assert member_columns.project_id.primary_key is True
     assert member_columns.user_id.primary_key is True
+
+
+def test_project_column_model_uses_expected_columns() -> None:
+    columns = SQLModel.metadata.tables["project_columns"].c
+
+    assert ProjectColumn.__tablename__ == "project_columns"
+    assert isinstance(columns.id.type, Uuid)
+    assert columns.project_id.nullable is False
+    assert columns.name.nullable is False
+    assert columns.position.nullable is False
+    assert columns.created_at.nullable is False
+    assert columns.updated_at.nullable is False
 
 
 def test_task_model_uses_client_fields_without_due_columns() -> None:
@@ -125,3 +137,37 @@ async def test_create_project_adds_creator_to_owners_by_default(
         owner.id,
     }
     assert {project_member.user_id for project_member in members.all()} == {member.id}
+
+
+@pytest.mark.asyncio
+async def test_create_project_adds_default_ordered_columns(
+    session: AsyncSession,
+) -> None:
+    creator = User(externalId="creator")
+    session.add(creator)
+    await session.commit()
+    await session.refresh(creator)
+
+    assert creator.id is not None
+
+    project = await create_project(
+        session,
+        creator_user_id=creator.id,
+        name="Enterprise Launch",
+        code="ENT",
+        priority="medium",
+    )
+
+    assert project.id is not None
+
+    columns = await session.scalars(
+        select(ProjectColumn)
+        .filter_by(project_id=project.id)
+        .order_by(SQLModel.metadata.tables["project_columns"].c.position)
+    )
+
+    assert [(column.name, column.position) for column in columns.all()] == [
+        ("To Do", 0),
+        ("In Progress", 1),
+        ("Done", 2),
+    ]

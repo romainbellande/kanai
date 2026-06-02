@@ -12,6 +12,7 @@ from app.repositories.project_repository import ProjectRepository
 from app.repositories.task_repository import TaskRepository
 from app.schemas.project import ProjectRead, ProjectUpdate
 from app.services.project_access import ProjectAccess, ProjectRole
+from app.services.project_column_service import ProjectColumnService
 
 
 def require_current_user_id(user_id: UUID | None) -> UUID:
@@ -110,6 +111,7 @@ async def create_project(
         repository.add_owner(project.id, owner_user_id)
     for member_user_id in set(member_ids):
         repository.add_member(project.id, member_user_id)
+    ProjectColumnService(session).add_default_columns(project.id)
 
     await repository.commit()
     await repository.refresh(project)
