@@ -46,6 +46,10 @@ class ProjectRepository:
         """Add a project workflow column row."""
         self._session.add(column)
 
+    async def flush(self) -> None:
+        """Flush pending changes so generated fields are available."""
+        await self._session.flush()
+
     async def list_columns_by_project(self, project_id: UUID) -> list[ProjectColumn]:
         """Return project columns ordered by board position."""
         columns = await self._session.scalars(
@@ -121,3 +125,7 @@ class ProjectRepository:
     async def refresh(self, project: Project) -> None:
         """Refresh a project from the database."""
         await self._session.refresh(project)
+
+    async def refresh_column(self, column: ProjectColumn) -> None:
+        """Refresh a project column from the database."""
+        await self._session.refresh(column)

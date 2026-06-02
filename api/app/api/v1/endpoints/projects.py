@@ -7,6 +7,7 @@ from fastapi import APIRouter, status
 from app.api.deps import CurrentUser, DatabaseSession
 from app.features.tasks import task_router
 from app.schemas.project import (
+    ProjectColumnCreate,
     ProjectColumnRead,
     ProjectCreate,
     ProjectMemberCreate,
@@ -89,6 +90,25 @@ async def list_project_columns(
     return await ProjectColumnService(session).list(
         project_id,
         require_current_user_id(current_user.id),
+    )
+
+
+@project_router.post(
+    "/{project_id}/columns",
+    response_model=ProjectColumnRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_project_column(
+    project_id: UUID,
+    payload: ProjectColumnCreate,
+    session: DatabaseSession,
+    current_user: CurrentUser,
+) -> ProjectColumnRead:
+    """Create a workflow column for a project owned by the current user."""
+    return await ProjectColumnService(session).create(
+        project_id,
+        require_current_user_id(current_user.id),
+        name=payload.name,
     )
 
 
