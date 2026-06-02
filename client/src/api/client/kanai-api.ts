@@ -59,6 +59,9 @@ export function useKanaiApi() {
 				taskId: string,
 				patch: Partial<Task>,
 			) => {
+				const previousTasks = queryClient.getQueryData<Task[]>(
+					projectTasksQueryKey(projectId),
+				);
 				queryClient.setQueryData<Task[]>(
 					projectTasksQueryKey(projectId),
 					(tasks) =>
@@ -66,6 +69,11 @@ export function useKanaiApi() {
 							task.id === taskId ? { ...task, ...patch } : task,
 						),
 				);
+
+				return previousTasks;
+			},
+			replaceCached: (projectId: string, tasks: Task[] | undefined) => {
+				queryClient.setQueryData(projectTasksQueryKey(projectId), tasks);
 			},
 			invalidateProjectTasks: (projectId: string) =>
 				queryClient.invalidateQueries({

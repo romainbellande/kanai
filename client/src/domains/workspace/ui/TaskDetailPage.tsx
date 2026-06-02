@@ -1,15 +1,9 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import { Save } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 
-import {
-	projectTasksQueryKey,
-	type Task,
-	useProjectQuery,
-	useProjectTasksQuery,
-	useUpdateProjectTaskMutation,
-} from "#/api/client";
+import { type Task, useKanaiApi } from "#/api/client";
 import { WorkspaceLayout } from "#/domains/workspace/ui/templates/WorkspaceLayout";
 
 type TaskFormState = {
@@ -36,10 +30,13 @@ export function TaskDetailPage() {
 	const { projectId, taskId } = useParams({
 		from: "/projects_/$projectId/tasks/$taskId",
 	});
-	const queryClient = useQueryClient();
-	const projectQuery = useProjectQuery(projectId);
-	const tasksQuery = useProjectTasksQuery(projectId);
-	const updateTaskMutation = useUpdateProjectTaskMutation();
+	const api = useKanaiApi();
+	const projectQuery = useQuery(api.projects.get(projectId));
+	const tasksQuery = useQuery(api.tasks.list(projectId));
+	const updateTaskMutation = useMutation({
+		mutationFn: (input: Parameters<typeof api.tasks.update>[1]) =>
+			api.tasks.update(projectId, input),
+	});
 	const task = tasksQuery.data?.find((item) => item.id === taskId) ?? null;
 	const [formState, setFormState] = useState<TaskFormState | null>(null);
 	const [formTaskId, setFormTaskId] = useState<string | null>(null);
@@ -81,9 +78,8 @@ export function TaskDetailPage() {
 
 		try {
 			const updatedTask = await updateTaskMutation.mutateAsync({
-				projectId,
 				taskId,
-				taskUpdate: {
+				values: {
 					acceptanceCriteria: formState.acceptanceCriteria.trim() || null,
 					description: formState.description.trim() || null,
 					priority: formState.priority,
@@ -93,14 +89,12 @@ export function TaskDetailPage() {
 				},
 			});
 
-			queryClient.setQueryData<Task[]>(
-				projectTasksQueryKey(projectId),
-				(tasks) =>
-					tasks?.map((item) => (item.id === taskId ? updatedTask : item)),
+			api.tasks.replaceCached(
+				projectId,
+				tasksQuery.data?.map((item) =>
+					item.id === taskId ? updatedTask : item,
+				),
 			);
-			await queryClient.invalidateQueries({
-				queryKey: projectTasksQueryKey(projectId),
-			});
 			setFormState(getFormState(updatedTask));
 			setFormTaskId(updatedTask.id);
 			setIsDirty(false);
