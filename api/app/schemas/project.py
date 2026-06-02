@@ -102,6 +102,12 @@ class ProjectColumnCreate(BaseModel):
     name: str = Field(max_length=80)
 
 
+class ProjectColumnUpdate(BaseModel):
+    """Request payload for updating a project workflow column."""
+
+    name: str = Field(max_length=80)
+
+
 class ProjectMemberCreate(BaseModel):
     """Request payload for adding a project member."""
 

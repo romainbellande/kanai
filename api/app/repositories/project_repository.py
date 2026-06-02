@@ -46,6 +46,10 @@ class ProjectRepository:
         """Add a project workflow column row."""
         self._session.add(column)
 
+    async def get_column(self, column_id: UUID) -> ProjectColumn | None:
+        """Return a project workflow column by ID."""
+        return await self._session.get(ProjectColumn, column_id)
+
     async def flush(self) -> None:
         """Flush pending changes so generated fields are available."""
         await self._session.flush()
