@@ -96,6 +96,12 @@ class ProjectColumnRead(BaseModel):
     updated_at: datetime | None
 
 
+class ProjectColumnCreate(BaseModel):
+    """Request payload for creating a project workflow column."""
+
+    name: str = Field(max_length=80)
+
+
 class ProjectMemberCreate(BaseModel):
     """Request payload for adding a project member."""
 

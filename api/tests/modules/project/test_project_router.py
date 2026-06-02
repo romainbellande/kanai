@@ -285,6 +285,88 @@ async def test_project_members_can_list_default_columns(
 
 
 @pytest.mark.asyncio
+async def test_project_owner_can_create_column_at_end(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    member_id = users["member"].id
+    assert member_id is not None
+
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "name": "Enterprise Launch",
+            "code": "ENT",
+            "priority": "medium",
+            "member_ids": [str(member_id)],
+        },
+    )
+    project_id = project_response.json()["id"]
+
+    response = await client.post(
+        f"/projects/{project_id}/columns",
+        headers={"Authorization": "Bearer token"},
+        json={"name": " Review "},
+    )
+
+    assert response.status_code == 201
+    created_column = response.json()
+    assert created_column["project_id"] == project_id
+    assert created_column["name"] == "Review"
+    assert created_column["position"] == 3
+
+    list_response = await client.get(
+        f"/projects/{project_id}/columns",
+        headers={"Authorization": "Bearer member-token"},
+    )
+
+    assert [(column["name"], column["position"]) for column in list_response.json()] == [
+        ("To Do", 0),
+        ("In Progress", 1),
+        ("Done", 2),
+        ("Review", 3),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_project_column_create_is_owner_only_and_rejects_duplicate_names(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    member_id = users["member"].id
+    assert member_id is not None
+
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "name": "Enterprise Launch",
+            "code": "ENT",
+            "priority": "medium",
+            "member_ids": [str(member_id)],
+        },
+    )
+    project_id = project_response.json()["id"]
+
+    unauthorized_response = await client.post(
+        f"/projects/{project_id}/columns",
+        headers={"Authorization": "Bearer member-token"},
+        json={"name": "Review"},
+    )
+    duplicate_response = await client.post(
+        f"/projects/{project_id}/columns",
+        headers={"Authorization": "Bearer token"},
+        json={"name": " done "},
+    )
+
+    assert unauthorized_response.status_code == 404
+    assert unauthorized_response.json() == {"detail": "Project not found"}
+    assert duplicate_response.status_code == 409
+    assert duplicate_response.json() == {"detail": "Column name already exists"}
+
+
+@pytest.mark.asyncio
 async def test_project_create_rejects_duplicate_global_code(
     client: AsyncClient,
     users: dict[str, User],
