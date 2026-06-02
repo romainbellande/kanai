@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.task import Task
 from app.repositories.task_repository import TaskRepository
 from app.schemas.task import TaskCreate, TaskRead, TaskUpdate
-from app.services.project_service import require_project_access, validate_user_ids
+from app.services.project_access import ProjectAccess
 
 
 RANK_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
@@ -80,9 +80,10 @@ async def create_task(
     payload: TaskCreate,
 ) -> TaskRead:
     """Create a task in a project accessible to a user."""
-    await require_project_access(session, project_id, user_id)
+    project_access = ProjectAccess(session)
+    await project_access.require_project(project_id, user_id)
     if payload.assignee_id is not None:
-        await validate_user_ids(session, {payload.assignee_id})
+        await project_access.validate_users_exist({payload.assignee_id})
 
     repository = TaskRepository(session)
     task = Task(
@@ -107,7 +108,7 @@ async def list_tasks(
     user_id: UUID,
 ) -> list[TaskRead]:
     """List tasks for a project accessible to a user."""
-    await require_project_access(session, project_id, user_id)
+    await ProjectAccess(session).require_project(project_id, user_id)
     tasks = await TaskRepository(session).list_by_project(project_id)
     return [task_to_read(task) for task in tasks]
 
@@ -120,7 +121,7 @@ async def get_task(
     user_id: UUID,
 ) -> TaskRead:
     """Get a single task from a project accessible to a user."""
-    await require_project_access(session, project_id, user_id)
+    await ProjectAccess(session).require_project(project_id, user_id)
     task = await TaskRepository(session).get_by_project(project_id, task_id)
     if task is None:
         raise HTTPException(
@@ -138,7 +139,8 @@ async def update_task(
     payload: TaskUpdate,
 ) -> TaskRead:
     """Update a task in a project accessible to a user."""
-    await require_project_access(session, project_id, user_id)
+    project_access = ProjectAccess(session)
+    await project_access.require_project(project_id, user_id)
     repository = TaskRepository(session)
     task = await repository.get_by_project(project_id, task_id)
     if task is None:
@@ -149,7 +151,7 @@ async def update_task(
     updates = payload.update_values()
     assignee_id = updates.get("assignee_id")
     if isinstance(assignee_id, UUID):
-        await validate_user_ids(session, {assignee_id})
+        await project_access.validate_users_exist({assignee_id})
 
     for field_name, value in updates.items():
         setattr(task, field_name, value)
@@ -165,7 +167,7 @@ async def delete_task(
     user_id: UUID,
 ) -> None:
     """Delete a task from a project accessible to a user."""
-    await require_project_access(session, project_id, user_id)
+    await ProjectAccess(session).require_project(project_id, user_id)
     repository = TaskRepository(session)
     task = await repository.get_by_project(project_id, task_id)
     if task is None:
