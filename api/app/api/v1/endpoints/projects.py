@@ -152,6 +152,24 @@ async def reorder_project_columns(
     )
 
 
+@project_router.delete(
+    "/{project_id}/columns/{column_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_project_column(
+    project_id: UUID,
+    column_id: UUID,
+    session: DatabaseSession,
+    current_user: CurrentUser,
+) -> None:
+    """Delete an empty workflow column from a project owned by the current user."""
+    await ProjectColumnService(session).delete(
+        project_id,
+        column_id,
+        require_current_user_id(current_user.id),
+    )
+
+
 @project_router.post("/{project_id}/members", response_model=ProjectRead)
 async def add_project_member(
     project_id: UUID,

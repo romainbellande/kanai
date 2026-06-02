@@ -137,6 +137,26 @@ class ProjectColumnService:
             await self._repository.refresh_column(column)
         return [self._to_read(column) for column in reordered_columns]
 
+    async def delete(self, project_id: UUID, column_id: UUID, user_id: UUID) -> None:
+        """Delete an empty workflow column from a project owned by the user."""
+        await self._access.require_project(project_id, user_id, role=ProjectRole.OWNER)
+        columns = await self._repository.list_columns_by_project(project_id)
+        column = next((column for column in columns if column.id == column_id), None)
+        if column is None:
+            self._raise_column_not_found()
+
+        if len(columns) == 1:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Cannot delete the final project column",
+            )
+
+        await self._repository.delete_column(column)
+        remaining_columns = [existing for existing in columns if existing.id != column_id]
+        for position, remaining_column in enumerate(remaining_columns):
+            remaining_column.position = position
+        await self._repository.commit()
+
     @staticmethod
     def _raise_column_not_found() -> NoReturn:
         raise HTTPException(
