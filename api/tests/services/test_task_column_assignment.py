@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 from fastapi import HTTPException
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel
 
@@ -104,7 +105,7 @@ async def test_create_task_accepts_project_column(
         )
 
         assert created.column_id == second_column.id
-        assert created.status == "Review"
+        assert "status" not in created.model_dump()
 
 
 @pytest.mark.asyncio
@@ -196,7 +197,15 @@ async def test_update_task_moves_to_project_column(
         )
 
         assert updated.column_id == second_column.id
-        assert updated.status == "Review"
+        assert "status" not in updated.model_dump()
+
+
+def test_task_api_payloads_reject_legacy_status() -> None:
+    with pytest.raises(ValidationError):
+        TaskCreate.model_validate({"title": "Legacy", "status": "done"})
+
+    with pytest.raises(ValidationError):
+        TaskUpdate.model_validate({"status": "done"})
 
 
 @pytest.mark.asyncio

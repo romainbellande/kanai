@@ -16,18 +16,18 @@ class TaskCreate(BaseModel):
     Parameters:
         title: Task title.
         column_id: Optional workflow column ID. Defaults to the first project column.
-        status: Legacy workflow status for the task. Defaults to "todo".
         priority: Priority level for the task. Defaults to "medium".
-        rank: Optional sortable LexoRank-style position. If omitted, appends to status.
+        rank: Optional sortable LexoRank-style position. If omitted, appends to column.
         assignee_id: Optional user ID assigned to the task.
         description: Optional task details.
         acceptance_criteria: Optional criteria required to complete the task.
         tag: Optional task tag.
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     title: str
     column_id: UUID | None = None
-    status: str = "todo"
     priority: str = "medium"
     rank: str | None = None
     assignee_id: UUID | None = None
@@ -42,7 +42,6 @@ class TaskUpdate(BaseModel):
     Parameters:
         title: Optional replacement task title.
         column_id: Optional replacement workflow column ID.
-        status: Optional replacement legacy workflow status.
         priority: Optional replacement priority level.
         rank: Optional replacement sortable LexoRank-style position.
         assignee_id: Optional replacement user ID assigned to the task.
@@ -51,9 +50,10 @@ class TaskUpdate(BaseModel):
         tag: Optional replacement task tag.
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     title: str | None = None
     column_id: UUID | None = None
-    status: str | None = None
     priority: str | None = None
     rank: str | None = None
     assignee_id: UUID | None = Field(
@@ -102,7 +102,9 @@ class TaskUpdate(BaseModel):
 class TaskDestination(BaseModel):
     """Destination for moving a task on the project board."""
 
-    status: str
+    model_config = ConfigDict(extra="forbid")
+
+    column_id: UUID
     before_task_id: UUID | None = None
     after_task_id: UUID | None = None
 
@@ -115,9 +117,8 @@ class TaskRead(BaseModel):
         project_id: ID of the project that owns the task.
         title: Task title.
         column_id: Workflow column ID for the task.
-        status: Legacy workflow status for the task.
         priority: Priority level for the task.
-        rank: Sortable LexoRank-style position within the task status column.
+        rank: Sortable LexoRank-style position within the task column.
         assignee_id: Optional user ID assigned to the task.
         description: Optional task details.
         acceptance_criteria: Optional criteria required to complete the task.
@@ -132,7 +133,6 @@ class TaskRead(BaseModel):
     project_id: UUID
     column_id: UUID
     title: str
-    status: str
     priority: str
     rank: str
     assignee_id: UUID | None
