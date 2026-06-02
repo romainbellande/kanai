@@ -55,6 +55,26 @@ class ProjectAccess:
                     detail=f"Unknown user id: {user_id}",
                 )
 
+    async def replace_membership(
+        self,
+        project_id: UUID,
+        *,
+        acting_user_id: UUID,
+        owner_ids: set[UUID] | None = None,
+        member_ids: set[UUID] | None = None,
+    ) -> None:
+        """Replace project owners and members while preserving acting ownership."""
+        if owner_ids is not None:
+            replacement_owner_ids = owner_ids | {acting_user_id}
+            await self.validate_users_exist(replacement_owner_ids)
+            await self._project_repository.replace_owners(
+                project_id, replacement_owner_ids
+            )
+
+        if member_ids is not None:
+            await self.validate_users_exist(member_ids)
+            await self._project_repository.replace_members(project_id, member_ids)
+
     @staticmethod
     def _raise_project_not_found() -> NoReturn:
         raise HTTPException(
