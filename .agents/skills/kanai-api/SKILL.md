@@ -14,6 +14,7 @@ Use this skill for backend work under `api/`, especially API routes, database mo
 - `api/app/api/deps.py` contains shared FastAPI dependencies and access guards.
 - `api/app/api/v1/router.py` composes versioned routers.
 - `api/app/api/v1/endpoints/` contains route handlers.
+- `api/app/features/` supports incremental feature modules with narrow public exports from each feature package root.
 - `api/app/models/` contains SQLModel database models.
 - `api/app/schemas/` contains Pydantic request/response schemas and auth session payloads.
 - `api/app/repositories/` contains persistence adapters and repository protocols.

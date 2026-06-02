@@ -20,6 +20,7 @@ This file is for coding agents working in `/home/naimor/dev/kanai/api`.
 - `app/core/config.py` holds environment-backed settings.
 - `app/db/session.py` creates the async engine and DB session dependency.
 - `app/api/v1/endpoints/` contains route handlers; `app/api/deps.py` contains shared FastAPI dependencies.
+- `app/features/` is available for incremental feature modules with explicit public exports from each feature package root.
 - `app/models/`, `app/schemas/`, `app/repositories/`, and `app/services/` hold persistence models, API contracts, persistence adapters, and business logic.
 - `app/db/migrations/` contains Alembic migration environment files and revisions.
 - `Justfile` is the main command entrypoint for local workflows.
@@ -104,7 +105,7 @@ This file is for coding agents working in `/home/naimor/dev/kanai/api`.
 
 ## FastAPI Conventions
 
-- Keep route definitions inside endpoint modules under `app/api/v1/endpoints/`.
+- Keep route definitions inside endpoint modules under `app/api/v1/endpoints/` unless a feature has been intentionally migrated under `app/features/<feature>/`.
 - Mount routers centrally from `app/main.py` through `app/api/v1/router.py`.
 - Use `async def` for request handlers unless there is a clear sync-only reason.
 - Return JSON-serializable data or response models, not raw ORM objects.
@@ -155,4 +156,5 @@ This file is for coding agents working in `/home/naimor/dev/kanai/api`.
 - Prefer minimal, local changes over broad refactors.
 - Do not move code into a new top-level package without a clear repository-wide reason.
 - Keep new files under `app/` or `tests/` unless the task calls for new infrastructure.
+- For feature modules under `app/features/<feature>/`, expose the narrow public surface from `app/features/<feature>/__init__.py` and avoid importing another feature's internals.
 - If you change commands, tooling, or layout, update `AGENTS.md` in the same task.
