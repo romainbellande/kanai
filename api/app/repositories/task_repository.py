@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import column, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.task import Task
@@ -27,18 +27,12 @@ class TaskRepository:
         tasks = await self._session.scalars(
             select(Task)
             .filter_by(project_id=project_id)
-            .order_by("status", "task_rank", "created_at", "id")
-        )
-        return list(tasks.all())
-
-    async def list_by_project_and_status(
-        self, project_id: UUID, status: str
-    ) -> list[Task]:
-        """Return tasks in one project status ordered by rank."""
-        tasks = await self._session.scalars(
-            select(Task)
-            .filter_by(project_id=project_id, status=status)
-            .order_by("task_rank", "created_at", "id")
+            .order_by(
+                column("column_id"),
+                column("task_rank"),
+                column("created_at"),
+                column("id"),
+            )
         )
         return list(tasks.all())
 
@@ -49,7 +43,11 @@ class TaskRepository:
         tasks = await self._session.scalars(
             select(Task)
             .filter_by(project_id=project_id, column_id=column_id)
-            .order_by("task_rank", "created_at", "id")
+            .order_by(
+                column("task_rank"),
+                column("created_at"),
+                column("id"),
+            )
         )
         return list(tasks.all())
 

@@ -742,7 +742,6 @@ async def test_task_crud_endpoints_do_not_expose_due_fields(
         headers={"Authorization": "Bearer token"},
         json={
             "title": "Finalize launch checklist",
-            "status": "todo",
             "priority": "urgent",
             "assignee_id": str(assignee_id),
             "description": "Launch handoff",
@@ -754,6 +753,8 @@ async def test_task_crud_endpoints_do_not_expose_due_fields(
     assert create_response.status_code == 201
     created_task = create_response.json()
     assert created_task["title"] == "Finalize launch checklist"
+    assert "column_id" in created_task
+    assert "status" not in created_task
     assert "due_label" not in created_task
     assert "due_date" not in created_task
 
@@ -776,12 +777,12 @@ async def test_task_crud_endpoints_do_not_expose_due_fields(
     update_response = await client.patch(
         f"/projects/{project_id}/tasks/{created_task['id']}",
         headers={"Authorization": "Bearer token"},
-        json={"status": "done", "priority": "low"},
+        json={"priority": "low"},
     )
 
     assert update_response.status_code == 200
     updated_task = update_response.json()
-    assert updated_task["status"] == "done"
+    assert "status" not in updated_task
     assert updated_task["priority"] == "low"
 
     clear_response = await client.patch(

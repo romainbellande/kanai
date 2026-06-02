@@ -82,17 +82,17 @@ async def test_move_task_persists_cross_column_top_placement(
             task_id=moved.id,
             user_id=owner.id,
             destination=TaskDestination(
-                status="done",
+                column_id=done_column.id,
                 before_task_id=None,
                 after_task_id=first_done.id,
             ),
         )
 
-        assert updated.status == "done"
+        assert updated.column_id == done_column.id
         assert updated.rank < first_done.rank
         persisted = await session.get(Task, moved.id)
         assert persisted is not None
-        assert persisted.status == "done"
+        assert persisted.column_id == done_column.id
         assert persisted.rank == updated.rank
 
 
@@ -151,13 +151,13 @@ async def test_move_task_allows_member_access_and_preserves_noop_rank(
             task_id=moved.id,
             user_id=member.id,
             destination=TaskDestination(
-                status="todo",
+                column_id=todo_column.id,
                 before_task_id=None,
                 after_task_id=after.id,
             ),
         )
 
-        assert updated.status == "todo"
+        assert updated.column_id == todo_column.id
         assert updated.rank == "U"
 
 
@@ -216,13 +216,13 @@ async def test_move_task_persists_within_column_bottom_placement(
             task_id=moved.id,
             user_id=owner.id,
             destination=TaskDestination(
-                status="todo",
+                column_id=todo_column.id,
                 before_task_id=last.id,
                 after_task_id=None,
             ),
         )
 
-        assert updated.status == "todo"
+        assert updated.column_id == todo_column.id
         assert updated.rank > last.rank
 
 
@@ -266,7 +266,7 @@ async def test_move_task_denies_users_without_project_access(
                 project_id=project.id,
                 task_id=task.id,
                 user_id=outsider.id,
-                destination=TaskDestination(status="done"),
+                destination=TaskDestination(column_id=todo_column.id),
             )
 
         assert error.value.status_code == 404

@@ -112,7 +112,7 @@ class TaskService:
         user_id: UUID,
         destination: TaskDestination,
     ) -> TaskRead:
-        """Move a task to a board destination and persist its status and rank."""
+        """Move a task to a board destination and persist its column and rank."""
         await self._project_access.require_project(project_id, user_id)
         task = await self._repository.get_by_project(project_id, task_id)
         if task is None:
@@ -120,8 +120,9 @@ class TaskService:
                 status_code=status.HTTP_404_NOT_FOUND, detail="Task not found"
             )
 
-        ordered_destination_tasks = await self._repository.list_by_project_and_status(
-            project_id, destination.status
+        column = await self._resolve_column(project_id, destination.column_id)
+        ordered_destination_tasks = await self._repository.list_by_project_and_column(
+            project_id, destination.column_id
         )
         if _is_same_position(task, ordered_destination_tasks, destination):
             return task_to_read(task)
@@ -144,7 +145,8 @@ class TaskService:
                 detail="Task destination neighbors are out of order",
             )
 
-        task.status = destination.status
+        task.column_id = destination.column_id
+        task.status = column.name
         task.rank = rank_between(before_rank, after_rank)
         return task_to_read(await self._repository.update(task))
 
@@ -227,7 +229,6 @@ def task_to_read(task: Task) -> TaskRead:
         project_id=task.project_id,
         column_id=task.column_id,
         title=task.title,
-        status=task.status,
         priority=task.priority,
         rank=task.rank,
         assignee_id=task.assignee_id,
@@ -258,7 +259,7 @@ def _rank_for_neighbor(
 def _is_same_position(
     task: Task, ordered_destination_tasks: list[Task], destination: TaskDestination
 ) -> bool:
-    if task.status != destination.status:
+    if task.column_id != destination.column_id:
         return False
 
     task_index = next(
