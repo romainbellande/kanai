@@ -1,15 +1,9 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { type Task, useKanaiApi } from "#/api/client";
+import { type ProjectColumn, type Task, useKanaiApi } from "#/api/client";
 
-const columnDefinitions = [
-	{ id: "todo", title: "To Do" },
-	{ id: "in-progress", title: "In Progress" },
-	{ id: "done", title: "Done" },
-] as const;
-
-export type ColumnId = (typeof columnDefinitions)[number]["id"];
+export type ColumnId = string;
 
 export type BoardColumn = {
 	id: ColumnId;
@@ -88,9 +82,11 @@ export function getColumnId(status: string): ColumnId {
 export function groupTasksByColumn(
 	tasks: Task[],
 	projectId: string,
+	projectColumns: ProjectColumn[],
 ): BoardColumn[] {
-	const columns: BoardColumn[] = columnDefinitions.map((column) => ({
-		...column,
+	const columns: BoardColumn[] = projectColumns.map((column) => ({
+		id: column.id,
+		title: column.name,
 		cards: [],
 	}));
 
@@ -99,7 +95,7 @@ export function groupTasksByColumn(
 			continue;
 		}
 
-		const column = columns.find(({ id }) => id === getColumnId(task.status));
+		const column = columns.find(({ id }) => id === task.columnId);
 
 		column?.cards.push(task);
 	}
@@ -137,7 +133,7 @@ function getNeighborRanks(cards: Task[], input: MoveTaskInput) {
 }
 
 function isSamePosition(sourceTask: Task, cards: Task[], input: MoveTaskInput) {
-	if (sourceTask.status !== input.toColumnId) {
+	if (sourceTask.columnId !== input.toColumnId) {
 		return false;
 	}
 
@@ -155,6 +151,7 @@ function isSamePosition(sourceTask: Task, cards: Task[], input: MoveTaskInput) {
 export function useProjectTaskBoard(projectId: string) {
 	const api = useKanaiApi();
 	const tasksQuery = useQuery(api.tasks.list(projectId));
+	const columnsQuery = useQuery(api.projectColumns.list(projectId));
 	const updateTaskMutation = useMutation({
 		mutationFn: (input: Parameters<typeof api.tasks.update>[1]) =>
 			api.tasks.update(projectId, input),
@@ -163,7 +160,11 @@ export function useProjectTaskBoard(projectId: string) {
 	const [activeDropColumnId, setActiveDropColumnId] = useState<ColumnId | null>(
 		null,
 	);
-	const columns = groupTasksByColumn(tasksQuery.data ?? [], projectId);
+	const columns = groupTasksByColumn(
+		tasksQuery.data ?? [],
+		projectId,
+		columnsQuery.data ?? [],
+	);
 
 	function moveTask(input: MoveTaskInput) {
 		const sourceTask = (tasksQuery.data ?? []).find(
@@ -187,19 +188,19 @@ export function useProjectTaskBoard(projectId: string) {
 			input,
 		);
 		const rank = rankBetween(beforeRank, afterRank);
-		if (sourceTask.status === input.toColumnId && sourceTask.rank === rank) {
+		if (sourceTask.columnId === input.toColumnId && sourceTask.rank === rank) {
 			return;
 		}
 
 		const previousTasks = api.tasks.patchCached(projectId, input.taskId, {
-			status: input.toColumnId,
+			columnId: input.toColumnId,
 			rank,
 		});
 
 		updateTaskMutation.mutate(
 			{
 				taskId: input.taskId,
-				values: { status: input.toColumnId, rank },
+				values: { columnId: input.toColumnId, rank },
 			},
 			{
 				onError: () => {
@@ -215,6 +216,7 @@ export function useProjectTaskBoard(projectId: string) {
 	return {
 		columns,
 		tasksQuery,
+		columnsQuery,
 		dragState: {
 			draggingTaskId,
 			activeDropColumnId,
