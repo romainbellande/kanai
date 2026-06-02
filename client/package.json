@@ -14,7 +14,8 @@
     "lint": "biome lint",
     "check": "biome check",
     "typecheck": "tsc --noEmit --project tsconfig.json",
-    "gen:openapi:client": "bunx @openapitools/openapi-generator-cli generate -i http://localhost:8000/openapi.json -g typescript-fetch -o src/api/openapi-client && node scripts/mark-openapi-client-ts-nocheck.mjs"
+    "gen:openapi:schema": "node scripts/export-openapi-schema.mjs",
+    "gen:openapi:client": "node scripts/export-openapi-schema.mjs && bunx @openapitools/openapi-generator-cli generate -i .generated/openapi.json -g typescript-fetch -o src/api/openapi-client && node scripts/mark-openapi-client-ts-nocheck.mjs"
   },
   "dependencies": {
     "@atlaskit/pragmatic-drag-and-drop": "^1.8.1",
