@@ -9,20 +9,16 @@ from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.security import AuthMiddleware
 from app.db.session import create_db_and_tables
-from app.services.auth_service import (
-    build_authenticate_request,
-    get_auth_whitelist_paths,
-)
+from app.services.auth_service import build_request_auth_boundary
 from app.services.redis_service import redis_service
 from app.services.seeder_service import seed_reference_data
 
 custom_logging.init()
 
-authenticate_request = build_authenticate_request(
+request_auth_boundary = build_request_auth_boundary(
     settings=settings,
     redis_service=redis_service,
 )
-auth_whitelist_paths = get_auth_whitelist_paths()
 
 
 @asynccontextmanager
@@ -39,8 +35,7 @@ origins = [settings.client_origin]
 
 app.add_middleware(
     AuthMiddleware,
-    authenticate_request=authenticate_request,
-    whitelist_paths=auth_whitelist_paths,
+    auth_boundary=request_auth_boundary,
 )
 
 app.add_middleware(

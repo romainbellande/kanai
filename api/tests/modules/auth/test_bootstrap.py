@@ -4,7 +4,9 @@ from app.repositories.session_repository import RedisSessionRepository
 from app.repositories.user_repository import DatabaseUserProvisioner
 from app.services.auth_service import (
     AuthenticateRequest,
+    RequestAuthBoundary,
     build_authenticate_request,
+    build_request_auth_boundary,
     get_auth_whitelist_paths,
 )
 from app.services.redis_service import RedisService
@@ -40,3 +42,13 @@ def test_get_auth_whitelist_paths_matches_public_docs_routes() -> None:
         "/openapi.json",
         "/redoc",
     }
+
+
+def test_build_request_auth_boundary_wires_authenticator_and_whitelist_paths() -> None:
+    redis_service = RedisService()
+
+    boundary = build_request_auth_boundary(settings=settings, redis_service=redis_service)
+
+    assert isinstance(boundary, RequestAuthBoundary)
+    assert isinstance(boundary._authenticate_request, AuthenticateRequest)
+    assert boundary._whitelist_paths == get_auth_whitelist_paths()

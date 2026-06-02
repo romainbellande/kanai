@@ -1,16 +1,29 @@
 import importlib
 import sys
+from typing import cast
 
 import pytest
 
 from app.core.security import AuthMiddleware, JoserfcTokenVerifier
+from app.schemas.auth import AuthenticatedContext
+from app.services.auth_service import AuthenticateRequest, RequestAuthBoundary
+
+
+class SentinelAuthenticateRequest:
+    async def execute(self, bearer_token: str) -> AuthenticatedContext:
+        del bearer_token
+        raise AssertionError("sentinel should not authenticate requests")
 
 
 def test_authenticate_request_wires_configured_audience_into_verifier() -> None:
     sys.modules.pop("app.main", None)
     main = importlib.import_module("app.main")
 
-    verifier = main.authenticate_request._token_verifier
+    authenticate_request = cast(
+        AuthenticateRequest,
+        main.request_auth_boundary._authenticate_request,
+    )
+    verifier = authenticate_request._token_verifier
 
     assert isinstance(verifier, JoserfcTokenVerifier)
     assert verifier.expected_audience == main.settings.auth.audience
@@ -21,18 +34,15 @@ def test_main_builds_auth_middleware_from_bootstrap_helpers(
 ) -> None:
     import app.services.auth_service as auth_service
 
-    sentinel_authenticate_request = object()
-    sentinel_whitelist_paths = {"/healthz"}
+    sentinel_auth_boundary = RequestAuthBoundary(
+        authenticate_request=SentinelAuthenticateRequest(),
+        whitelist_paths={"/healthz"},
+    )
 
     monkeypatch.setattr(
         auth_service,
-        "build_authenticate_request",
-        lambda *, settings, redis_service: sentinel_authenticate_request,
-    )
-    monkeypatch.setattr(
-        auth_service,
-        "get_auth_whitelist_paths",
-        lambda: sentinel_whitelist_paths,
+        "build_request_auth_boundary",
+        lambda *, settings, redis_service: sentinel_auth_boundary,
     )
 
     sys.modules.pop("app.main", None)
@@ -42,7 +52,5 @@ def test_main_builds_auth_middleware_from_bootstrap_helpers(
         item for item in main.app.user_middleware if item.cls is AuthMiddleware
     )
 
-    assert main.authenticate_request is sentinel_authenticate_request
-    assert main.auth_whitelist_paths == sentinel_whitelist_paths
-    assert middleware.kwargs["authenticate_request"] is sentinel_authenticate_request
-    assert middleware.kwargs["whitelist_paths"] == sentinel_whitelist_paths
+    assert main.request_auth_boundary is sentinel_auth_boundary
+    assert middleware.kwargs["auth_boundary"] is sentinel_auth_boundary
