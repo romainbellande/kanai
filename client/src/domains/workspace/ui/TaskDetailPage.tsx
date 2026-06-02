@@ -1,30 +1,11 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import { Save } from "lucide-react";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useState } from "react";
 
-import { type Task, useKanaiApi } from "#/api/client";
+import { useKanaiApi } from "#/api/client";
+import { useTaskForm } from "#/domains/workspace/model/useTaskForm";
 import { WorkspaceLayout } from "#/domains/workspace/ui/templates/WorkspaceLayout";
-
-type TaskFormState = {
-	acceptanceCriteria: string;
-	description: string;
-	priority: string;
-	status: string;
-	tag: string;
-	title: string;
-};
-
-function getFormState(task: Task): TaskFormState {
-	return {
-		acceptanceCriteria: task.acceptanceCriteria ?? "",
-		description: task.description ?? "",
-		priority: task.priority,
-		status: task.status,
-		tag: task.tag ?? "",
-		title: task.title,
-	};
-}
 
 export function TaskDetailPage() {
 	const { projectId, taskId } = useParams({
@@ -33,75 +14,26 @@ export function TaskDetailPage() {
 	const api = useKanaiApi();
 	const projectQuery = useQuery(api.projects.get(projectId));
 	const tasksQuery = useQuery(api.tasks.list(projectId));
-	const updateTaskMutation = useMutation({
-		mutationFn: (input: Parameters<typeof api.tasks.update>[1]) =>
-			api.tasks.update(projectId, input),
-	});
 	const task = tasksQuery.data?.find((item) => item.id === taskId) ?? null;
-	const [formState, setFormState] = useState<TaskFormState | null>(null);
-	const [formTaskId, setFormTaskId] = useState<string | null>(null);
-	const [isDirty, setIsDirty] = useState(false);
-	const [formError, setFormError] = useState<string | null>(null);
 	const [savedMessage, setSavedMessage] = useState<string | null>(null);
+	const form = useTaskForm({
+		projectId,
+		mode: "edit",
+		taskId,
+		task,
+		onSaved: () => setSavedMessage("Task changes saved."),
+	});
 	const projectName = projectQuery.data?.name ?? "Project";
 
-	useEffect(() => {
-		if (task && (formTaskId !== task.id || !isDirty)) {
-			setFormState(getFormState(task));
-			setFormTaskId(task.id);
-			setIsDirty(false);
-		}
-	}, [formTaskId, isDirty, task]);
-
-	function updateField(field: keyof TaskFormState, value: string) {
-		setFormState((current) =>
-			current ? { ...current, [field]: value } : current,
-		);
-		setIsDirty(true);
+	function updateField(field: keyof typeof form.values, value: string) {
+		form.setField(field, value);
 		setSavedMessage(null);
 	}
 
 	async function handleSubmit(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
-		setFormError(null);
 		setSavedMessage(null);
-
-		if (!formState) {
-			return;
-		}
-
-		const title = formState.title.trim();
-		if (!title) {
-			setFormError("Task title is required.");
-			return;
-		}
-
-		try {
-			const updatedTask = await updateTaskMutation.mutateAsync({
-				taskId,
-				values: {
-					acceptanceCriteria: formState.acceptanceCriteria.trim() || null,
-					description: formState.description.trim() || null,
-					priority: formState.priority,
-					status: formState.status,
-					tag: formState.tag.trim() || null,
-					title,
-				},
-			});
-
-			api.tasks.replaceCached(
-				projectId,
-				tasksQuery.data?.map((item) =>
-					item.id === taskId ? updatedTask : item,
-				),
-			);
-			setFormState(getFormState(updatedTask));
-			setFormTaskId(updatedTask.id);
-			setIsDirty(false);
-			setSavedMessage("Task changes saved.");
-		} catch {
-			setFormError("Task could not be saved. Please try again.");
-		}
+		await form.submit();
 	}
 
 	return (
@@ -161,7 +93,7 @@ export function TaskDetailPage() {
 					</div>
 				) : null}
 
-				{task && formState ? (
+				{task ? (
 					<form className="flex flex-col gap-8" onSubmit={handleSubmit}>
 						<section className="grid grid-cols-1 gap-5 sm:grid-cols-2">
 							<div className="sm:col-span-2">
@@ -187,7 +119,7 @@ export function TaskDetailPage() {
 									onChange={(event) => updateField("title", event.target.value)}
 									required
 									type="text"
-									value={formState.title}
+									value={form.values.title}
 								/>
 							</div>
 						</section>
@@ -216,7 +148,7 @@ export function TaskDetailPage() {
 									onChange={(event) =>
 										updateField("status", event.target.value)
 									}
-									value={formState.status}
+									value={form.values.status}
 								>
 									<option value="todo">To Do</option>
 									<option value="in-progress">In Progress</option>
@@ -237,7 +169,7 @@ export function TaskDetailPage() {
 									onChange={(event) =>
 										updateField("priority", event.target.value)
 									}
-									value={formState.priority}
+									value={form.values.priority}
 								>
 									<option value="low">Low</option>
 									<option value="medium">Medium</option>
@@ -259,7 +191,7 @@ export function TaskDetailPage() {
 									onChange={(event) => updateField("tag", event.target.value)}
 									placeholder="Optional label shown on the card"
 									type="text"
-									value={formState.tag}
+									value={form.values.tag}
 								/>
 							</div>
 						</section>
@@ -290,7 +222,7 @@ export function TaskDetailPage() {
 									}
 									placeholder="Add context, background, or handoff notes..."
 									rows={5}
-									value={formState.description}
+									value={form.values.description}
 								/>
 							</div>
 
@@ -309,14 +241,14 @@ export function TaskDetailPage() {
 									}
 									placeholder="List the conditions that must be met for this task to be complete..."
 									rows={4}
-									value={formState.acceptanceCriteria}
+									value={form.values.acceptanceCriteria}
 								/>
 							</div>
 						</section>
 
-						{formError ? (
+						{form.errorMessage ? (
 							<p className="rounded-xl border border-[var(--outline-variant)] bg-[var(--error-container)] px-4 py-3 text-sm font-semibold text-[var(--on-error-container)]">
-								{formError}
+								{form.errorMessage}
 							</p>
 						) : null}
 
@@ -335,12 +267,12 @@ export function TaskDetailPage() {
 								Back to Board
 							</Link>
 							<button
-								disabled={updateTaskMutation.isPending}
+								disabled={form.isSaving}
 								type="submit"
 								className="inline-flex items-center justify-center gap-2 rounded-full bg-[var(--primary)] px-5 py-2.5 text-sm font-semibold text-[var(--on-primary)] shadow-[0_12px_28px_rgba(0,61,155,0.18)] transition hover:bg-[var(--primary-container)]"
 							>
 								<Save className="h-4 w-4" />
-								{updateTaskMutation.isPending ? "Saving..." : "Save Changes"}
+								{form.isSaving ? "Saving..." : "Save Changes"}
 							</button>
 						</div>
 					</form>
