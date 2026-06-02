@@ -178,15 +178,12 @@ async def replace_project_users(
     member_ids: list[UUID] | None,
 ) -> None:
     """Replace owner and member associations for a project."""
-    repository = ProjectRepository(session)
-    if owner_ids is not None:
-        replacement_owner_ids = set(owner_ids) | {creator_user_id}
-        await validate_user_ids(session, replacement_owner_ids)
-        await repository.replace_owners(project_id, replacement_owner_ids)
-    if member_ids is not None:
-        replacement_member_ids = set(member_ids)
-        await validate_user_ids(session, replacement_member_ids)
-        await repository.replace_members(project_id, replacement_member_ids)
+    await ProjectAccess(session).replace_membership(
+        project_id,
+        acting_user_id=creator_user_id,
+        owner_ids=set(owner_ids) if owner_ids is not None else None,
+        member_ids=set(member_ids) if member_ids is not None else None,
+    )
 
 
 async def update_project_for_user(
@@ -204,12 +201,11 @@ async def update_project_for_user(
         if value is not None:
             setattr(project, field_name, value)
 
-    await replace_project_users(
-        session,
+    await ProjectAccess(session).replace_membership(
         project_id,
-        user_id,
-        payload.owner_ids,
-        payload.member_ids,
+        acting_user_id=user_id,
+        owner_ids=set(payload.owner_ids) if payload.owner_ids is not None else None,
+        member_ids=set(payload.member_ids) if payload.member_ids is not None else None,
     )
     try:
         await repository.commit()

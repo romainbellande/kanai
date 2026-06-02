@@ -7,6 +7,7 @@ from uuid import UUID
 import pytest
 import pytest_asyncio
 from fastapi import HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel
 
@@ -133,6 +134,62 @@ async def test_project_access_masks_missing_and_forbidden_projects(
 
         assert error.value.status_code == 404
         assert error.value.detail == "Project not found"
+
+
+@pytest.mark.asyncio
+async def test_project_access_validates_known_and_unknown_users(
+    session: AsyncSession,
+    project_context: dict[str, UUID],
+) -> None:
+    access = ProjectAccess(session)
+
+    await access.validate_users_exist(
+        {project_context["owner_id"], project_context["member_id"]}
+    )
+
+    unknown_user_id = UUID("00000000-0000-0000-0000-000000000000")
+    with pytest.raises(HTTPException) as error:
+        await access.validate_users_exist(
+            {project_context["owner_id"], unknown_user_id}
+        )
+
+    assert error.value.status_code == 422
+    assert error.value.detail == f"Unknown user id: {unknown_user_id}"
+
+
+@pytest.mark.asyncio
+async def test_project_access_replaces_membership_and_preserves_acting_owner(
+    session: AsyncSession,
+    project_context: dict[str, UUID],
+) -> None:
+    replacement_owner = User(externalId="replacement-owner")
+    replacement_member = User(externalId="replacement-member")
+    session.add_all([replacement_owner, replacement_member])
+    await session.flush()
+    assert replacement_owner.id is not None
+    assert replacement_member.id is not None
+
+    await ProjectAccess(session).replace_membership(
+        project_context["project_id"],
+        acting_user_id=project_context["owner_id"],
+        owner_ids={replacement_owner.id},
+        member_ids={replacement_member.id},
+    )
+
+    await session.flush()
+
+    owner_rows = await session.scalars(
+        select(ProjectOwner).filter_by(project_id=project_context["project_id"])
+    )
+    member_rows = await session.scalars(
+        select(ProjectMember).filter_by(project_id=project_context["project_id"])
+    )
+
+    assert {row.user_id for row in owner_rows} == {
+        project_context["owner_id"],
+        replacement_owner.id,
+    }
+    assert {row.user_id for row in member_rows} == {replacement_member.id}
 
 
 @pytest.mark.asyncio
