@@ -19,7 +19,7 @@ Use this skill for backend work under `api/`, especially API routes, database mo
 - `api/app/schemas/` contains Pydantic request/response schemas and auth session payloads.
 - `api/app/repositories/` contains persistence adapters and repository protocols.
 - `api/app/services/` contains application services and business workflows.
-- `api/app/db/session.py` owns the async engine, session factory, DB dependency, and startup table creation.
+- `api/app/db/session.py` owns the async engine, session factory, DB dependency, and guarded startup table reset/recreation.
 - `api/app/db/base.py` imports models for SQLModel metadata registration.
 - `api/app/db/migrations/` contains Alembic environment files and revisions.
 - `api/app/integrations/` contains external service clients/providers.
@@ -28,7 +28,7 @@ Use this skill for backend work under `api/`, especially API routes, database mo
 ## Migration Policy
 
 - Do not create new Alembic migration files for schema changes unless the user explicitly asks to resume migration creation.
-- Current project policy is that `create_db_and_tables` in `api/app/db/session.py` handles database schema creation automatically in startup-enabled environments.
+- Current project policy is that `create_db_and_tables` in `api/app/db/session.py` drops and recreates SQLModel metadata tables in startup-enabled environments.
 - Model metadata registration lives in `api/app/db/base.py`.
 - Alembic exists under `api/app/db/migrations/`, but migration generation is on hold by user request.
 - If a schema change seems to require a persisted migration, ask before adding a revision file.
@@ -37,7 +37,6 @@ Use this skill for backend work under `api/`, especially API routes, database mo
 
 - Do not read `.env` or other secret-bearing files unless the user explicitly authorizes it.
 - Avoid string-based SQLAlchemy ordering such as `order_by("rank")`; it can resolve to PostgreSQL ordered-set aggregate functions. Use explicit model attributes such as `Task.rank`.
-- If startup schema creation or repair handles new columns, make sure repair runs before any early "already initialized" skip.
 
 ## Skill Maintenance Trigger
 
