@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.task import Task
 from app.repositories.task_repository import TaskRepository
-from app.schemas.task import TaskCreate, TaskRead, TaskUpdate
+from app.schemas.task import TaskCreate, TaskDestination, TaskRead, TaskUpdate
 from app.services.project_access import ProjectAccess
 
 
@@ -157,6 +157,99 @@ async def update_task(
         setattr(task, field_name, value)
 
     return task_to_read(await repository.update(task))
+
+
+async def move_task(
+    session: AsyncSession,
+    *,
+    project_id: UUID,
+    task_id: UUID,
+    user_id: UUID,
+    destination: TaskDestination,
+) -> TaskRead:
+    """Move a task to a board destination and persist its status and rank."""
+    await ProjectAccess(session).require_project(project_id, user_id)
+    repository = TaskRepository(session)
+    task = await repository.get_by_project(project_id, task_id)
+    if task is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Task not found"
+        )
+
+    ordered_destination_tasks = await repository.list_by_project_and_status(
+        project_id, destination.status
+    )
+    if _is_same_position(task, ordered_destination_tasks, destination):
+        return task_to_read(task)
+
+    destination_tasks = [
+        destination_task
+        for destination_task in ordered_destination_tasks
+        if destination_task.id != task_id
+    ]
+    before_rank = _rank_for_neighbor(
+        destination_tasks, destination.before_task_id, "before_task_id"
+    )
+    after_rank = _rank_for_neighbor(
+        destination_tasks, destination.after_task_id, "after_task_id"
+    )
+
+    if before_rank is not None and after_rank is not None and before_rank >= after_rank:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Task destination neighbors are out of order",
+        )
+
+    task.status = destination.status
+    task.rank = rank_between(before_rank, after_rank)
+    return task_to_read(await repository.update(task))
+
+
+def _rank_for_neighbor(
+    tasks: list[Task], task_id: UUID | None, field_name: str
+) -> str | None:
+    if task_id is None:
+        return None
+
+    for task in tasks:
+        if task.id == task_id:
+            return task.rank
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"{field_name} not found",
+    )
+
+
+def _is_same_position(
+    task: Task, ordered_destination_tasks: list[Task], destination: TaskDestination
+) -> bool:
+    if task.status != destination.status:
+        return False
+
+    task_index = next(
+        (
+            index
+            for index, destination_task in enumerate(ordered_destination_tasks)
+            if destination_task.id == task.id
+        ),
+        None,
+    )
+    if task_index is None:
+        return False
+
+    before_task_id = (
+        ordered_destination_tasks[task_index - 1].id if task_index else None
+    )
+    after_task = (
+        ordered_destination_tasks[task_index + 1]
+        if task_index + 1 < len(ordered_destination_tasks)
+        else None
+    )
+    return (
+        destination.before_task_id == before_task_id
+        and destination.after_task_id == (after_task.id if after_task else None)
+    )
 
 
 async def delete_task(
