@@ -9,10 +9,9 @@ import {
 	waitFor,
 } from "@testing-library/react";
 import type { AnchorHTMLAttributes, ReactNode } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { currentUserQueryOptions, projectQueryOptions } from "#/api/client";
-import { TasksApi } from "#/api/openapi-client";
 
 const routerMocks = vi.hoisted(() => ({
 	navigate: vi.fn(),
@@ -58,7 +57,11 @@ function renderWithQueryClient(ui: ReactNode) {
 			queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },
 		},
 	});
-	queryClient.setQueryData(currentUserQueryOptions().queryKey, undefined);
+	queryClient.setQueryData(currentUserQueryOptions().queryKey, {
+		id: "user-1",
+		first_name: "Task",
+		last_name: "Creator",
+	});
 	queryClient.setQueryData(projectQueryOptions("project-1").queryKey, {
 		id: "project-1",
 		name: "API Project",
@@ -78,10 +81,19 @@ function renderWithQueryClient(ui: ReactNode) {
 }
 
 describe("CreateTaskPage", () => {
+	beforeEach(() => {
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({ accessToken: "task-token" }),
+		);
+	});
+
 	afterEach(() => {
 		cleanup();
 		vi.restoreAllMocks();
 		vi.unstubAllEnvs();
+		vi.unstubAllGlobals();
+		window.sessionStorage.clear();
 	});
 
 	it("submits schema-compatible task data for the route project", async () => {
@@ -89,22 +101,26 @@ describe("CreateTaskPage", () => {
 			"#/domains/workspace/ui/CreateTaskPage"
 		);
 		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
-		const createTask = vi
-			.spyOn(TasksApi.prototype, "createTaskEndpointProjectsProjectIdTasksPost")
-			.mockResolvedValue({
-				id: "task-1",
-				projectId: "project-1",
-				title: "Persist task",
-				status: "todo",
-				priority: "medium",
-				rank: "0|hzzzzz:",
-				assigneeId: null,
-				description: "Task notes",
-				acceptanceCriteria: "Done means done",
-				tag: null,
-				createdAt: null,
-				updatedAt: null,
-			});
+		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					id: "task-1",
+					project_id: "project-1",
+					title: "Persist task",
+					status: "todo",
+					priority: "medium",
+					rank: "0|hzzzzz:",
+					assignee_id: null,
+					description: "Task notes",
+					acceptance_criteria: "Done means done",
+					tag: null,
+					created_at: null,
+					updated_at: null,
+				}),
+				{ headers: { "content-type": "application/json" }, status: 200 },
+			),
+		);
+		vi.stubGlobal("fetch", fetchSpy);
 
 		renderWithQueryClient(<CreateTaskPage />);
 		fireEvent.change(screen.getByLabelText(/task title/i), {
@@ -118,16 +134,26 @@ describe("CreateTaskPage", () => {
 		});
 		fireEvent.submit(getCreateTaskForm());
 
-		await waitFor(() => expect(createTask).toHaveBeenCalledTimes(1));
-		expect(createTask).toHaveBeenCalledWith({
-			projectId: "project-1",
-			taskCreate: {
-				title: "Persist task",
-				status: "todo",
-				priority: "medium",
-				description: "Task notes",
-				acceptanceCriteria: "Done means done",
-			},
+		await waitFor(() =>
+			expect(
+				fetchSpy.mock.calls.some(
+					([url, init]) =>
+						String(url).endsWith("/projects/project-1/tasks") &&
+						init?.method === "POST",
+				),
+			).toBe(true),
+		);
+		const [, init] = fetchSpy.mock.calls.find(
+			([url, init]) =>
+				String(url).endsWith("/projects/project-1/tasks") &&
+				init?.method === "POST",
+		) ?? [null, undefined];
+		expect(JSON.parse(String(init?.body))).toEqual({
+			title: "Persist task",
+			status: "todo",
+			priority: "medium",
+			description: "Task notes",
+			acceptance_criteria: "Done means done",
 		});
 		expect(routerMocks.navigate).toHaveBeenCalledWith({
 			to: "/projects/$projectId",
@@ -140,22 +166,26 @@ describe("CreateTaskPage", () => {
 			"#/domains/workspace/ui/CreateTaskPage"
 		);
 		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
-		const createTask = vi
-			.spyOn(TasksApi.prototype, "createTaskEndpointProjectsProjectIdTasksPost")
-			.mockResolvedValue({
-				id: "task-1",
-				projectId: "project-1",
-				title: "Column task",
-				status: "in-progress",
-				priority: "medium",
-				rank: "0|hzzzzz:",
-				assigneeId: null,
-				description: null,
-				acceptanceCriteria: null,
-				tag: null,
-				createdAt: null,
-				updatedAt: null,
-			});
+		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					id: "task-1",
+					project_id: "project-1",
+					title: "Column task",
+					status: "in-progress",
+					priority: "medium",
+					rank: "0|hzzzzz:",
+					assignee_id: null,
+					description: null,
+					acceptance_criteria: null,
+					tag: null,
+					created_at: null,
+					updated_at: null,
+				}),
+				{ headers: { "content-type": "application/json" }, status: 200 },
+			),
+		);
+		vi.stubGlobal("fetch", fetchSpy);
 
 		renderWithQueryClient(<CreateTaskPage initialStatus="in-progress" />);
 		fireEvent.change(screen.getByLabelText(/task title/i), {
@@ -163,16 +193,24 @@ describe("CreateTaskPage", () => {
 		});
 		fireEvent.submit(getCreateTaskForm());
 
-		await waitFor(() => expect(createTask).toHaveBeenCalledTimes(1));
-		expect(createTask).toHaveBeenCalledWith({
-			projectId: "project-1",
-			taskCreate: {
-				title: "Column task",
-				status: "in-progress",
-				priority: "medium",
-				description: undefined,
-				acceptanceCriteria: undefined,
-			},
+		await waitFor(() =>
+			expect(
+				fetchSpy.mock.calls.some(
+					([url, init]) =>
+						String(url).endsWith("/projects/project-1/tasks") &&
+						init?.method === "POST",
+				),
+			).toBe(true),
+		);
+		const [, init] = fetchSpy.mock.calls.find(
+			([url, init]) =>
+				String(url).endsWith("/projects/project-1/tasks") &&
+				init?.method === "POST",
+		) ?? [null, undefined];
+		expect(JSON.parse(String(init?.body))).toEqual({
+			title: "Column task",
+			status: "in-progress",
+			priority: "medium",
 		});
 	});
 
@@ -181,16 +219,20 @@ describe("CreateTaskPage", () => {
 			"#/domains/workspace/ui/CreateTaskPage"
 		);
 		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
-		const createTask = vi.spyOn(
-			TasksApi.prototype,
-			"createTaskEndpointProjectsProjectIdTasksPost",
-		);
+		const fetchSpy = vi.fn<typeof fetch>();
+		vi.stubGlobal("fetch", fetchSpy);
 
 		renderWithQueryClient(<CreateTaskPage />);
 		fireEvent.submit(getCreateTaskForm());
 
 		expect(await screen.findByText("Task title is required.")).toBeTruthy();
-		expect(createTask).not.toHaveBeenCalled();
+		expect(
+			fetchSpy.mock.calls.some(
+				([url, init]) =>
+					String(url).endsWith("/projects/project-1/tasks") &&
+					init?.method === "POST",
+			),
+		).toBe(false);
 	});
 
 	it("keeps form input and shows an inline error when creation fails", async () => {
@@ -198,10 +240,14 @@ describe("CreateTaskPage", () => {
 			"#/domains/workspace/ui/CreateTaskPage"
 		);
 		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
-		vi.spyOn(
-			TasksApi.prototype,
-			"createTaskEndpointProjectsProjectIdTasksPost",
-		).mockRejectedValue(new Error("failed"));
+		vi.stubGlobal(
+			"fetch",
+			vi
+				.fn<typeof fetch>()
+				.mockResolvedValue(
+					new Response(JSON.stringify({ detail: "Nope" }), { status: 500 }),
+				),
+		);
 
 		renderWithQueryClient(<CreateTaskPage />);
 		const titleInput = screen.getByLabelText(/task title/i) as HTMLInputElement;

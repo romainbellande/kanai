@@ -106,22 +106,21 @@ describe("useKanaiApi", () => {
 		);
 	});
 
-	it("patches a task inside the project task cache", () => {
+	it("patches and restores a task inside the project task cache", () => {
 		const queryClient = createTestQueryClient();
-		queryClient.setQueryData(
-			["projects", "project-1", "tasks"],
-			[
-				task({ id: "task-1", title: "Original" }),
-				task({ id: "task-2", title: "Unchanged" }),
-			],
-		);
+		const originalTasks = [
+			task({ id: "task-1", title: "Original" }),
+			task({ id: "task-2", title: "Unchanged" }),
+		];
+		queryClient.setQueryData(["projects", "project-1", "tasks"], originalTasks);
 
 		const { result } = renderHook(() => useKanaiApi(), {
 			wrapper: createWrapper(queryClient),
 		});
 
+		let previousTasks: Task[] | undefined;
 		act(() => {
-			result.current.tasks.patchCached("project-1", "task-1", {
+			previousTasks = result.current.tasks.patchCached("project-1", "task-1", {
 				title: "Patched",
 				status: "done",
 			});
@@ -133,6 +132,14 @@ describe("useKanaiApi", () => {
 			task({ id: "task-1", title: "Patched", status: "done" }),
 			task({ id: "task-2", title: "Unchanged" }),
 		]);
+
+		act(() => {
+			result.current.tasks.replaceCached("project-1", previousTasks);
+		});
+
+		expect(
+			queryClient.getQueryData(["projects", "project-1", "tasks"]),
+		).toEqual(originalTasks);
 	});
 
 	it("creates a project task with app-shaped input and invalidates project tasks", async () => {

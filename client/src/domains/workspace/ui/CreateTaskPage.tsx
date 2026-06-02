@@ -1,13 +1,9 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { CirclePlus } from "lucide-react";
 import { type FormEvent, useState } from "react";
 
-import {
-	projectTasksQueryKey,
-	useCreateProjectTaskMutation,
-	useProjectQuery,
-} from "#/api/client";
+import { useKanaiApi } from "#/api/client";
 import { WorkspaceLayout } from "#/domains/workspace/ui/templates/WorkspaceLayout";
 
 const taskStatuses = ["todo", "in-progress", "done"] as const;
@@ -21,9 +17,12 @@ function getInitialTaskStatus(status: string | undefined): TaskStatus {
 export function CreateTaskPage({ initialStatus }: { initialStatus?: string }) {
 	const { projectId } = useParams({ from: "/projects_/$projectId/tasks/new" });
 	const navigate = useNavigate();
-	const queryClient = useQueryClient();
-	const projectQuery = useProjectQuery(projectId);
-	const createTaskMutation = useCreateProjectTaskMutation();
+	const api = useKanaiApi();
+	const projectQuery = useQuery(api.projects.get(projectId));
+	const createTaskMutation = useMutation({
+		mutationFn: (values: Parameters<typeof api.tasks.create>[1]) =>
+			api.tasks.create(projectId, values),
+	});
 	const [formError, setFormError] = useState<string | null>(null);
 	const projectName = projectQuery.data?.name ?? "Project";
 	const defaultStatus = getInitialTaskStatus(initialStatus);
@@ -46,17 +45,11 @@ export function CreateTaskPage({ initialStatus }: { initialStatus?: string }) {
 
 		try {
 			await createTaskMutation.mutateAsync({
-				projectId,
-				taskCreate: {
-					title,
-					status: String(formData.get("taskStatus") ?? "todo"),
-					priority: String(formData.get("taskPriority") ?? "medium"),
-					description: description || undefined,
-					acceptanceCriteria: acceptanceCriteria || undefined,
-				},
-			});
-			await queryClient.invalidateQueries({
-				queryKey: projectTasksQueryKey(projectId),
+				title,
+				status: String(formData.get("taskStatus") ?? "todo"),
+				priority: String(formData.get("taskPriority") ?? "medium"),
+				description: description || undefined,
+				acceptanceCriteria: acceptanceCriteria || undefined,
 			});
 			void navigate({ to: "/projects/$projectId", params: { projectId } });
 		} catch {

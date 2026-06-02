@@ -8,7 +8,7 @@ import {
 	attachClosestEdge,
 	extractClosestEdge,
 } from "@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import {
 	Bell,
@@ -33,12 +33,9 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import {
 	CurrentUserAuthError,
-	projectTasksQueryKey,
 	type Task,
 	useCurrentUserQuery,
-	useProjectQuery,
-	useProjectTasksQuery,
-	useUpdateProjectTaskMutation,
+	useKanaiApi,
 } from "#/api/client";
 import { getAuthLogoutUrl } from "#/domains/auth/model/auth-client";
 import { clearAuthSession } from "#/domains/auth/model/openid-client";
@@ -397,11 +394,14 @@ function BoardColumnView({
 
 export function ProjectBoardPage() {
 	const { projectId } = useParams({ from: "/projects/$projectId" });
+	const api = useKanaiApi();
 	const { data: currentUser } = useCurrentUserQuery();
-	const projectQuery = useProjectQuery(projectId);
-	const tasksQuery = useProjectTasksQuery(projectId);
-	const queryClient = useQueryClient();
-	const updateTaskMutation = useUpdateProjectTaskMutation();
+	const projectQuery = useQuery(api.projects.get(projectId));
+	const tasksQuery = useQuery(api.tasks.list(projectId));
+	const updateTaskMutation = useMutation({
+		mutationFn: (input: Parameters<typeof api.tasks.update>[1]) =>
+			api.tasks.update(projectId, input),
+	});
 	const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
 	const [activeDropColumnId, setActiveDropColumnId] = useState<ColumnId | null>(
 		null,
@@ -502,34 +502,28 @@ export function ProjectBoardPage() {
 					return;
 				}
 
-				const queryKey = projectTasksQueryKey(projectId);
-				const previousTasks = queryClient.getQueryData<Task[]>(queryKey);
-				queryClient.setQueryData<Task[]>(queryKey, (tasks) =>
-					tasks?.map((task) =>
-						task.id === sourceTaskId
-							? { ...task, status: destinationColumnId, rank }
-							: task,
-					),
-				);
+				const previousTasks = api.tasks.patchCached(projectId, sourceTaskId, {
+					status: destinationColumnId,
+					rank,
+				});
 
 				updateTaskMutation.mutate(
 					{
-						projectId,
 						taskId: sourceTaskId,
-						taskUpdate: { status: destinationColumnId, rank },
+						values: { status: destinationColumnId, rank },
 					},
 					{
 						onError: () => {
-							queryClient.setQueryData(queryKey, previousTasks);
+							api.tasks.replaceCached(projectId, previousTasks);
 						},
 						onSettled: () => {
-							void queryClient.invalidateQueries({ queryKey });
+							void api.tasks.invalidateProjectTasks(projectId);
 						},
 					},
 				);
 			},
 		});
-	}, [columns, projectId, queryClient, tasksQuery.data, updateTaskMutation]);
+	}, [api.tasks, columns, projectId, tasksQuery.data, updateTaskMutation]);
 
 	function handleLogout() {
 		if (!logoutUrl) {
