@@ -13,7 +13,7 @@ from app.models.project import Project, ProjectMember, ProjectOwner
 from app.models.task import Task
 from app.models.user import User
 from app.schemas.task import TaskDestination
-from app.services.task_service import move_task
+from app.features.tasks import TaskService
 
 
 @pytest_asyncio.fixture
@@ -67,8 +67,7 @@ async def test_move_task_persists_cross_column_top_placement(
         assert moved.id is not None
         assert first_done.id is not None
 
-        updated = await move_task(
-            session,
+        updated = await TaskService(session).move(
             project_id=project.id,
             task_id=moved.id,
             user_id=owner.id,
@@ -130,8 +129,7 @@ async def test_move_task_allows_member_access_and_preserves_noop_rank(
         assert moved.id is not None
         assert after.id is not None
 
-        updated = await move_task(
-            session,
+        updated = await TaskService(session).move(
             project_id=project.id,
             task_id=moved.id,
             user_id=member.id,
@@ -188,8 +186,7 @@ async def test_move_task_persists_within_column_bottom_placement(
         assert moved.id is not None
         assert last.id is not None
 
-        updated = await move_task(
-            session,
+        updated = await TaskService(session).move(
             project_id=project.id,
             task_id=moved.id,
             user_id=owner.id,
@@ -234,8 +231,7 @@ async def test_move_task_denies_users_without_project_access(
         assert task.id is not None
 
         with pytest.raises(HTTPException) as error:
-            await move_task(
-                session,
+            await TaskService(session).move(
                 project_id=project.id,
                 task_id=task.id,
                 user_id=outsider.id,

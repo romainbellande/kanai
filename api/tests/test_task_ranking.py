@@ -5,9 +5,9 @@ from uuid import UUID
 import pytest
 from pydantic import ValidationError
 
+from app.features.tasks.service import rank_between, task_to_read
 from app.models.task import Task
 from app.schemas.task import TaskUpdate
-from app.services.task_service import rank_between, task_to_read
 
 
 def test_rank_between_returns_sortable_midpoints() -> None:

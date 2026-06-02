@@ -2,21 +2,22 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, HTTPException, status
 
 from app.api.deps import CurrentUser, DatabaseSession
 from app.schemas.task import TaskCreate, TaskRead, TaskUpdate
-from app.services.project_service import require_current_user_id
-from app.services.task_service import (
-    create_task,
-    delete_task,
-    get_task,
-    list_tasks,
-    update_task,
-)
 
 
 task_router = APIRouter(prefix="/{project_id}/tasks", tags=["tasks"])
+
+
+def _require_current_user_id(user_id: UUID | None) -> UUID:
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authenticated user is missing a database id",
+        )
+    return user_id
 
 
 @task_router.post("", response_model=TaskRead, status_code=status.HTTP_201_CREATED)
@@ -27,10 +28,11 @@ async def create_task_endpoint(
     current_user: CurrentUser,
 ) -> TaskRead:
     """Create a task in a project accessible to the current user."""
-    return await create_task(
-        session,
+    from app.features.tasks import TaskService
+
+    return await TaskService(session).create(
         project_id=project_id,
-        user_id=require_current_user_id(current_user.id),
+        user_id=_require_current_user_id(current_user.id),
         payload=payload,
     )
 
@@ -42,10 +44,11 @@ async def list_tasks_endpoint(
     current_user: CurrentUser,
 ) -> list[TaskRead]:
     """List tasks for a project accessible to the current user."""
-    return await list_tasks(
-        session,
+    from app.features.tasks import TaskService
+
+    return await TaskService(session).list(
         project_id=project_id,
-        user_id=require_current_user_id(current_user.id),
+        user_id=_require_current_user_id(current_user.id),
     )
 
 
@@ -57,11 +60,12 @@ async def get_task_endpoint(
     current_user: CurrentUser,
 ) -> TaskRead:
     """Get a single task from a project accessible to the current user."""
-    return await get_task(
-        session,
+    from app.features.tasks import TaskService
+
+    return await TaskService(session).get(
         project_id=project_id,
         task_id=task_id,
-        user_id=require_current_user_id(current_user.id),
+        user_id=_require_current_user_id(current_user.id),
     )
 
 
@@ -74,11 +78,12 @@ async def update_task_endpoint(
     current_user: CurrentUser,
 ) -> TaskRead:
     """Update a task in a project accessible to the current user."""
-    return await update_task(
-        session,
+    from app.features.tasks import TaskService
+
+    return await TaskService(session).update(
         project_id=project_id,
         task_id=task_id,
-        user_id=require_current_user_id(current_user.id),
+        user_id=_require_current_user_id(current_user.id),
         payload=payload,
     )
 
@@ -91,9 +96,10 @@ async def delete_task_endpoint(
     current_user: CurrentUser,
 ) -> None:
     """Delete a task from a project accessible to the current user."""
-    await delete_task(
-        session,
+    from app.features.tasks import TaskService
+
+    await TaskService(session).delete(
         project_id=project_id,
         task_id=task_id,
-        user_id=require_current_user_id(current_user.id),
+        user_id=_require_current_user_id(current_user.id),
     )
