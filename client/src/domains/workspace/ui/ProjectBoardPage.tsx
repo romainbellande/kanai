@@ -15,7 +15,6 @@ import {
 	Calendar,
 	ChevronRight,
 	CircleHelp,
-	FileText,
 	Filter,
 	LayoutDashboard,
 	LogOut,
@@ -41,7 +40,6 @@ import { useAuthBoundary } from "#/domains/auth/model/auth-boundary";
 import {
 	type BoardColumn,
 	type ColumnId,
-	getColumnId,
 	getRankForDestination,
 	groupTasksByColumn,
 	rankBetween,
@@ -123,9 +121,7 @@ function getDropColumnId(
 	data: Record<string | symbol, unknown> | undefined,
 ): ColumnId | null {
 	const columnId = data?.columnId;
-	return typeof columnId === "string" && getColumnId(columnId) === columnId
-		? columnId
-		: null;
+	return typeof columnId === "string" ? columnId : null;
 }
 
 function BoardTaskCard({
@@ -196,14 +192,7 @@ function BoardTaskCard({
 						{card.tag || card.priority}
 					</span>
 				) : null}
-				<p
-					className={[
-						"mt-3 text-sm leading-6",
-						columnId === "done"
-							? "text-[var(--on-surface-variant)] line-through"
-							: "text-[var(--on-surface)]",
-					].join(" ")}
-				>
+				<p className="mt-3 text-sm leading-6 text-[var(--on-surface)]">
 					{card.title}
 				</p>
 				{card.description ? (
@@ -212,11 +201,7 @@ function BoardTaskCard({
 					</p>
 				) : null}
 				<div className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-[var(--surface-variant)] px-2 py-1 text-xs font-semibold text-[var(--on-surface-variant)]">
-					{columnId === "in-progress" ? (
-						<FileText className="h-3.5 w-3.5" />
-					) : (
-						<Calendar className="h-3.5 w-3.5" />
-					)}
+					<Calendar className="h-3.5 w-3.5" />
 					{getTaskMeta(card)}
 				</div>
 			</Link>
@@ -282,7 +267,7 @@ function BoardColumnView({
 			<Link
 				to="/projects/$projectId/tasks/new"
 				params={{ projectId }}
-				search={{ status: column.id }}
+				search={{ column_id: column.id }}
 				className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-4 py-3 text-sm font-semibold text-[var(--on-surface-variant)] hover:bg-[var(--surface-bright)]"
 			>
 				<Plus className="h-4 w-4" />
@@ -299,12 +284,13 @@ export function ProjectBoardPage() {
 	const { data: currentUser } = useCurrentUserQuery();
 	const projectQuery = useQuery(api.projects.get(projectId));
 	const board = useProjectTaskBoard(projectId);
-	const { tasksQuery } = board;
+	const { columnsQuery, tasksQuery } = board;
 	const { draggingTaskId, activeDropColumnId } = board.dragState;
 	const projectName = projectQuery.data?.name ?? "Project";
 	const { columns } = board;
 	const isProjectAuthError = projectQuery.error instanceof CurrentUserAuthError;
 	const isTasksAuthError = tasksQuery.error instanceof CurrentUserAuthError;
+	const isColumnsAuthError = columnsQuery.error instanceof CurrentUserAuthError;
 	const accountInitials = [
 		getInitials(currentUser?.first_name),
 		getInitials(currentUser?.last_name),
@@ -546,6 +532,20 @@ export function ProjectBoardPage() {
 							</div>
 						</div>
 
+						{columnsQuery.isError ? (
+							<div className="mb-4 min-w-[1100px] rounded-xl border border-[var(--outline-variant)] bg-[var(--surface-container-low)] p-4 text-sm text-[var(--on-surface-variant)]">
+								{isColumnsAuthError
+									? "Sign in again to load columns."
+									: "Columns could not be loaded."}
+								<button
+									type="button"
+									onClick={() => void columnsQuery.refetch()}
+									className="ml-3 rounded-full bg-[var(--primary)] px-3 py-1.5 text-xs font-semibold text-[var(--on-primary)]"
+								>
+									Retry
+								</button>
+							</div>
+						) : null}
 						{tasksQuery.isError ? (
 							<div className="mb-4 min-w-[1100px] rounded-xl border border-[var(--outline-variant)] bg-[var(--surface-container-low)] p-4 text-sm text-[var(--on-surface-variant)]">
 								{isTasksAuthError
@@ -561,36 +561,42 @@ export function ProjectBoardPage() {
 							</div>
 						) : null}
 						<div className="flex min-w-[1100px] gap-6">
-							{columns.map((column) => (
-								<BoardColumnView
-									key={column.id}
-									column={column}
-									projectId={projectId}
-									isActiveDropTarget={activeDropColumnId === column.id}
-								>
-									{tasksQuery.isPending ? (
-										<p className="rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-4 text-sm text-[var(--on-surface-variant)]">
-											Loading tasks...
-										</p>
-									) : null}
-									{!tasksQuery.isPending &&
-									!tasksQuery.isError &&
-									column.cards.length === 0 ? (
-										<p className="rounded-2xl border border-dashed border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-4 text-sm text-[var(--on-surface-variant)]">
-											No tasks in {column.title.toLowerCase()}.
-										</p>
-									) : null}
-									{column.cards.map((card) => (
-										<BoardTaskCard
-											key={card.id}
-											card={card}
-											columnId={column.id}
-											isDragging={draggingTaskId === card.id}
-											onDragStateChange={board.dragState.setDraggingTaskId}
-										/>
-									))}
-								</BoardColumnView>
-							))}
+							{columnsQuery.isPending ? (
+								<p className="rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-4 text-sm text-[var(--on-surface-variant)]">
+									Loading columns...
+								</p>
+							) : null}
+							{!columnsQuery.isError &&
+								columns.map((column) => (
+									<BoardColumnView
+										key={column.id}
+										column={column}
+										projectId={projectId}
+										isActiveDropTarget={activeDropColumnId === column.id}
+									>
+										{tasksQuery.isPending ? (
+											<p className="rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-4 text-sm text-[var(--on-surface-variant)]">
+												Loading tasks...
+											</p>
+										) : null}
+										{!tasksQuery.isPending &&
+										!tasksQuery.isError &&
+										column.cards.length === 0 ? (
+											<p className="rounded-2xl border border-dashed border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-4 text-sm text-[var(--on-surface-variant)]">
+												No tasks in {column.title.toLowerCase()}.
+											</p>
+										) : null}
+										{column.cards.map((card) => (
+											<BoardTaskCard
+												key={card.id}
+												card={card}
+												columnId={column.id}
+												isDragging={draggingTaskId === card.id}
+												onDragStateChange={board.dragState.setDraggingTaskId}
+											/>
+										))}
+									</BoardColumnView>
+								))}
 
 							<button
 								type="button"

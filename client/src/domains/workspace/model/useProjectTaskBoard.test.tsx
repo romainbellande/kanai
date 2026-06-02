@@ -5,7 +5,11 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { projectTasksQueryOptions, type Task } from "#/api/client";
+import {
+	projectColumnsQueryOptions,
+	projectTasksQueryOptions,
+	type Task,
+} from "#/api/client";
 import { useProjectTaskBoard } from "#/domains/workspace/model/useProjectTaskBoard";
 
 function createTestQueryClient() {
@@ -31,6 +35,7 @@ function task(overrides: Partial<Task> = {}): Task {
 		projectId: "project-1",
 		title: "Task",
 		status: "todo",
+		columnId: "column-todo",
 		priority: "medium",
 		rank: "U",
 		assigneeId: null,
@@ -58,9 +63,31 @@ describe("useProjectTaskBoard", () => {
 
 	it("exposes grouped columns and drag state", () => {
 		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			{
+				id: "column-backlog",
+				projectId: "project-1",
+				name: "Backlog",
+				position: 0,
+				createdAt: null,
+				updatedAt: null,
+			},
+			{
+				id: "column-review",
+				projectId: "project-1",
+				name: "Review",
+				position: 1,
+				createdAt: null,
+				updatedAt: null,
+			},
+		]);
 		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
-			task({ id: "done-task", title: "Done", status: "done" }),
-			task({ id: "todo-task", title: "Todo", status: "todo" }),
+			task({ id: "review-task", title: "Review", columnId: "column-review" }),
+			task({
+				id: "backlog-task",
+				title: "Backlog",
+				columnId: "column-backlog",
+			}),
 		]);
 
 		const { result } = renderHook(() => useProjectTaskBoard("project-1"), {
@@ -68,31 +95,52 @@ describe("useProjectTaskBoard", () => {
 		});
 
 		expect(result.current.columns.map((column) => column.id)).toEqual([
-			"todo",
-			"in-progress",
-			"done",
+			"column-backlog",
+			"column-review",
+		]);
+		expect(result.current.columns.map((column) => column.title)).toEqual([
+			"Backlog",
+			"Review",
 		]);
 		expect(result.current.columns[0].cards.map((card) => card.id)).toEqual([
-			"todo-task",
+			"backlog-task",
 		]);
-		expect(result.current.columns[2].cards.map((card) => card.id)).toEqual([
-			"done-task",
+		expect(result.current.columns[1].cards.map((card) => card.id)).toEqual([
+			"review-task",
 		]);
 
 		act(() => {
-			result.current.dragState.setDraggingTaskId("todo-task");
-			result.current.dragState.setActiveDropColumnId("done");
+			result.current.dragState.setDraggingTaskId("backlog-task");
+			result.current.dragState.setActiveDropColumnId("column-review");
 		});
 
-		expect(result.current.dragState.draggingTaskId).toBe("todo-task");
-		expect(result.current.dragState.activeDropColumnId).toBe("done");
+		expect(result.current.dragState.draggingTaskId).toBe("backlog-task");
+		expect(result.current.dragState.activeDropColumnId).toBe("column-review");
 	});
 
 	it("optimistically moves a task and invalidates after success", async () => {
 		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			{
+				id: "column-todo",
+				projectId: "project-1",
+				name: "To Do",
+				position: 0,
+				createdAt: null,
+				updatedAt: null,
+			},
+			{
+				id: "column-done",
+				projectId: "project-1",
+				name: "Done",
+				position: 1,
+				createdAt: null,
+				updatedAt: null,
+			},
+		]);
 		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
-			task({ id: "moved", status: "todo", rank: "U" }),
-			task({ id: "done-first", status: "done", rank: "U" }),
+			task({ id: "moved", columnId: "column-todo", rank: "U" }),
+			task({ id: "done-first", columnId: "column-done", rank: "U" }),
 		]);
 		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
 			new Response(
@@ -100,7 +148,7 @@ describe("useProjectTaskBoard", () => {
 					id: "moved",
 					project_id: "project-1",
 					title: "Task",
-					status: "done",
+					column_id: "column-done",
 					priority: "medium",
 					rank: "F",
 					assignee_id: null,
@@ -122,7 +170,7 @@ describe("useProjectTaskBoard", () => {
 		act(() => {
 			result.current.moveTask({
 				taskId: "moved",
-				toColumnId: "done",
+				toColumnId: "column-done",
 				afterTaskId: "done-first",
 			});
 		});
@@ -131,12 +179,12 @@ describe("useProjectTaskBoard", () => {
 			queryClient
 				.getQueryData<Task[]>(projectTasksQueryOptions("project-1").queryKey)
 				?.find((cachedTask) => cachedTask.id === "moved"),
-		).toMatchObject({ status: "done", rank: "F" });
+		).toMatchObject({ columnId: "column-done", rank: "F" });
 
 		await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
 		const [, init] = fetchSpy.mock.calls[0];
 		expect(JSON.parse(String(init?.body))).toEqual({
-			status: "done",
+			column_id: "column-done",
 			rank: "F",
 		});
 		await waitFor(() =>
@@ -150,9 +198,27 @@ describe("useProjectTaskBoard", () => {
 
 	it("rolls back optimistic movement on API failure", async () => {
 		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			{
+				id: "column-todo",
+				projectId: "project-1",
+				name: "To Do",
+				position: 0,
+				createdAt: null,
+				updatedAt: null,
+			},
+			{
+				id: "column-done",
+				projectId: "project-1",
+				name: "Done",
+				position: 1,
+				createdAt: null,
+				updatedAt: null,
+			},
+		]);
 		const originalTasks = [
-			task({ id: "moved", status: "todo", rank: "U" }),
-			task({ id: "done-first", status: "done", rank: "U" }),
+			task({ id: "moved", columnId: "column-todo", rank: "U" }),
+			task({ id: "done-first", columnId: "column-done", rank: "U" }),
 		];
 		queryClient.setQueryData(
 			projectTasksQueryOptions("project-1").queryKey,
@@ -174,7 +240,7 @@ describe("useProjectTaskBoard", () => {
 		act(() => {
 			result.current.moveTask({
 				taskId: "moved",
-				toColumnId: "done",
+				toColumnId: "column-done",
 				afterTaskId: "done-first",
 			});
 		});

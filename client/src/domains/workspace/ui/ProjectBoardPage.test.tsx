@@ -8,6 +8,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
 	currentUserQueryOptions,
 	type Project,
+	type ProjectColumn,
+	projectColumnsQueryOptions,
 	projectQueryOptions,
 	projectTasksQueryOptions,
 	type Task,
@@ -48,12 +50,25 @@ function task(overrides: Partial<Task>): Task {
 		projectId: "project-1",
 		title: "Task",
 		status: "todo",
+		columnId: "column-todo",
 		priority: "medium",
 		rank: "U",
 		assigneeId: null,
 		description: null,
 		acceptanceCriteria: null,
 		tag: null,
+		createdAt: null,
+		updatedAt: null,
+		...overrides,
+	};
+}
+
+function column(overrides: Partial<ProjectColumn>): ProjectColumn {
+	return {
+		id: "column-todo",
+		projectId: "project-1",
+		name: "To Do",
+		position: 0,
 		createdAt: null,
 		updatedAt: null,
 		...overrides,
@@ -105,23 +120,33 @@ describe("ProjectBoardPage", () => {
 		);
 		const columns = groupTasksByColumn(
 			[
-				task({ id: "todo-task", title: "Todo", status: "todo", rank: "U" }),
-				task({ id: "doing-task", title: "Doing", status: "in-progress" }),
-				task({ id: "done-task", title: "Done", status: "done" }),
+				task({
+					id: "todo-task",
+					title: "Todo",
+					columnId: "column-todo",
+					rank: "U",
+				}),
+				task({ id: "doing-task", title: "Doing", columnId: "column-doing" }),
+				task({ id: "done-task", title: "Done", columnId: "column-done" }),
 				task({
 					id: "unknown-task",
 					title: "Unknown",
-					status: "blocked",
+					columnId: "missing-column",
 					rank: "j",
 				}),
 				task({ id: "other-task", projectId: "project-2", title: "Other" }),
 			],
 			"project-1",
+			[
+				column({ id: "column-todo", name: "To Do", position: 0 }),
+				column({ id: "column-doing", name: "Doing", position: 1 }),
+				column({ id: "column-done", name: "Done", position: 2 }),
+			],
 		);
 
 		expect(
 			columns.map((column) => column.cards.map((card) => card.id)),
-		).toEqual([["todo-task", "unknown-task"], ["doing-task"], ["done-task"]]);
+		).toEqual([["todo-task"], ["doing-task"], ["done-task"]]);
 	});
 
 	it("sorts cards by rank and computes fractional ranks", async () => {
@@ -133,6 +158,7 @@ describe("ProjectBoardPage", () => {
 				task({ id: "first", title: "First", rank: "U" }),
 			],
 			"project-1",
+			[column({ id: "column-todo", name: "To Do", position: 0 })],
 		);
 
 		const middleRank = rankBetween("U", "j");
@@ -158,14 +184,19 @@ describe("ProjectBoardPage", () => {
 			project({ name: "API Board" }),
 		);
 		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
-			task({ id: "todo-task", title: "API Todo", status: "todo" }),
-			task({ id: "doing-task", title: "API Doing", status: "in-progress" }),
-			task({ id: "done-task", title: "API Done", status: "done" }),
+			task({ id: "todo-task", title: "API Todo", columnId: "column-todo" }),
+			task({ id: "doing-task", title: "API Doing", columnId: "column-doing" }),
+			task({ id: "done-task", title: "API Done", columnId: "column-done" }),
 			task({
 				id: "other-task",
 				projectId: "project-2",
 				title: "Other Project",
 			}),
+		]);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({ id: "column-todo", name: "Backlog", position: 0 }),
+			column({ id: "column-doing", name: "Review", position: 1 }),
+			column({ id: "column-done", name: "Shipped", position: 2 }),
 		]);
 
 		renderWithQueryClient(<ProjectBoardPage />, queryClient);
@@ -178,11 +209,14 @@ describe("ProjectBoardPage", () => {
 		).toContain("/projects/project-1/tasks/todo-task");
 		expect(screen.getByText("API Doing")).toBeTruthy();
 		expect(screen.getByText("API Done")).toBeTruthy();
+		expect(screen.getByText("Backlog")).toBeTruthy();
+		expect(screen.getByText("Review")).toBeTruthy();
+		expect(screen.getByText("Shipped")).toBeTruthy();
 		expect(screen.queryByText("Other Project")).toBeNull();
 		expect(screen.queryByText("Security Audit Phase 1")).toBeNull();
 	});
 
-	it("links column task creation to the column status", async () => {
+	it("links column task creation to the persisted column id", async () => {
 		const { ProjectBoardPage } = await import(
 			"#/domains/workspace/ui/ProjectBoardPage"
 		);
@@ -195,18 +229,19 @@ describe("ProjectBoardPage", () => {
 			projectTasksQueryOptions("project-1").queryKey,
 			[],
 		);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({ id: "column-backlog", name: "Backlog", position: 0 }),
+			column({ id: "column-review", name: "Review", position: 1 }),
+		]);
 
 		renderWithQueryClient(<ProjectBoardPage />, queryClient);
 
 		const addTaskLinks = screen.getAllByRole("link", { name: /add a task/i });
 		expect((addTaskLinks[0] as HTMLAnchorElement).href).toContain(
-			"/projects/project-1/tasks/new?status=todo",
+			"/projects/project-1/tasks/new?column_id=column-backlog",
 		);
 		expect((addTaskLinks[1] as HTMLAnchorElement).href).toContain(
-			"/projects/project-1/tasks/new?status=in-progress",
-		);
-		expect((addTaskLinks[2] as HTMLAnchorElement).href).toContain(
-			"/projects/project-1/tasks/new?status=done",
+			"/projects/project-1/tasks/new?column_id=column-review",
 		);
 	});
 
@@ -223,12 +258,15 @@ describe("ProjectBoardPage", () => {
 			projectTasksQueryOptions("project-1").queryKey,
 			[],
 		);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({ id: "column-backlog", name: "Backlog", position: 0 }),
+			column({ id: "column-review", name: "Review", position: 1 }),
+		]);
 
 		renderWithQueryClient(<ProjectBoardPage />, queryClient);
 
-		expect(screen.getByText("No tasks in to do.")).toBeTruthy();
-		expect(screen.getByText("No tasks in in progress.")).toBeTruthy();
-		expect(screen.getByText("No tasks in done.")).toBeTruthy();
+		expect(screen.getByText("No tasks in backlog.")).toBeTruthy();
+		expect(screen.getByText("No tasks in review.")).toBeTruthy();
 		expect(screen.queryByText(/Conduct initial market research/i)).toBeNull();
 	});
 });
