@@ -23,6 +23,13 @@ class Task(SQLModel, table=True):
             nullable=False,
         ),
     )
+    column_id: UUID = Field(
+        sa_column=Column(
+            Uuid(),
+            ForeignKey("project_columns.id", ondelete="RESTRICT"),
+            nullable=False,
+        ),
+    )
     title: str = Field(sa_column=Column(String(), nullable=False))
     status: str = Field(sa_column=Column(String(), nullable=False))
     priority: str = Field(sa_column=Column(String(), nullable=False))

@@ -5,7 +5,9 @@ from uuid import UUID
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.project import ProjectColumn
 from app.models.task import Task
+from app.repositories.project_repository import ProjectRepository
 from app.repositories.task_repository import TaskRepository
 from app.schemas.task import TaskCreate, TaskDestination, TaskRead, TaskUpdate
 from app.services.project_access import ProjectAccess
@@ -21,6 +23,7 @@ class TaskService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
         self._project_access = ProjectAccess(session)
+        self._project_repository = ProjectRepository(session)
         self._repository = TaskRepository(session)
 
     async def create(
@@ -35,13 +38,19 @@ class TaskService:
         if payload.assignee_id is not None:
             await self._project_access.validate_users_exist({payload.assignee_id})
 
+        column = await self._resolve_column(project_id, payload.column_id)
+        column_id = column.id
+        if column_id is None:
+            raise RuntimeError("Project column ID is missing")
+
         task = Task(
             project_id=project_id,
+            column_id=column_id,
             title=payload.title,
-            status=payload.status,
+            status=column.name,
             priority=payload.priority,
             rank=payload.rank
-            or await next_task_rank(self._repository, project_id, payload.status),
+            or await next_task_rank(self._repository, project_id, column_id),
             assignee_id=payload.assignee_id,
             description=payload.description,
             acceptance_criteria=payload.acceptance_criteria,
@@ -85,6 +94,10 @@ class TaskService:
         assignee_id = updates.get("assignee_id")
         if isinstance(assignee_id, UUID):
             await self._project_access.validate_users_exist({assignee_id})
+        column_id = updates.get("column_id")
+        if isinstance(column_id, UUID):
+            column = await self._resolve_column(project_id, column_id)
+            updates["status"] = column.name
 
         for field_name, value in updates.items():
             setattr(task, field_name, value)
@@ -145,6 +158,28 @@ class TaskService:
             )
         await self._repository.delete(task)
 
+    async def _resolve_column(
+        self, project_id: UUID, column_id: UUID | None
+    ) -> ProjectColumn:
+        columns = await self._project_repository.list_columns_by_project(project_id)
+        if column_id is None:
+            if not columns:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail="Project has no columns",
+                )
+            column = columns[0]
+        else:
+            column = next((column for column in columns if column.id == column_id), None)
+
+        if column is None or column.id is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Task column must belong to the project",
+            )
+
+        return column
+
 
 def rank_between(before: str | None, after: str | None) -> str:
     """Return a lexicographic rank strictly between neighboring ranks."""
@@ -175,10 +210,10 @@ def rank_between(before: str | None, after: str | None) -> str:
 
 
 async def next_task_rank(
-    repository: TaskRepository, project_id: UUID, status_value: str
+    repository: TaskRepository, project_id: UUID, column_id: UUID
 ) -> str:
-    """Append a task after the current end of a status column."""
-    tasks = await repository.list_by_project_and_status(project_id, status_value)
+    """Append a task after the current end of a project column."""
+    tasks = await repository.list_by_project_and_column(project_id, column_id)
     return rank_between(tasks[-1].rank, None) if tasks else DEFAULT_TASK_RANK
 
 
@@ -190,6 +225,7 @@ def task_to_read(task: Task) -> TaskRead:
     return TaskRead(
         id=task.id,
         project_id=task.project_id,
+        column_id=task.column_id,
         title=task.title,
         status=task.status,
         priority=task.priority,

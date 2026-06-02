@@ -24,6 +24,7 @@ def test_task_read_includes_rank() -> None:
     task = Task(
         id=UUID("00000000-0000-0000-0000-000000000001"),
         project_id=UUID("00000000-0000-0000-0000-000000000002"),
+        column_id=UUID("00000000-0000-0000-0000-000000000003"),
         title="Ranked task",
         status="todo",
         priority="medium",

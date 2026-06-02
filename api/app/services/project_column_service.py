@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.project import ProjectColumn
 from app.repositories.project_repository import ProjectRepository
+from app.repositories.task_repository import TaskRepository
 from app.schemas.project import ProjectColumnRead
 from app.services.project_access import ProjectAccess, ProjectRole
 
@@ -23,6 +24,7 @@ class ProjectColumnService:
     def __init__(self, session: AsyncSession) -> None:
         """Initialize the service with a database session."""
         self._repository = ProjectRepository(session)
+        self._task_repository = TaskRepository(session)
         self._access = ProjectAccess(session)
 
     def add_default_columns(self, project_id: UUID) -> None:
@@ -149,6 +151,16 @@ class ProjectColumnService:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Cannot delete the final project column",
+            )
+        if column.id is None:
+            self._raise_column_not_found()
+        tasks = await self._task_repository.list_by_project_and_column(
+            project_id, column.id
+        )
+        if tasks:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Cannot delete a column with tasks",
             )
 
         await self._repository.delete_column(column)

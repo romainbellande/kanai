@@ -42,6 +42,17 @@ class TaskRepository:
         )
         return list(tasks.all())
 
+    async def list_by_project_and_column(
+        self, project_id: UUID, column_id: UUID
+    ) -> list[Task]:
+        """Return tasks in one project column ordered by rank."""
+        tasks = await self._session.scalars(
+            select(Task)
+            .filter_by(project_id=project_id, column_id=column_id)
+            .order_by("task_rank", "created_at", "id")
+        )
+        return list(tasks.all())
+
     async def get_by_project(self, project_id: UUID, task_id: UUID) -> Task | None:
         """Return one task by project and task ID."""
         return await self._session.scalar(
