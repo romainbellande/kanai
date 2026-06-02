@@ -22,9 +22,9 @@ from app.schemas.auth import AuthenticatedContext
 
 class StubAuthenticateRequest:
     async def execute(self, bearer_token: str) -> AuthenticatedContext:
-        del bearer_token
+        subject = "member" if bearer_token == "member-token" else "creator"
         return AuthenticatedContext(
-            subject="creator",
+            subject=subject,
             issuer="https://issuer.test",
             expires_at=datetime.now(UTC) + timedelta(minutes=5),
             audience="kanai-api",
@@ -177,6 +177,76 @@ async def test_project_crud_endpoints(
     assert project is None
     assert project_owners.all() == []
     assert project_members.all() == []
+
+
+@pytest.mark.asyncio
+async def test_project_add_member_is_owner_only_and_idempotent(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    member_id = users["member"].id
+    assignee_id = users["assignee"].id
+    assert member_id is not None
+    assert assignee_id is not None
+
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Enterprise Launch", "code": "ENT", "priority": "medium"},
+    )
+    project_id = project_response.json()["id"]
+
+    add_response = await client.post(
+        f"/projects/{project_id}/members",
+        headers={"Authorization": "Bearer token"},
+        json={"user_id": str(member_id)},
+    )
+
+    assert add_response.status_code == 200
+    assert add_response.json()["member_ids"] == [str(member_id)]
+
+    duplicate_response = await client.post(
+        f"/projects/{project_id}/members",
+        headers={"Authorization": "Bearer token"},
+        json={"user_id": str(member_id)},
+    )
+
+    assert duplicate_response.status_code == 200
+    assert duplicate_response.json()["member_ids"] == [str(member_id)]
+
+    unauthorized_response = await client.post(
+        f"/projects/{project_id}/members",
+        headers={"Authorization": "Bearer member-token"},
+        json={"user_id": str(assignee_id)},
+    )
+
+    assert unauthorized_response.status_code == 404
+    assert unauthorized_response.json() == {"detail": "Project not found"}
+
+
+@pytest.mark.asyncio
+async def test_project_add_member_validates_user_exists(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Enterprise Launch", "code": "ENT", "priority": "medium"},
+    )
+    project_id = project_response.json()["id"]
+
+    response = await client.post(
+        f"/projects/{project_id}/members",
+        headers={"Authorization": "Bearer token"},
+        json={"user_id": "00000000-0000-0000-0000-000000000000"},
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "detail": "Unknown user id: 00000000-0000-0000-0000-000000000000"
+    }
 
 
 @pytest.mark.asyncio

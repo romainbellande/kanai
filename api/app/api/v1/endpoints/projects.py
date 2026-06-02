@@ -6,8 +6,9 @@ from fastapi import APIRouter, status
 
 from app.api.deps import CurrentUser, DatabaseSession
 from app.api.v1.endpoints.tasks import task_router
-from app.schemas.project import ProjectCreate, ProjectRead, ProjectUpdate
+from app.schemas.project import ProjectCreate, ProjectMemberCreate, ProjectRead, ProjectUpdate
 from app.services.project_service import (
+    add_project_member_for_user,
     create_project_for_user,
     delete_project_for_user,
     list_projects_for_user,
@@ -69,6 +70,22 @@ async def get_project(
         require_current_user_id(current_user.id),
     )
     return await project_to_read(session, project)
+
+
+@project_router.post("/{project_id}/members", response_model=ProjectRead)
+async def add_project_member(
+    project_id: UUID,
+    payload: ProjectMemberCreate,
+    session: DatabaseSession,
+    current_user: CurrentUser,
+) -> ProjectRead:
+    """Add a member to a project owned by the current user."""
+    return await add_project_member_for_user(
+        session,
+        project_id=project_id,
+        user_id=require_current_user_id(current_user.id),
+        member_user_id=payload.user_id,
+    )
 
 
 @project_router.patch("/{project_id}", response_model=ProjectRead)

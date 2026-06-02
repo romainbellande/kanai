@@ -27,7 +27,7 @@ async def validate_user_ids(session: AsyncSession, user_ids: set[UUID]) -> None:
     for user_id in user_ids:
         if await user_repository.get(user_id) is None:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=f"Unknown user id: {user_id}",
             )
 
@@ -257,3 +257,22 @@ async def delete_project_for_user(
     await project_repository.delete_relationships(project_id)
     await project_repository.delete(project)
     await project_repository.commit()
+
+
+async def add_project_member_for_user(
+    session: AsyncSession,
+    *,
+    project_id: UUID,
+    user_id: UUID,
+    member_user_id: UUID,
+) -> ProjectRead:
+    """Add a member to a project owned by a user."""
+    project_repository = ProjectRepository(session)
+    project = await require_project_owner(session, project_id, user_id)
+    await validate_user_ids(session, {member_user_id})
+
+    if await project_repository.get_member(project_id, member_user_id) is None:
+        project_repository.add_member(project_id, member_user_id)
+        await project_repository.commit()
+
+    return await project_to_read(session, project)

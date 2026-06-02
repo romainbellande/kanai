@@ -28,6 +28,33 @@ class UserRepository:
             select(User).filter_by(externalId=external_id)
         )
 
+    async def list(self) -> list[User]:
+        """Return all users ordered by external identity."""
+        users = await self._session.scalars(select(User).order_by(User.externalId))
+        return list(users.all())
+
+    async def add(self, user: User) -> User:
+        """Add a user and flush so generated fields are available."""
+        self._session.add(user)
+        await self._session.flush()
+        return user
+
+    async def delete(self, user: User) -> None:
+        """Delete a user without committing."""
+        await self._session.delete(user)
+
+    async def commit(self) -> None:
+        """Commit pending changes."""
+        await self._session.commit()
+
+    async def rollback(self) -> None:
+        """Roll back pending changes."""
+        await self._session.rollback()
+
+    async def refresh(self, user: User) -> None:
+        """Refresh a user from the database."""
+        await self._session.refresh(user)
+
 
 class DatabaseUserProvisioner:
     """Provisions authenticated principals as database users."""

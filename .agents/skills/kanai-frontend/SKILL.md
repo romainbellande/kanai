@@ -15,6 +15,12 @@ Use this skill for work under `client/` involving React, TanStack Router file ro
 - Example: `/projects/$projectId/tasks/new` should be `client/src/routes/projects_.$projectId.tasks.new.tsx`, not a child route under `client/src/routes/projects/$projectId.tsx`.
 - In an unnested project route, call `useParams({ from: "/projects_/$projectId/tasks/new" })` while links still use `to="/projects/$projectId/tasks/new"`.
 
+## Generated API Client
+
+- `client/src/api/openapi-client/` is generated; do not hand-edit it except through generation/postprocess scripts.
+- Biome ignores do not affect `tsc`; TypeScript failures from generated client files must be handled through TypeScript config or generation postprocessing.
+- Use package scripts for OpenAPI generation. The generator should be invoked through `bunx`, and the existing postprocess may add `// @ts-nocheck` to generated `.ts` files.
+
 ## Verification
 
 - Run frontend commands from `client/`.

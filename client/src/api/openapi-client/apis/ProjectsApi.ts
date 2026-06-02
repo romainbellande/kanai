@@ -18,6 +18,7 @@ import * as runtime from '../runtime';
 import type {
   HTTPValidationError,
   ProjectCreate,
+  ProjectMemberCreate,
   ProjectRead,
   ProjectUpdate,
   TaskCreate,
@@ -29,6 +30,8 @@ import {
     HTTPValidationErrorToJSON,
     ProjectCreateFromJSON,
     ProjectCreateToJSON,
+    ProjectMemberCreateFromJSON,
+    ProjectMemberCreateToJSON,
     ProjectReadFromJSON,
     ProjectReadToJSON,
     ProjectUpdateFromJSON,
@@ -40,6 +43,11 @@ import {
     TaskUpdateFromJSON,
     TaskUpdateToJSON,
 } from '../models/index';
+
+export interface AddProjectMemberProjectsProjectIdMembersPostRequest {
+    projectId: string;
+    projectMemberCreate: ProjectMemberCreate;
+}
 
 export interface CreateProjectEndpointProjectsPostRequest {
     projectCreate: ProjectCreate;
@@ -87,6 +95,63 @@ export interface UpdateTaskEndpointProjectsProjectIdTasksTaskIdPatchRequest {
  * 
  */
 export class ProjectsApi extends runtime.BaseAPI {
+
+    /**
+     * Creates request options for addProjectMemberProjectsProjectIdMembersPost without sending the request
+     */
+    async addProjectMemberProjectsProjectIdMembersPostRequestOpts(requestParameters: AddProjectMemberProjectsProjectIdMembersPostRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling addProjectMemberProjectsProjectIdMembersPost().'
+            );
+        }
+
+        if (requestParameters['projectMemberCreate'] == null) {
+            throw new runtime.RequiredError(
+                'projectMemberCreate',
+                'Required parameter "projectMemberCreate" was null or undefined when calling addProjectMemberProjectsProjectIdMembersPost().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+
+        let urlPath = `/projects/{project_id}/members`;
+        urlPath = urlPath.replace(`{${"project_id"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        return {
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+            body: ProjectMemberCreateToJSON(requestParameters['projectMemberCreate']),
+        };
+    }
+
+    /**
+     * Add a member to a project owned by the current user.
+     * Add Project Member
+     */
+    async addProjectMemberProjectsProjectIdMembersPostRaw(requestParameters: AddProjectMemberProjectsProjectIdMembersPostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectRead>> {
+        const requestOptions = await this.addProjectMemberProjectsProjectIdMembersPostRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ProjectReadFromJSON(jsonValue));
+    }
+
+    /**
+     * Add a member to a project owned by the current user.
+     * Add Project Member
+     */
+    async addProjectMemberProjectsProjectIdMembersPost(requestParameters: AddProjectMemberProjectsProjectIdMembersPostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectRead> {
+        const response = await this.addProjectMemberProjectsProjectIdMembersPostRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
 
     /**
      * Creates request options for createProjectEndpointProjectsPost without sending the request

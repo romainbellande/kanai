@@ -32,6 +32,12 @@ Use this skill for backend work under `api/`, especially API routes, database mo
 - Alembic exists under `api/app/db/migrations/`, but migration generation is on hold by user request.
 - If a schema change seems to require a persisted migration, ask before adding a revision file.
 
+## Database Gotchas
+
+- Do not read `.env` or other secret-bearing files unless the user explicitly authorizes it.
+- Avoid string-based SQLAlchemy ordering such as `order_by("rank")`; it can resolve to PostgreSQL ordered-set aggregate functions. Use explicit model attributes such as `Task.rank`.
+- If startup schema creation or repair handles new columns, make sure repair runs before any early "already initialized" skip.
+
 ## Skill Maintenance Trigger
 
 - After backend architecture, command, migration, or verification workflow changes, check whether this skill still matches the repository.

@@ -4,6 +4,7 @@ All URIs are relative to *http://localhost*
 
 | Method | HTTP request | Description |
 |------------- | ------------- | -------------|
+| [**addProjectMemberProjectsProjectIdMembersPost**](ProjectsApi.md#addprojectmemberprojectsprojectidmemberspost) | **POST** /projects/{project_id}/members | Add Project Member |
 | [**createProjectEndpointProjectsPost**](ProjectsApi.md#createprojectendpointprojectspost) | **POST** /projects | Create Project Endpoint |
 | [**createTaskEndpointProjectsProjectIdTasksPost**](ProjectsApi.md#createtaskendpointprojectsprojectidtaskspost) | **POST** /projects/{project_id}/tasks | Create Task Endpoint |
 | [**deleteProjectProjectsProjectIdDelete**](ProjectsApi.md#deleteprojectprojectsprojectiddelete) | **DELETE** /projects/{project_id} | Delete Project |
@@ -15,6 +16,77 @@ All URIs are relative to *http://localhost*
 | [**updateProjectProjectsProjectIdPatch**](ProjectsApi.md#updateprojectprojectsprojectidpatch) | **PATCH** /projects/{project_id} | Update Project |
 | [**updateTaskEndpointProjectsProjectIdTasksTaskIdPatch**](ProjectsApi.md#updatetaskendpointprojectsprojectidtaskstaskidpatch) | **PATCH** /projects/{project_id}/tasks/{task_id} | Update Task Endpoint |
 
+
+
+## addProjectMemberProjectsProjectIdMembersPost
+
+> ProjectRead addProjectMemberProjectsProjectIdMembersPost(projectId, projectMemberCreate)
+
+Add Project Member
+
+Add a member to a project owned by the current user.
+
+### Example
+
+```ts
+import {
+  Configuration,
+  ProjectsApi,
+} from '';
+import type { AddProjectMemberProjectsProjectIdMembersPostRequest } from '';
+
+async function example() {
+  console.log("🚀 Testing  SDK...");
+  const api = new ProjectsApi();
+
+  const body = {
+    // string
+    projectId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+    // ProjectMemberCreate
+    projectMemberCreate: ...,
+  } satisfies AddProjectMemberProjectsProjectIdMembersPostRequest;
+
+  try {
+    const data = await api.addProjectMemberProjectsProjectIdMembersPost(body);
+    console.log(data);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+// Run the test
+example().catch(console.error);
+```
+
+### Parameters
+
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **projectId** | `string` |  | [Defaults to `undefined`] |
+| **projectMemberCreate** | [ProjectMemberCreate](ProjectMemberCreate.md) |  | |
+
+### Return type
+
+[**ProjectRead**](ProjectRead.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+- **Content-Type**: `application/json`
+- **Accept**: `application/json`
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+| **200** | Successful Response |  -  |
+| **422** | Validation Error |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 
 ## createProjectEndpointProjectsPost

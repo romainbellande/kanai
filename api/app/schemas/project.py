@@ -81,3 +81,9 @@ class ProjectRead(BaseModel):
     member_ids: list[UUID]
     created_at: datetime | None
     updated_at: datetime | None
+
+
+class ProjectMemberCreate(BaseModel):
+    """Request payload for adding a project member."""
+
+    user_id: UUID
