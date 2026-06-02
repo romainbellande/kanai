@@ -2,11 +2,20 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { currentUserQueryOptions } from "./current-user";
 import {
+	type CreateProjectColumnInput,
 	type CreateProjectInput,
 	createProject,
+	createProjectColumn,
+	deleteProjectColumn,
+	projectColumnsQueryKey,
+	projectColumnsQueryOptions,
 	projectQueryOptions,
 	projectsQueryKey,
 	projectsQueryOptions,
+	type ReorderProjectColumnsInput,
+	reorderProjectColumns,
+	type UpdateProjectColumnInput,
+	updateProjectColumn,
 } from "./projects";
 import {
 	type CreateTaskInput,
@@ -30,6 +39,47 @@ export function useKanaiApi() {
 				await queryClient.invalidateQueries({ queryKey: projectsQueryKey });
 				return project;
 			},
+		},
+		projectColumns: {
+			list: (projectId: string) => projectColumnsQueryOptions(projectId),
+			create: async (projectId: string, values: CreateProjectColumnInput) => {
+				const column = await createProjectColumn(projectId, values);
+				await queryClient.invalidateQueries({
+					queryKey: projectColumnsQueryKey(projectId),
+				});
+				return column;
+			},
+			update: async (
+				projectId: string,
+				columnId: string,
+				values: UpdateProjectColumnInput,
+			) => {
+				const column = await updateProjectColumn(projectId, columnId, values);
+				await queryClient.invalidateQueries({
+					queryKey: projectColumnsQueryKey(projectId),
+				});
+				return column;
+			},
+			reorder: async (
+				projectId: string,
+				values: ReorderProjectColumnsInput,
+			) => {
+				const columns = await reorderProjectColumns(projectId, values);
+				await queryClient.invalidateQueries({
+					queryKey: projectColumnsQueryKey(projectId),
+				});
+				return columns;
+			},
+			delete: async (projectId: string, columnId: string) => {
+				await deleteProjectColumn(projectId, columnId);
+				await queryClient.invalidateQueries({
+					queryKey: projectColumnsQueryKey(projectId),
+				});
+			},
+			invalidateProjectColumns: (projectId: string) =>
+				queryClient.invalidateQueries({
+					queryKey: projectColumnsQueryKey(projectId),
+				}),
 		},
 		tasks: {
 			list: (projectId: string) => projectTasksQueryOptions(projectId),

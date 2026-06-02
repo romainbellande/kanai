@@ -229,4 +229,48 @@ describe("useKanaiApi", () => {
 		expect(queryClient.getQueryState(["projects", "project-1"])).toBeDefined();
 		expect(queryClient.getQueryState(["users", "me"])).toBeDefined();
 	});
+
+	it("exposes project column queries through the facade", async () => {
+		const queryClient = createTestQueryClient();
+		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(
+				JSON.stringify([
+					{
+						id: "column-1",
+						project_id: "project-1",
+						name: "Backlog",
+						position: 0,
+						created_at: null,
+						updated_at: null,
+					},
+				]),
+				{ headers: { "content-type": "application/json" }, status: 200 },
+			),
+		);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		const { result } = renderHook(
+			() => {
+				const api = useKanaiApi();
+				return useQuery(api.projectColumns.list("project-1"));
+			},
+			{ wrapper: createWrapper(queryClient) },
+		);
+
+		await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+		expect(result.current.data).toEqual([
+			{
+				id: "column-1",
+				projectId: "project-1",
+				name: "Backlog",
+				position: 0,
+				createdAt: null,
+				updatedAt: null,
+			},
+		]);
+		expect(
+			queryClient.getQueryData(["projects", "project-1", "columns"]),
+		).toEqual(result.current.data);
+	});
 });
