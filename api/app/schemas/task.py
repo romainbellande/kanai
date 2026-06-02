@@ -15,7 +15,8 @@ class TaskCreate(BaseModel):
 
     Parameters:
         title: Task title.
-        status: Workflow status for the task. Defaults to "todo".
+        column_id: Optional workflow column ID. Defaults to the first project column.
+        status: Legacy workflow status for the task. Defaults to "todo".
         priority: Priority level for the task. Defaults to "medium".
         rank: Optional sortable LexoRank-style position. If omitted, appends to status.
         assignee_id: Optional user ID assigned to the task.
@@ -25,6 +26,7 @@ class TaskCreate(BaseModel):
     """
 
     title: str
+    column_id: UUID | None = None
     status: str = "todo"
     priority: str = "medium"
     rank: str | None = None
@@ -39,7 +41,8 @@ class TaskUpdate(BaseModel):
 
     Parameters:
         title: Optional replacement task title.
-        status: Optional replacement workflow status.
+        column_id: Optional replacement workflow column ID.
+        status: Optional replacement legacy workflow status.
         priority: Optional replacement priority level.
         rank: Optional replacement sortable LexoRank-style position.
         assignee_id: Optional replacement user ID assigned to the task.
@@ -49,6 +52,7 @@ class TaskUpdate(BaseModel):
     """
 
     title: str | None = None
+    column_id: UUID | None = None
     status: str | None = None
     priority: str | None = None
     rank: str | None = None
@@ -110,7 +114,8 @@ class TaskRead(BaseModel):
         id: Task ID.
         project_id: ID of the project that owns the task.
         title: Task title.
-        status: Workflow status for the task.
+        column_id: Workflow column ID for the task.
+        status: Legacy workflow status for the task.
         priority: Priority level for the task.
         rank: Sortable LexoRank-style position within the task status column.
         assignee_id: Optional user ID assigned to the task.
@@ -125,6 +130,7 @@ class TaskRead(BaseModel):
 
     id: UUID
     project_id: UUID
+    column_id: UUID
     title: str
     status: str
     priority: str

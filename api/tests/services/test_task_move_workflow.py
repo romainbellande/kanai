@@ -9,7 +9,7 @@ from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel
 
-from app.models.project import Project, ProjectMember, ProjectOwner
+from app.models.project import Project, ProjectColumn, ProjectMember, ProjectOwner
 from app.models.task import Task
 from app.models.user import User
 from app.schemas.task import TaskDestination
@@ -46,8 +46,17 @@ async def test_move_task_persists_cross_column_top_placement(
         assert owner.id is not None
         assert project.id is not None
         session.add(ProjectOwner(project_id=project.id, user_id=owner.id))
+        todo_column = ProjectColumn(project_id=project.id, name="todo", position=0)
+        done_column = ProjectColumn(project_id=project.id, name="done", position=1)
+        session.add_all([todo_column, done_column])
+        await session.commit()
+        await session.refresh(todo_column)
+        await session.refresh(done_column)
+        assert todo_column.id is not None
+        assert done_column.id is not None
         moved = Task(
             project_id=project.id,
+            column_id=todo_column.id,
             title="Moved",
             status="todo",
             priority="medium",
@@ -55,6 +64,7 @@ async def test_move_task_persists_cross_column_top_placement(
         )
         first_done = Task(
             project_id=project.id,
+            column_id=done_column.id,
             title="First done",
             status="done",
             priority="medium",
@@ -108,8 +118,14 @@ async def test_move_task_allows_member_access_and_preserves_noop_rank(
                 ProjectMember(project_id=project.id, user_id=member.id),
             ]
         )
+        todo_column = ProjectColumn(project_id=project.id, name="todo", position=0)
+        session.add(todo_column)
+        await session.commit()
+        await session.refresh(todo_column)
+        assert todo_column.id is not None
         moved = Task(
             project_id=project.id,
+            column_id=todo_column.id,
             title="Moved",
             status="todo",
             priority="medium",
@@ -117,6 +133,7 @@ async def test_move_task_allows_member_access_and_preserves_noop_rank(
         )
         after = Task(
             project_id=project.id,
+            column_id=todo_column.id,
             title="After",
             status="todo",
             priority="medium",
@@ -158,8 +175,14 @@ async def test_move_task_persists_within_column_bottom_placement(
         assert owner.id is not None
         assert project.id is not None
         session.add(ProjectOwner(project_id=project.id, user_id=owner.id))
+        todo_column = ProjectColumn(project_id=project.id, name="todo", position=0)
+        session.add(todo_column)
+        await session.commit()
+        await session.refresh(todo_column)
+        assert todo_column.id is not None
         first = Task(
             project_id=project.id,
+            column_id=todo_column.id,
             title="First",
             status="todo",
             priority="medium",
@@ -167,6 +190,7 @@ async def test_move_task_persists_within_column_bottom_placement(
         )
         moved = Task(
             project_id=project.id,
+            column_id=todo_column.id,
             title="Moved",
             status="todo",
             priority="medium",
@@ -174,6 +198,7 @@ async def test_move_task_persists_within_column_bottom_placement(
         )
         last = Task(
             project_id=project.id,
+            column_id=todo_column.id,
             title="Last",
             status="todo",
             priority="medium",
@@ -218,8 +243,14 @@ async def test_move_task_denies_users_without_project_access(
         assert outsider.id is not None
         assert project.id is not None
         session.add(ProjectOwner(project_id=project.id, user_id=owner.id))
+        todo_column = ProjectColumn(project_id=project.id, name="todo", position=0)
+        session.add(todo_column)
+        await session.commit()
+        await session.refresh(todo_column)
+        assert todo_column.id is not None
         task = Task(
             project_id=project.id,
+            column_id=todo_column.id,
             title="Moved",
             status="todo",
             priority="medium",
