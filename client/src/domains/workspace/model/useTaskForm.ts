@@ -51,7 +51,7 @@ function createInitialValues(
 function editInitialValues(task: Task | null | undefined): TaskFormValues {
 	return {
 		title: task?.title ?? "",
-		status: task?.status ?? "todo",
+		status: task?.columnId ?? "todo",
 		priority: task?.priority ?? "medium",
 		description: task?.description ?? "",
 		acceptanceCriteria: task?.acceptanceCriteria ?? "",
@@ -119,7 +119,7 @@ export function useTaskForm(input: UseTaskFormInput) {
 					taskId: input.taskId,
 					values: {
 						title,
-						status: values.status,
+						columnId: values.status,
 						priority: values.priority,
 						description: description || null,
 						acceptanceCriteria: acceptanceCriteria || null,
@@ -136,7 +136,7 @@ export function useTaskForm(input: UseTaskFormInput) {
 
 			const task = await createTaskMutation.mutateAsync({
 				title,
-				status: values.status,
+				columnId: values.status,
 				priority: values.priority,
 				description: description || undefined,
 				acceptanceCriteria: acceptanceCriteria || undefined,

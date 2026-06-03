@@ -33,7 +33,7 @@ function task(overrides: Partial<Task> = {}): Task {
 		id: "task-1",
 		projectId: "project-1",
 		title: "Task",
-		status: "todo",
+		columnId: "column-todo",
 		priority: "medium",
 		rank: "U",
 		assigneeId: null,
@@ -68,7 +68,7 @@ describe("useKanaiApi", () => {
 						id: "task-1",
 						project_id: "project-1",
 						title: "Facade Task",
-						status: "todo",
+						column_id: "column-todo",
 						priority: "medium",
 						rank: "U",
 						assignee_id: null,
@@ -122,14 +122,14 @@ describe("useKanaiApi", () => {
 		act(() => {
 			previousTasks = result.current.tasks.patchCached("project-1", "task-1", {
 				title: "Patched",
-				status: "done",
+				columnId: "column-done",
 			});
 		});
 
 		expect(
 			queryClient.getQueryData(["projects", "project-1", "tasks"]),
 		).toEqual([
-			task({ id: "task-1", title: "Patched", status: "done" }),
+			task({ id: "task-1", title: "Patched", columnId: "column-done" }),
 			task({ id: "task-2", title: "Unchanged" }),
 		]);
 
@@ -151,7 +151,7 @@ describe("useKanaiApi", () => {
 					id: "task-1",
 					project_id: "project-1",
 					title: "Created",
-					status: "todo",
+					column_id: "column-todo",
 					priority: "medium",
 					rank: "U",
 					assignee_id: null,
@@ -173,7 +173,7 @@ describe("useKanaiApi", () => {
 		await act(async () => {
 			await result.current.tasks.create("project-1", {
 				title: "Created",
-				status: "todo",
+				columnId: "column-todo",
 				priority: "medium",
 			});
 		});
@@ -181,7 +181,7 @@ describe("useKanaiApi", () => {
 		const [, init] = fetchSpy.mock.calls[0];
 		expect(JSON.parse(String(init?.body))).toEqual({
 			title: "Created",
-			status: "todo",
+			column_id: "column-todo",
 			priority: "medium",
 		});
 		expect(

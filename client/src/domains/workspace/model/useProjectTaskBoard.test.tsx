@@ -34,7 +34,6 @@ function task(overrides: Partial<Task> = {}): Task {
 		id: "task-1",
 		projectId: "project-1",
 		title: "Task",
-		status: "todo",
 		columnId: "column-todo",
 		priority: "medium",
 		rank: "U",

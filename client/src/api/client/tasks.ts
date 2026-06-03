@@ -8,8 +8,7 @@ export type Task = {
 	id: string;
 	projectId: string;
 	title: string;
-	status: string;
-	columnId?: string;
+	columnId: string;
 	priority: string;
 	rank: string;
 	assigneeId: string | null;
@@ -20,15 +19,14 @@ export type Task = {
 	updatedAt: Date | null;
 };
 
-export type CreateTaskInput = TaskCreate & { columnId?: string };
-export type UpdateTaskInput = TaskUpdate & { columnId?: string | null };
+export type CreateTaskInput = TaskCreate;
+export type UpdateTaskInput = TaskUpdate;
 
 type TaskJson = {
 	id: string;
 	project_id: string;
 	title: string;
-	status?: string;
-	column_id?: string;
+	column_id: string;
 	priority: string;
 	rank: string;
 	assignee_id: string | null;
@@ -48,7 +46,6 @@ function mapTask(task: TaskJson): Task {
 		id: task.id,
 		projectId: task.project_id,
 		title: task.title,
-		status: task.status ?? task.column_id ?? "",
 		columnId: task.column_id,
 		priority: task.priority,
 		rank: task.rank,
@@ -64,7 +61,6 @@ function mapTask(task: TaskJson): Task {
 function taskInputToJson(values: CreateTaskInput | UpdateTaskInput) {
 	return {
 		title: values.title,
-		status: values.status,
 		column_id: values.columnId,
 		priority: values.priority,
 		rank: values.rank,
