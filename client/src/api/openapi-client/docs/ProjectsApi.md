@@ -5,14 +5,19 @@ All URIs are relative to *http://localhost*
 | Method | HTTP request | Description |
 |------------- | ------------- | -------------|
 | [**addProjectMemberProjectsProjectIdMembersPost**](ProjectsApi.md#addprojectmemberprojectsprojectidmemberspost) | **POST** /projects/{project_id}/members | Add Project Member |
+| [**createProjectColumnProjectsProjectIdColumnsPost**](ProjectsApi.md#createprojectcolumnprojectsprojectidcolumnspost) | **POST** /projects/{project_id}/columns | Create Project Column |
 | [**createProjectEndpointProjectsPost**](ProjectsApi.md#createprojectendpointprojectspost) | **POST** /projects | Create Project Endpoint |
 | [**createTaskEndpointProjectsProjectIdTasksPost**](ProjectsApi.md#createtaskendpointprojectsprojectidtaskspost) | **POST** /projects/{project_id}/tasks | Create Task Endpoint |
+| [**deleteProjectColumnProjectsProjectIdColumnsColumnIdDelete**](ProjectsApi.md#deleteprojectcolumnprojectsprojectidcolumnscolumniddelete) | **DELETE** /projects/{project_id}/columns/{column_id} | Delete Project Column |
 | [**deleteProjectProjectsProjectIdDelete**](ProjectsApi.md#deleteprojectprojectsprojectiddelete) | **DELETE** /projects/{project_id} | Delete Project |
 | [**deleteTaskEndpointProjectsProjectIdTasksTaskIdDelete**](ProjectsApi.md#deletetaskendpointprojectsprojectidtaskstaskiddelete) | **DELETE** /projects/{project_id}/tasks/{task_id} | Delete Task Endpoint |
 | [**getProjectProjectsProjectIdGet**](ProjectsApi.md#getprojectprojectsprojectidget) | **GET** /projects/{project_id} | Get Project |
 | [**getTaskEndpointProjectsProjectIdTasksTaskIdGet**](ProjectsApi.md#gettaskendpointprojectsprojectidtaskstaskidget) | **GET** /projects/{project_id}/tasks/{task_id} | Get Task Endpoint |
+| [**listProjectColumnsProjectsProjectIdColumnsGet**](ProjectsApi.md#listprojectcolumnsprojectsprojectidcolumnsget) | **GET** /projects/{project_id}/columns | List Project Columns |
 | [**listProjectsProjectsGet**](ProjectsApi.md#listprojectsprojectsget) | **GET** /projects | List Projects |
 | [**listTasksEndpointProjectsProjectIdTasksGet**](ProjectsApi.md#listtasksendpointprojectsprojectidtasksget) | **GET** /projects/{project_id}/tasks | List Tasks Endpoint |
+| [**reorderProjectColumnsProjectsProjectIdColumnsReorderPut**](ProjectsApi.md#reorderprojectcolumnsprojectsprojectidcolumnsreorderput) | **PUT** /projects/{project_id}/columns/reorder | Reorder Project Columns |
+| [**updateProjectColumnProjectsProjectIdColumnsColumnIdPatch**](ProjectsApi.md#updateprojectcolumnprojectsprojectidcolumnscolumnidpatch) | **PATCH** /projects/{project_id}/columns/{column_id} | Update Project Column |
 | [**updateProjectProjectsProjectIdPatch**](ProjectsApi.md#updateprojectprojectsprojectidpatch) | **PATCH** /projects/{project_id} | Update Project |
 | [**updateTaskEndpointProjectsProjectIdTasksTaskIdPatch**](ProjectsApi.md#updatetaskendpointprojectsprojectidtaskstaskidpatch) | **PATCH** /projects/{project_id}/tasks/{task_id} | Update Task Endpoint |
 
@@ -84,6 +89,77 @@ No authorization required
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
 | **200** | Successful Response |  -  |
+| **422** | Validation Error |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+
+## createProjectColumnProjectsProjectIdColumnsPost
+
+> ProjectColumnRead createProjectColumnProjectsProjectIdColumnsPost(projectId, projectColumnCreate)
+
+Create Project Column
+
+Create a workflow column for a project owned by the current user.
+
+### Example
+
+```ts
+import {
+  Configuration,
+  ProjectsApi,
+} from '';
+import type { CreateProjectColumnProjectsProjectIdColumnsPostRequest } from '';
+
+async function example() {
+  console.log("🚀 Testing  SDK...");
+  const api = new ProjectsApi();
+
+  const body = {
+    // string
+    projectId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+    // ProjectColumnCreate
+    projectColumnCreate: ...,
+  } satisfies CreateProjectColumnProjectsProjectIdColumnsPostRequest;
+
+  try {
+    const data = await api.createProjectColumnProjectsProjectIdColumnsPost(body);
+    console.log(data);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+// Run the test
+example().catch(console.error);
+```
+
+### Parameters
+
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **projectId** | `string` |  | [Defaults to `undefined`] |
+| **projectColumnCreate** | [ProjectColumnCreate](ProjectColumnCreate.md) |  | |
+
+### Return type
+
+[**ProjectColumnRead**](ProjectColumnRead.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+- **Content-Type**: `application/json`
+- **Accept**: `application/json`
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+| **201** | Successful Response |  -  |
 | **422** | Validation Error |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
@@ -223,6 +299,77 @@ No authorization required
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
 | **201** | Successful Response |  -  |
+| **422** | Validation Error |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+
+## deleteProjectColumnProjectsProjectIdColumnsColumnIdDelete
+
+> deleteProjectColumnProjectsProjectIdColumnsColumnIdDelete(projectId, columnId)
+
+Delete Project Column
+
+Delete an empty workflow column from a project owned by the current user.
+
+### Example
+
+```ts
+import {
+  Configuration,
+  ProjectsApi,
+} from '';
+import type { DeleteProjectColumnProjectsProjectIdColumnsColumnIdDeleteRequest } from '';
+
+async function example() {
+  console.log("🚀 Testing  SDK...");
+  const api = new ProjectsApi();
+
+  const body = {
+    // string
+    projectId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+    // string
+    columnId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+  } satisfies DeleteProjectColumnProjectsProjectIdColumnsColumnIdDeleteRequest;
+
+  try {
+    const data = await api.deleteProjectColumnProjectsProjectIdColumnsColumnIdDelete(body);
+    console.log(data);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+// Run the test
+example().catch(console.error);
+```
+
+### Parameters
+
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **projectId** | `string` |  | [Defaults to `undefined`] |
+| **columnId** | `string` |  | [Defaults to `undefined`] |
+
+### Return type
+
+`void` (Empty response body)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: `application/json`
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+| **204** | Successful Response |  -  |
 | **422** | Validation Error |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
@@ -506,6 +653,74 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 
+## listProjectColumnsProjectsProjectIdColumnsGet
+
+> Array&lt;ProjectColumnRead&gt; listProjectColumnsProjectsProjectIdColumnsGet(projectId)
+
+List Project Columns
+
+List workflow columns for a project accessible to the current user.
+
+### Example
+
+```ts
+import {
+  Configuration,
+  ProjectsApi,
+} from '';
+import type { ListProjectColumnsProjectsProjectIdColumnsGetRequest } from '';
+
+async function example() {
+  console.log("🚀 Testing  SDK...");
+  const api = new ProjectsApi();
+
+  const body = {
+    // string
+    projectId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+  } satisfies ListProjectColumnsProjectsProjectIdColumnsGetRequest;
+
+  try {
+    const data = await api.listProjectColumnsProjectsProjectIdColumnsGet(body);
+    console.log(data);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+// Run the test
+example().catch(console.error);
+```
+
+### Parameters
+
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **projectId** | `string` |  | [Defaults to `undefined`] |
+
+### Return type
+
+[**Array&lt;ProjectColumnRead&gt;**](ProjectColumnRead.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: `application/json`
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+| **200** | Successful Response |  -  |
+| **422** | Validation Error |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+
 ## listProjectsProjectsGet
 
 > Array&lt;ProjectRead&gt; listProjectsProjectsGet()
@@ -621,6 +836,151 @@ No authorization required
 ### HTTP request headers
 
 - **Content-Type**: Not defined
+- **Accept**: `application/json`
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+| **200** | Successful Response |  -  |
+| **422** | Validation Error |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+
+## reorderProjectColumnsProjectsProjectIdColumnsReorderPut
+
+> Array&lt;ProjectColumnRead&gt; reorderProjectColumnsProjectsProjectIdColumnsReorderPut(projectId, projectColumnReorder)
+
+Reorder Project Columns
+
+Reorder all workflow columns for a project owned by the current user.
+
+### Example
+
+```ts
+import {
+  Configuration,
+  ProjectsApi,
+} from '';
+import type { ReorderProjectColumnsProjectsProjectIdColumnsReorderPutRequest } from '';
+
+async function example() {
+  console.log("🚀 Testing  SDK...");
+  const api = new ProjectsApi();
+
+  const body = {
+    // string
+    projectId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+    // ProjectColumnReorder
+    projectColumnReorder: ...,
+  } satisfies ReorderProjectColumnsProjectsProjectIdColumnsReorderPutRequest;
+
+  try {
+    const data = await api.reorderProjectColumnsProjectsProjectIdColumnsReorderPut(body);
+    console.log(data);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+// Run the test
+example().catch(console.error);
+```
+
+### Parameters
+
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **projectId** | `string` |  | [Defaults to `undefined`] |
+| **projectColumnReorder** | [ProjectColumnReorder](ProjectColumnReorder.md) |  | |
+
+### Return type
+
+[**Array&lt;ProjectColumnRead&gt;**](ProjectColumnRead.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+- **Content-Type**: `application/json`
+- **Accept**: `application/json`
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+| **200** | Successful Response |  -  |
+| **422** | Validation Error |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+
+## updateProjectColumnProjectsProjectIdColumnsColumnIdPatch
+
+> ProjectColumnRead updateProjectColumnProjectsProjectIdColumnsColumnIdPatch(projectId, columnId, projectColumnUpdate)
+
+Update Project Column
+
+Rename a workflow column for a project owned by the current user.
+
+### Example
+
+```ts
+import {
+  Configuration,
+  ProjectsApi,
+} from '';
+import type { UpdateProjectColumnProjectsProjectIdColumnsColumnIdPatchRequest } from '';
+
+async function example() {
+  console.log("🚀 Testing  SDK...");
+  const api = new ProjectsApi();
+
+  const body = {
+    // string
+    projectId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+    // string
+    columnId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+    // ProjectColumnUpdate
+    projectColumnUpdate: ...,
+  } satisfies UpdateProjectColumnProjectsProjectIdColumnsColumnIdPatchRequest;
+
+  try {
+    const data = await api.updateProjectColumnProjectsProjectIdColumnsColumnIdPatch(body);
+    console.log(data);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+// Run the test
+example().catch(console.error);
+```
+
+### Parameters
+
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **projectId** | `string` |  | [Defaults to `undefined`] |
+| **columnId** | `string` |  | [Defaults to `undefined`] |
+| **projectColumnUpdate** | [ProjectColumnUpdate](ProjectColumnUpdate.md) |  | |
+
+### Return type
+
+[**ProjectColumnRead**](ProjectColumnRead.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+- **Content-Type**: `application/json`
 - **Accept**: `application/json`
 
 

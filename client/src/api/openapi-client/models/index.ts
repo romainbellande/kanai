@@ -3,6 +3,10 @@
 /* eslint-disable */
 export * from './HTTPValidationError';
 export * from './LocationInner';
+export * from './ProjectColumnCreate';
+export * from './ProjectColumnRead';
+export * from './ProjectColumnReorder';
+export * from './ProjectColumnUpdate';
 export * from './ProjectCreate';
 export * from './ProjectMemberCreate';
 export * from './ProjectRead';

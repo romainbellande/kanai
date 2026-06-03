@@ -21,9 +21,9 @@ import { mapValues } from '../runtime';
  *     id: Task ID.
  *     project_id: ID of the project that owns the task.
  *     title: Task title.
- *     status: Workflow status for the task.
+ *     column_id: Workflow column ID for the task.
  *     priority: Priority level for the task.
- *     rank: Sortable LexoRank-style position within the task status column.
+ *     rank: Sortable LexoRank-style position within the task column.
  *     assignee_id: Optional user ID assigned to the task.
  *     description: Optional task details.
  *     acceptance_criteria: Optional criteria required to complete the task.
@@ -51,13 +51,13 @@ export interface TaskRead {
      * @type {string}
      * @memberof TaskRead
      */
-    title: string;
+    columnId: string;
     /**
      * 
      * @type {string}
      * @memberof TaskRead
      */
-    status: string;
+    title: string;
     /**
      * 
      * @type {string}
@@ -114,8 +114,8 @@ export interface TaskRead {
 export function instanceOfTaskRead(value: object): value is TaskRead {
     if (!('id' in value) || value['id'] === undefined) return false;
     if (!('projectId' in value) || value['projectId'] === undefined) return false;
+    if (!('columnId' in value) || value['columnId'] === undefined) return false;
     if (!('title' in value) || value['title'] === undefined) return false;
-    if (!('status' in value) || value['status'] === undefined) return false;
     if (!('priority' in value) || value['priority'] === undefined) return false;
     if (!('rank' in value) || value['rank'] === undefined) return false;
     if (!('assigneeId' in value) || value['assigneeId'] === undefined) return false;
@@ -139,8 +139,8 @@ export function TaskReadFromJSONTyped(json: any, ignoreDiscriminator: boolean): 
         
         'id': json['id'],
         'projectId': json['project_id'],
+        'columnId': json['column_id'],
         'title': json['title'],
-        'status': json['status'],
         'priority': json['priority'],
         'rank': json['rank'],
         'assigneeId': json['assignee_id'],
@@ -165,8 +165,8 @@ export function TaskReadToJSONTyped(value?: TaskRead | null, ignoreDiscriminator
         
         'id': value['id'],
         'project_id': value['projectId'],
+        'column_id': value['columnId'],
         'title': value['title'],
-        'status': value['status'],
         'priority': value['priority'],
         'rank': value['rank'],
         'assignee_id': value['assigneeId'],

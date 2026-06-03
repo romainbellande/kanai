@@ -17,6 +17,10 @@
 import * as runtime from '../runtime';
 import type {
   HTTPValidationError,
+  ProjectColumnCreate,
+  ProjectColumnRead,
+  ProjectColumnReorder,
+  ProjectColumnUpdate,
   ProjectCreate,
   ProjectMemberCreate,
   ProjectRead,
@@ -28,6 +32,14 @@ import type {
 import {
     HTTPValidationErrorFromJSON,
     HTTPValidationErrorToJSON,
+    ProjectColumnCreateFromJSON,
+    ProjectColumnCreateToJSON,
+    ProjectColumnReadFromJSON,
+    ProjectColumnReadToJSON,
+    ProjectColumnReorderFromJSON,
+    ProjectColumnReorderToJSON,
+    ProjectColumnUpdateFromJSON,
+    ProjectColumnUpdateToJSON,
     ProjectCreateFromJSON,
     ProjectCreateToJSON,
     ProjectMemberCreateFromJSON,
@@ -49,6 +61,11 @@ export interface AddProjectMemberProjectsProjectIdMembersPostRequest {
     projectMemberCreate: ProjectMemberCreate;
 }
 
+export interface CreateProjectColumnProjectsProjectIdColumnsPostRequest {
+    projectId: string;
+    projectColumnCreate: ProjectColumnCreate;
+}
+
 export interface CreateProjectEndpointProjectsPostRequest {
     projectCreate: ProjectCreate;
 }
@@ -56,6 +73,11 @@ export interface CreateProjectEndpointProjectsPostRequest {
 export interface CreateTaskEndpointProjectsProjectIdTasksPostRequest {
     projectId: string;
     taskCreate: TaskCreate;
+}
+
+export interface DeleteProjectColumnProjectsProjectIdColumnsColumnIdDeleteRequest {
+    projectId: string;
+    columnId: string;
 }
 
 export interface DeleteProjectProjectsProjectIdDeleteRequest {
@@ -76,8 +98,23 @@ export interface GetTaskEndpointProjectsProjectIdTasksTaskIdGetRequest {
     taskId: string;
 }
 
+export interface ListProjectColumnsProjectsProjectIdColumnsGetRequest {
+    projectId: string;
+}
+
 export interface ListTasksEndpointProjectsProjectIdTasksGetRequest {
     projectId: string;
+}
+
+export interface ReorderProjectColumnsProjectsProjectIdColumnsReorderPutRequest {
+    projectId: string;
+    projectColumnReorder: ProjectColumnReorder;
+}
+
+export interface UpdateProjectColumnProjectsProjectIdColumnsColumnIdPatchRequest {
+    projectId: string;
+    columnId: string;
+    projectColumnUpdate: ProjectColumnUpdate;
 }
 
 export interface UpdateProjectProjectsProjectIdPatchRequest {
@@ -150,6 +187,63 @@ export class ProjectsApi extends runtime.BaseAPI {
      */
     async addProjectMemberProjectsProjectIdMembersPost(requestParameters: AddProjectMemberProjectsProjectIdMembersPostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectRead> {
         const response = await this.addProjectMemberProjectsProjectIdMembersPostRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for createProjectColumnProjectsProjectIdColumnsPost without sending the request
+     */
+    async createProjectColumnProjectsProjectIdColumnsPostRequestOpts(requestParameters: CreateProjectColumnProjectsProjectIdColumnsPostRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling createProjectColumnProjectsProjectIdColumnsPost().'
+            );
+        }
+
+        if (requestParameters['projectColumnCreate'] == null) {
+            throw new runtime.RequiredError(
+                'projectColumnCreate',
+                'Required parameter "projectColumnCreate" was null or undefined when calling createProjectColumnProjectsProjectIdColumnsPost().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+
+        let urlPath = `/projects/{project_id}/columns`;
+        urlPath = urlPath.replace(`{${"project_id"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        return {
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+            body: ProjectColumnCreateToJSON(requestParameters['projectColumnCreate']),
+        };
+    }
+
+    /**
+     * Create a workflow column for a project owned by the current user.
+     * Create Project Column
+     */
+    async createProjectColumnProjectsProjectIdColumnsPostRaw(requestParameters: CreateProjectColumnProjectsProjectIdColumnsPostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectColumnRead>> {
+        const requestOptions = await this.createProjectColumnProjectsProjectIdColumnsPostRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ProjectColumnReadFromJSON(jsonValue));
+    }
+
+    /**
+     * Create a workflow column for a project owned by the current user.
+     * Create Project Column
+     */
+    async createProjectColumnProjectsProjectIdColumnsPost(requestParameters: CreateProjectColumnProjectsProjectIdColumnsPostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectColumnRead> {
+        const response = await this.createProjectColumnProjectsProjectIdColumnsPostRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -257,6 +351,60 @@ export class ProjectsApi extends runtime.BaseAPI {
     async createTaskEndpointProjectsProjectIdTasksPost(requestParameters: CreateTaskEndpointProjectsProjectIdTasksPostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<TaskRead> {
         const response = await this.createTaskEndpointProjectsProjectIdTasksPostRaw(requestParameters, initOverrides);
         return await response.value();
+    }
+
+    /**
+     * Creates request options for deleteProjectColumnProjectsProjectIdColumnsColumnIdDelete without sending the request
+     */
+    async deleteProjectColumnProjectsProjectIdColumnsColumnIdDeleteRequestOpts(requestParameters: DeleteProjectColumnProjectsProjectIdColumnsColumnIdDeleteRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling deleteProjectColumnProjectsProjectIdColumnsColumnIdDelete().'
+            );
+        }
+
+        if (requestParameters['columnId'] == null) {
+            throw new runtime.RequiredError(
+                'columnId',
+                'Required parameter "columnId" was null or undefined when calling deleteProjectColumnProjectsProjectIdColumnsColumnIdDelete().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/projects/{project_id}/columns/{column_id}`;
+        urlPath = urlPath.replace(`{${"project_id"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+        urlPath = urlPath.replace(`{${"column_id"}}`, encodeURIComponent(String(requestParameters['columnId'])));
+
+        return {
+            path: urlPath,
+            method: 'DELETE',
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     * Delete an empty workflow column from a project owned by the current user.
+     * Delete Project Column
+     */
+    async deleteProjectColumnProjectsProjectIdColumnsColumnIdDeleteRaw(requestParameters: DeleteProjectColumnProjectsProjectIdColumnsColumnIdDeleteRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<void>> {
+        const requestOptions = await this.deleteProjectColumnProjectsProjectIdColumnsColumnIdDeleteRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.VoidApiResponse(response);
+    }
+
+    /**
+     * Delete an empty workflow column from a project owned by the current user.
+     * Delete Project Column
+     */
+    async deleteProjectColumnProjectsProjectIdColumnsColumnIdDelete(requestParameters: DeleteProjectColumnProjectsProjectIdColumnsColumnIdDeleteRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<void> {
+        await this.deleteProjectColumnProjectsProjectIdColumnsColumnIdDeleteRaw(requestParameters, initOverrides);
     }
 
     /**
@@ -462,6 +610,53 @@ export class ProjectsApi extends runtime.BaseAPI {
     }
 
     /**
+     * Creates request options for listProjectColumnsProjectsProjectIdColumnsGet without sending the request
+     */
+    async listProjectColumnsProjectsProjectIdColumnsGetRequestOpts(requestParameters: ListProjectColumnsProjectsProjectIdColumnsGetRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling listProjectColumnsProjectsProjectIdColumnsGet().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/projects/{project_id}/columns`;
+        urlPath = urlPath.replace(`{${"project_id"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        return {
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     * List workflow columns for a project accessible to the current user.
+     * List Project Columns
+     */
+    async listProjectColumnsProjectsProjectIdColumnsGetRaw(requestParameters: ListProjectColumnsProjectsProjectIdColumnsGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Array<ProjectColumnRead>>> {
+        const requestOptions = await this.listProjectColumnsProjectsProjectIdColumnsGetRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(ProjectColumnReadFromJSON));
+    }
+
+    /**
+     * List workflow columns for a project accessible to the current user.
+     * List Project Columns
+     */
+    async listProjectColumnsProjectsProjectIdColumnsGet(requestParameters: ListProjectColumnsProjectsProjectIdColumnsGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Array<ProjectColumnRead>> {
+        const response = await this.listProjectColumnsProjectsProjectIdColumnsGetRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
      * Creates request options for listProjectsProjectsGet without sending the request
      */
     async listProjectsProjectsGetRequestOpts(): Promise<runtime.RequestOpts> {
@@ -544,6 +739,128 @@ export class ProjectsApi extends runtime.BaseAPI {
      */
     async listTasksEndpointProjectsProjectIdTasksGet(requestParameters: ListTasksEndpointProjectsProjectIdTasksGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Array<TaskRead>> {
         const response = await this.listTasksEndpointProjectsProjectIdTasksGetRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for reorderProjectColumnsProjectsProjectIdColumnsReorderPut without sending the request
+     */
+    async reorderProjectColumnsProjectsProjectIdColumnsReorderPutRequestOpts(requestParameters: ReorderProjectColumnsProjectsProjectIdColumnsReorderPutRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling reorderProjectColumnsProjectsProjectIdColumnsReorderPut().'
+            );
+        }
+
+        if (requestParameters['projectColumnReorder'] == null) {
+            throw new runtime.RequiredError(
+                'projectColumnReorder',
+                'Required parameter "projectColumnReorder" was null or undefined when calling reorderProjectColumnsProjectsProjectIdColumnsReorderPut().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+
+        let urlPath = `/projects/{project_id}/columns/reorder`;
+        urlPath = urlPath.replace(`{${"project_id"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        return {
+            path: urlPath,
+            method: 'PUT',
+            headers: headerParameters,
+            query: queryParameters,
+            body: ProjectColumnReorderToJSON(requestParameters['projectColumnReorder']),
+        };
+    }
+
+    /**
+     * Reorder all workflow columns for a project owned by the current user.
+     * Reorder Project Columns
+     */
+    async reorderProjectColumnsProjectsProjectIdColumnsReorderPutRaw(requestParameters: ReorderProjectColumnsProjectsProjectIdColumnsReorderPutRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Array<ProjectColumnRead>>> {
+        const requestOptions = await this.reorderProjectColumnsProjectsProjectIdColumnsReorderPutRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(ProjectColumnReadFromJSON));
+    }
+
+    /**
+     * Reorder all workflow columns for a project owned by the current user.
+     * Reorder Project Columns
+     */
+    async reorderProjectColumnsProjectsProjectIdColumnsReorderPut(requestParameters: ReorderProjectColumnsProjectsProjectIdColumnsReorderPutRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Array<ProjectColumnRead>> {
+        const response = await this.reorderProjectColumnsProjectsProjectIdColumnsReorderPutRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for updateProjectColumnProjectsProjectIdColumnsColumnIdPatch without sending the request
+     */
+    async updateProjectColumnProjectsProjectIdColumnsColumnIdPatchRequestOpts(requestParameters: UpdateProjectColumnProjectsProjectIdColumnsColumnIdPatchRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling updateProjectColumnProjectsProjectIdColumnsColumnIdPatch().'
+            );
+        }
+
+        if (requestParameters['columnId'] == null) {
+            throw new runtime.RequiredError(
+                'columnId',
+                'Required parameter "columnId" was null or undefined when calling updateProjectColumnProjectsProjectIdColumnsColumnIdPatch().'
+            );
+        }
+
+        if (requestParameters['projectColumnUpdate'] == null) {
+            throw new runtime.RequiredError(
+                'projectColumnUpdate',
+                'Required parameter "projectColumnUpdate" was null or undefined when calling updateProjectColumnProjectsProjectIdColumnsColumnIdPatch().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+
+        let urlPath = `/projects/{project_id}/columns/{column_id}`;
+        urlPath = urlPath.replace(`{${"project_id"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+        urlPath = urlPath.replace(`{${"column_id"}}`, encodeURIComponent(String(requestParameters['columnId'])));
+
+        return {
+            path: urlPath,
+            method: 'PATCH',
+            headers: headerParameters,
+            query: queryParameters,
+            body: ProjectColumnUpdateToJSON(requestParameters['projectColumnUpdate']),
+        };
+    }
+
+    /**
+     * Rename a workflow column for a project owned by the current user.
+     * Update Project Column
+     */
+    async updateProjectColumnProjectsProjectIdColumnsColumnIdPatchRaw(requestParameters: UpdateProjectColumnProjectsProjectIdColumnsColumnIdPatchRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectColumnRead>> {
+        const requestOptions = await this.updateProjectColumnProjectsProjectIdColumnsColumnIdPatchRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ProjectColumnReadFromJSON(jsonValue));
+    }
+
+    /**
+     * Rename a workflow column for a project owned by the current user.
+     * Update Project Column
+     */
+    async updateProjectColumnProjectsProjectIdColumnsColumnIdPatch(requestParameters: UpdateProjectColumnProjectsProjectIdColumnsColumnIdPatchRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectColumnRead> {
+        const response = await this.updateProjectColumnProjectsProjectIdColumnsColumnIdPatchRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
