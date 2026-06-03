@@ -13,6 +13,7 @@ export function TaskDetailPage() {
 	});
 	const api = useKanaiApi();
 	const projectQuery = useQuery(api.projects.get(projectId));
+	const columnsQuery = useQuery(api.projectColumns.list(projectId));
 	const tasksQuery = useQuery(api.tasks.list(projectId));
 	const task = tasksQuery.data?.find((item) => item.id === taskId) ?? null;
 	const [savedMessage, setSavedMessage] = useState<string | null>(null);
@@ -21,9 +22,14 @@ export function TaskDetailPage() {
 		mode: "edit",
 		taskId,
 		task,
+		workflowColumns: columnsQuery.data,
+		isWorkflowLoading: columnsQuery.isLoading,
 		onSaved: () => setSavedMessage("Task changes saved."),
 	});
 	const projectName = projectQuery.data?.name ?? "Project";
+	const workflowMessage = columnsQuery.isError
+		? "Project workflow columns could not be loaded."
+		: form.workflowState.message;
 
 	function updateField(field: keyof typeof form.values, value: string) {
 		form.setField(field, value);
@@ -140,20 +146,30 @@ export function TaskDetailPage() {
 									className="mb-2 block text-sm font-semibold text-[var(--on-surface)]"
 									htmlFor="taskStatus"
 								>
-									Status
+									Workflow
 								</label>
 								<select
 									className="w-full rounded-lg border border-[var(--outline-variant)] bg-[var(--surface)] px-4 py-3 text-base text-[var(--on-surface)] outline-none transition focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]"
 									id="taskStatus"
+									disabled={
+										form.workflowState.isBlocked || columnsQuery.isError
+									}
 									onChange={(event) =>
 										updateField("status", event.target.value)
 									}
 									value={form.values.status}
 								>
-									<option value="todo">To Do</option>
-									<option value="in-progress">In Progress</option>
-									<option value="done">Done</option>
+									{columnsQuery.data?.map((column) => (
+										<option key={column.id} value={column.id}>
+											{column.name}
+										</option>
+									))}
 								</select>
+								{workflowMessage ? (
+									<p className="mt-2 text-sm font-medium text-[var(--on-surface-variant)]">
+										{workflowMessage}
+									</p>
+								) : null}
 							</div>
 
 							<div>
@@ -267,7 +283,11 @@ export function TaskDetailPage() {
 								Back to Board
 							</Link>
 							<button
-								disabled={form.isSaving}
+								disabled={
+									form.isSaving ||
+									form.workflowState.isBlocked ||
+									columnsQuery.isError
+								}
 								type="submit"
 								className="inline-flex items-center justify-center gap-2 rounded-full bg-[var(--primary)] px-5 py-2.5 text-sm font-semibold text-[var(--on-primary)] shadow-[0_12px_28px_rgba(0,61,155,0.18)] transition hover:bg-[var(--primary-container)]"
 							>

@@ -15,6 +15,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	currentUserQueryOptions,
 	type Project,
+	type ProjectColumn,
+	projectColumnsQueryOptions,
 	projectQueryOptions,
 	projectTasksQueryOptions,
 	type Task,
@@ -75,6 +77,18 @@ function project(overrides: Partial<Project> = {}): Project {
 	};
 }
 
+function column(overrides: Partial<ProjectColumn> = {}): ProjectColumn {
+	return {
+		id: "todo",
+		projectId: "project-1",
+		name: "Ready",
+		position: 0,
+		createdAt: null,
+		updatedAt: null,
+		...overrides,
+	};
+}
+
 function createTestQueryClient() {
 	return new QueryClient({
 		defaultOptions: {
@@ -127,7 +141,12 @@ describe("TaskDetailPage", () => {
 		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
 			task(),
 		]);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column(),
+			column({ id: "done", name: "Released", position: 1 }),
+		]);
 		const updatedTask = task({
+			columnId: "done",
 			description: "Updated notes",
 			priority: "high",
 			title: "Updated Task",
@@ -170,6 +189,9 @@ describe("TaskDetailPage", () => {
 		fireEvent.change(screen.getByLabelText("Priority"), {
 			target: { value: "high" },
 		});
+		fireEvent.change(screen.getByLabelText("Workflow"), {
+			target: { value: "done" },
+		});
 		fireEvent.change(screen.getByLabelText("Description"), {
 			target: { value: "Updated notes" },
 		});
@@ -177,11 +199,18 @@ describe("TaskDetailPage", () => {
 
 		await screen.findByText("Task changes saved.");
 		const [, init] = fetchSpy.mock.calls[0];
-		expect(JSON.parse(String(init?.body))).toMatchObject({
+		expect(JSON.parse(String(init?.body))).toEqual({
+			column_id: "done",
+			acceptance_criteria: "Original criteria",
 			description: "Updated notes",
 			priority: "high",
+			tag: "Feature",
 			title: "Updated Task",
 		});
+		expect(JSON.parse(String(init?.body))).not.toHaveProperty("status");
+		expect(screen.getByLabelText<HTMLSelectElement>("Workflow").value).toBe(
+			"done",
+		);
 		expect(
 			queryClient.getQueryData<Task[]>(
 				projectTasksQueryOptions("project-1").queryKey,
@@ -200,6 +229,9 @@ describe("TaskDetailPage", () => {
 		);
 		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
 			task(),
+		]);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column(),
 		]);
 		vi.stubGlobal(
 			"fetch",
@@ -235,6 +267,9 @@ describe("TaskDetailPage", () => {
 		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
 			task(),
 		]);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column(),
+		]);
 
 		renderTaskDetailPage(<TaskDetailPage />, queryClient);
 
@@ -249,5 +284,70 @@ describe("TaskDetailPage", () => {
 
 		expect(screen.getByDisplayValue("Unsaved Task")).toBeTruthy();
 		expect(screen.queryByDisplayValue("Server Refetch Task")).toBeNull();
+	});
+
+	it("blocks saving when workflow columns cannot be loaded", async () => {
+		const { TaskDetailPage } = await import(
+			"#/domains/workspace/ui/TaskDetailPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project(),
+		);
+		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
+			task(),
+		]);
+		const fetchSpy = vi
+			.fn<typeof fetch>()
+			.mockResolvedValue(
+				new Response(JSON.stringify({ detail: "No columns" }), { status: 500 }),
+			);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		renderTaskDetailPage(<TaskDetailPage />, queryClient);
+
+		expect(
+			await screen.findByText("Project workflow columns could not be loaded."),
+		).toBeTruthy();
+		await waitFor(() => {
+			expect(
+				screen.getByRole<HTMLButtonElement>("button", { name: /save changes/i })
+					.disabled,
+			).toBe(true);
+		});
+		expect(fetchSpy).toHaveBeenCalledTimes(1);
+	});
+
+	it("blocks saving when the task references a missing workflow column", async () => {
+		const { TaskDetailPage } = await import(
+			"#/domains/workspace/ui/TaskDetailPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project(),
+		);
+		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
+			task({ columnId: "missing-column" }),
+		]);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column(),
+		]);
+		const fetchSpy = vi.fn<typeof fetch>();
+		vi.stubGlobal("fetch", fetchSpy);
+
+		renderTaskDetailPage(<TaskDetailPage />, queryClient);
+
+		expect(
+			await screen.findByText(
+				"This task references a workflow column that no longer exists. Choose a valid column after the task data is repaired.",
+			),
+		).toBeTruthy();
+		expect(
+			screen.getByRole<HTMLButtonElement>("button", { name: /save changes/i })
+				.disabled,
+		).toBe(true);
+		expect(fetchSpy).not.toHaveBeenCalled();
 	});
 });

@@ -127,6 +127,25 @@ describe("getTaskFormWorkflowState", () => {
 			selectedColumnId: "column-backlog",
 		});
 	});
+
+	it("blocks edit submission when the selected task column is missing", () => {
+		expect(
+			getTaskFormWorkflowState({
+				columns: [
+					{ id: "column-backlog", name: "Backlog" },
+					{ id: "column-review", name: "Review" },
+				],
+				isLoading: false,
+				selectedColumnId: "missing-column",
+				requireSelectedColumn: true,
+			}),
+		).toEqual({
+			isBlocked: true,
+			message:
+				"This task references a workflow column that no longer exists. Choose a valid column after the task data is repaired.",
+			selectedColumnId: "missing-column",
+		});
+	});
 });
 
 describe("useTaskForm create mode", () => {
@@ -356,6 +375,7 @@ describe("useTaskForm edit mode", () => {
 					mode: "edit",
 					taskId: "task-1",
 					task: task(),
+					workflowColumns: [{ id: "in-progress", name: "In Progress" }],
 				}),
 			{ wrapper: createWrapper(queryClient) },
 		);
@@ -405,6 +425,10 @@ describe("useTaskForm edit mode", () => {
 					mode: "edit",
 					taskId: "task-1",
 					task: task(),
+					workflowColumns: [
+						{ id: "in-progress", name: "In Progress" },
+						{ id: "done", name: "Done" },
+					],
 					onSaved,
 				}),
 			{ wrapper: createWrapper(queryClient) },
@@ -455,6 +479,7 @@ describe("useTaskForm edit mode", () => {
 					mode: "edit",
 					taskId: "task-1",
 					task: task(),
+					workflowColumns: [{ id: "in-progress", name: "In Progress" }],
 				}),
 			{ wrapper: createWrapper(queryClient) },
 		);

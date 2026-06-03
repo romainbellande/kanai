@@ -18,6 +18,7 @@ type TaskFormWorkflowInput = {
 	columns: readonly TaskFormWorkflowColumn[] | undefined;
 	isLoading: boolean;
 	selectedColumnId: string;
+	requireSelectedColumn?: boolean;
 };
 
 type TaskFormWorkflowState = {
@@ -40,11 +41,14 @@ type UseTaskFormInput =
 			mode: "edit";
 			taskId: string;
 			task?: Task | null;
+			workflowColumns?: readonly TaskFormWorkflowColumn[];
+			isWorkflowLoading?: boolean;
 			onSaved?: (task: Task) => void;
 	  };
 export function getTaskFormWorkflowState({
 	columns,
 	isLoading,
+	requireSelectedColumn,
 	selectedColumnId,
 }: TaskFormWorkflowInput): TaskFormWorkflowState {
 	if (isLoading) {
@@ -73,6 +77,15 @@ export function getTaskFormWorkflowState({
 	}
 
 	const selectedColumn = columns.find(({ id }) => id === selectedColumnId);
+
+	if (!selectedColumn && selectedColumnId && requireSelectedColumn) {
+		return {
+			selectedColumnId,
+			isBlocked: true,
+			message:
+				"This task references a workflow column that no longer exists. Choose a valid column after the task data is repaired.",
+		};
+	}
 
 	return {
 		selectedColumnId: selectedColumn?.id ?? columns[0].id,
@@ -127,11 +140,12 @@ export function useTaskForm(input: UseTaskFormInput) {
 					isLoading: input.isWorkflowLoading ?? false,
 					selectedColumnId: values.status,
 				})
-			: {
+			: getTaskFormWorkflowState({
+					columns: input.workflowColumns,
+					isLoading: input.isWorkflowLoading ?? false,
 					selectedColumnId: values.status,
-					isBlocked: false,
-					message: null,
-				};
+					requireSelectedColumn: true,
+				});
 	const createTaskMutation = useMutation({
 		mutationFn: (payload: Parameters<typeof api.tasks.create>[1]) =>
 			api.tasks.create(input.projectId, payload),
