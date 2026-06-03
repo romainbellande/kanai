@@ -11,6 +11,11 @@ export type BoardColumn = {
 	cards: Task[];
 };
 
+export type InvalidBoardTask = {
+	task: Task;
+	missingColumnId: ColumnId;
+};
+
 export type MoveTaskInput = {
 	taskId: string;
 	toColumnId: ColumnId;
@@ -63,22 +68,6 @@ function compareTasksByRank(first: Task, second: Task): number {
 	);
 }
 
-export function getColumnId(status: string): ColumnId {
-	const normalizedStatus = status.trim().toLowerCase();
-
-	if (["done", "complete", "completed", "closed"].includes(normalizedStatus)) {
-		return "done";
-	}
-
-	if (
-		["in-progress", "in progress", "doing", "active"].includes(normalizedStatus)
-	) {
-		return "in-progress";
-	}
-
-	return "todo";
-}
-
 export function groupTasksByColumn(
 	tasks: Task[],
 	projectId: string,
@@ -104,6 +93,21 @@ export function groupTasksByColumn(
 		...column,
 		cards: column.cards.sort(compareTasksByRank),
 	}));
+}
+
+export function getTasksWithMissingColumns(
+	tasks: Task[],
+	projectId: string,
+	projectColumns: ProjectColumn[],
+): InvalidBoardTask[] {
+	const columnIds = new Set(projectColumns.map((column) => column.id));
+
+	return tasks
+		.filter(
+			(task) => task.projectId === projectId && !columnIds.has(task.columnId),
+		)
+		.sort(compareTasksByRank)
+		.map((task) => ({ task, missingColumnId: task.columnId }));
 }
 
 export function getRankForDestination(
@@ -165,6 +169,11 @@ export function useProjectTaskBoard(projectId: string) {
 		projectId,
 		columnsQuery.data ?? [],
 	);
+	const invalidTasks = getTasksWithMissingColumns(
+		tasksQuery.data ?? [],
+		projectId,
+		columnsQuery.data ?? [],
+	);
 
 	function moveTask(input: MoveTaskInput) {
 		const sourceTask = (tasksQuery.data ?? []).find(
@@ -215,6 +224,7 @@ export function useProjectTaskBoard(projectId: string) {
 
 	return {
 		columns,
+		invalidTasks,
 		tasksQuery,
 		columnsQuery,
 		dragState: {
