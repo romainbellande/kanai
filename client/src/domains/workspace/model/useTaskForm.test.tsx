@@ -150,7 +150,7 @@ describe("useTaskForm create mode", () => {
 				useTaskForm({
 					projectId: "project-1",
 					mode: "create",
-					initialStatus: "column-unknown",
+					initialColumnId: "column-unknown",
 				}),
 			{ wrapper: createWrapper(queryClient) },
 		);
@@ -176,7 +176,7 @@ describe("useTaskForm create mode", () => {
 				useTaskForm({
 					projectId: "project-1",
 					mode: "create",
-					initialStatus: "column-review",
+					initialColumnId: "column-review",
 					workflowColumns: [
 						{ id: "column-backlog", name: "Backlog" },
 						{ id: "column-review", name: "Review" },

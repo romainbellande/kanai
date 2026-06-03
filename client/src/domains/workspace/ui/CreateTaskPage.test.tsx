@@ -231,7 +231,7 @@ describe("CreateTaskPage", () => {
 		);
 		vi.stubGlobal("fetch", fetchSpy);
 
-		renderWithQueryClient(<CreateTaskPage initialStatus="column-review" />);
+		renderWithQueryClient(<CreateTaskPage initialColumnId="column-review" />);
 		await waitFor(() =>
 			expect(
 				(screen.getByLabelText(/workflow/i) as HTMLSelectElement).value,
@@ -278,10 +278,10 @@ describe("CreateTaskPage", () => {
 		fireEvent.submit(getCreateTaskForm());
 
 		expect(
-			screen.getByText(
+			screen.getAllByText(
 				"This project has no workflow columns. Add a workflow column before creating tasks.",
 			),
-		).toBeTruthy();
+		).toHaveLength(2);
 		expect(
 			(
 				screen.getByRole("button", {

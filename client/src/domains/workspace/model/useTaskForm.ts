@@ -30,7 +30,7 @@ type UseTaskFormInput =
 	| {
 			projectId: string;
 			mode: "create";
-			initialStatus?: string;
+			initialColumnId?: string;
 			workflowColumns?: readonly TaskFormWorkflowColumn[];
 			isWorkflowLoading?: boolean;
 			onSaved?: (task: Task) => void;
@@ -82,11 +82,11 @@ export function getTaskFormWorkflowState({
 }
 
 function createInitialValues(
-	initialStatus: string | undefined,
+	initialColumnId: string | undefined,
 ): TaskFormValues {
 	return {
 		title: "",
-		status: initialStatus ?? "",
+		status: initialColumnId ?? "",
 		priority: "medium",
 		description: "",
 		acceptanceCriteria: "",
@@ -107,7 +107,7 @@ function editInitialValues(task: Task | null | undefined): TaskFormValues {
 
 function initialValues(input: UseTaskFormInput): TaskFormValues {
 	return input.mode === "create"
-		? createInitialValues(input.initialStatus)
+		? createInitialValues(input.initialColumnId)
 		: editInitialValues(input.task);
 }
 

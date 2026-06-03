@@ -7,7 +7,11 @@ import { useKanaiApi } from "#/api/client";
 import { useTaskForm } from "#/domains/workspace/model/useTaskForm";
 import { WorkspaceLayout } from "#/domains/workspace/ui/templates/WorkspaceLayout";
 
-export function CreateTaskPage({ initialStatus }: { initialStatus?: string }) {
+export function CreateTaskPage({
+	initialColumnId,
+}: {
+	initialColumnId?: string;
+}) {
 	const { projectId } = useParams({ from: "/projects_/$projectId/tasks/new" });
 	const navigate = useNavigate();
 	const api = useKanaiApi();
@@ -16,7 +20,7 @@ export function CreateTaskPage({ initialStatus }: { initialStatus?: string }) {
 	const form = useTaskForm({
 		projectId,
 		mode: "create",
-		initialStatus,
+		initialColumnId,
 		workflowColumns: columnsQuery.data,
 		isWorkflowLoading: columnsQuery.isLoading,
 		onSaved: () => {
