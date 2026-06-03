@@ -1,7 +1,7 @@
 
 # TaskRead
 
-Response payload for reading a project task.  Parameters:     id: Task ID.     project_id: ID of the project that owns the task.     title: Task title.     status: Workflow status for the task.     priority: Priority level for the task.     rank: Sortable LexoRank-style position within the task status column.     assignee_id: Optional user ID assigned to the task.     description: Optional task details.     acceptance_criteria: Optional criteria required to complete the task.     tag: Optional task tag.     created_at: Optional timestamp when the task was created.     updated_at: Optional timestamp when the task was last updated.
+Response payload for reading a project task.  Parameters:     id: Task ID.     project_id: ID of the project that owns the task.     title: Task title.     column_id: Workflow column ID for the task.     priority: Priority level for the task.     rank: Sortable LexoRank-style position within the task column.     assignee_id: Optional user ID assigned to the task.     description: Optional task details.     acceptance_criteria: Optional criteria required to complete the task.     tag: Optional task tag.     created_at: Optional timestamp when the task was created.     updated_at: Optional timestamp when the task was last updated.
 
 ## Properties
 
@@ -9,8 +9,8 @@ Name | Type
 ------------ | -------------
 `id` | string
 `projectId` | string
+`columnId` | string
 `title` | string
-`status` | string
 `priority` | string
 `rank` | string
 `assigneeId` | string
@@ -29,8 +29,8 @@ import type { TaskRead } from ''
 const example = {
   "id": null,
   "projectId": null,
+  "columnId": null,
   "title": null,
-  "status": null,
   "priority": null,
   "rank": null,
   "assigneeId": null,

@@ -4,6 +4,10 @@ apis/UsersApi.ts
 apis/index.ts
 docs/HTTPValidationError.md
 docs/LocationInner.md
+docs/ProjectColumnCreate.md
+docs/ProjectColumnRead.md
+docs/ProjectColumnReorder.md
+docs/ProjectColumnUpdate.md
 docs/ProjectCreate.md
 docs/ProjectMemberCreate.md
 docs/ProjectRead.md
@@ -21,6 +25,10 @@ docs/ValidationError.md
 index.ts
 models/HTTPValidationError.ts
 models/LocationInner.ts
+models/ProjectColumnCreate.ts
+models/ProjectColumnRead.ts
+models/ProjectColumnReorder.ts
+models/ProjectColumnUpdate.ts
 models/ProjectCreate.ts
 models/ProjectMemberCreate.ts
 models/ProjectRead.ts
