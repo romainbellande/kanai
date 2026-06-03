@@ -5,7 +5,10 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useTaskForm } from "#/domains/workspace/model/useTaskForm";
+import {
+	getTaskFormWorkflowState,
+	useTaskForm,
+} from "#/domains/workspace/model/useTaskForm";
 
 function createTestQueryClient() {
 	return new QueryClient({
@@ -61,6 +64,71 @@ function task(overrides: Record<string, unknown> = {}) {
 	};
 }
 
+describe("getTaskFormWorkflowState", () => {
+	it("selects the first loaded column by default", () => {
+		expect(
+			getTaskFormWorkflowState({
+				columns: [
+					{ id: "column-backlog", name: "Backlog" },
+					{ id: "column-review", name: "Review" },
+				],
+				isLoading: false,
+				selectedColumnId: "",
+			}),
+		).toEqual({
+			isBlocked: false,
+			message: null,
+			selectedColumnId: "column-backlog",
+		});
+	});
+
+	it("blocks submission while columns are loading", () => {
+		expect(
+			getTaskFormWorkflowState({
+				columns: undefined,
+				isLoading: true,
+				selectedColumnId: "",
+			}),
+		).toEqual({
+			isBlocked: true,
+			message: "Loading project workflow columns...",
+			selectedColumnId: "",
+		});
+	});
+
+	it("blocks submission when loaded columns are empty", () => {
+		expect(
+			getTaskFormWorkflowState({
+				columns: [],
+				isLoading: false,
+				selectedColumnId: "",
+			}),
+		).toEqual({
+			isBlocked: true,
+			message:
+				"This project has no workflow columns. Add a workflow column before creating tasks.",
+			selectedColumnId: "",
+		});
+	});
+
+	it("falls back to the first column for invalid selections", () => {
+		expect(
+			getTaskFormWorkflowState({
+				columns: [
+					{ id: "column-backlog", name: "Backlog" },
+					{ id: "column-review", name: "Review" },
+				],
+				isLoading: false,
+				selectedColumnId: "legacy-status",
+			}),
+		).toEqual({
+			isBlocked: false,
+			message: null,
+			selectedColumnId: "column-backlog",
+		});
+	});
+});
+
 describe("useTaskForm create mode", () => {
 	beforeEach(() => {
 		vi.restoreAllMocks();
@@ -74,7 +142,7 @@ describe("useTaskForm create mode", () => {
 		);
 	});
 
-	it("starts create mode with default values and status fallback", () => {
+	it("starts create mode with default values and no workflow selection", () => {
 		const queryClient = createTestQueryClient();
 
 		const { result } = renderHook(
@@ -82,14 +150,14 @@ describe("useTaskForm create mode", () => {
 				useTaskForm({
 					projectId: "project-1",
 					mode: "create",
-					initialStatus: "archived",
+					initialStatus: "column-unknown",
 				}),
 			{ wrapper: createWrapper(queryClient) },
 		);
 
 		expect(result.current.values).toEqual({
 			title: "",
-			status: "todo",
+			status: "column-unknown",
 			priority: "medium",
 			description: "",
 			acceptanceCriteria: "",
@@ -100,7 +168,7 @@ describe("useTaskForm create mode", () => {
 		expect(result.current.errorMessage).toBeNull();
 	});
 
-	it("uses a valid initial status and updates fields", () => {
+	it("uses loaded columns to choose the initial workflow column", async () => {
 		const queryClient = createTestQueryClient();
 
 		const { result } = renderHook(
@@ -108,9 +176,17 @@ describe("useTaskForm create mode", () => {
 				useTaskForm({
 					projectId: "project-1",
 					mode: "create",
-					initialStatus: "in-progress",
+					initialStatus: "column-review",
+					workflowColumns: [
+						{ id: "column-backlog", name: "Backlog" },
+						{ id: "column-review", name: "Review" },
+					],
 				}),
 			{ wrapper: createWrapper(queryClient) },
+		);
+
+		await waitFor(() =>
+			expect(result.current.values.status).toBe("column-review"),
 		);
 
 		act(() => {
@@ -118,7 +194,7 @@ describe("useTaskForm create mode", () => {
 		});
 
 		expect(result.current.values.title).toBe("Draft task");
-		expect(result.current.values.status).toBe("in-progress");
+		expect(result.current.values.status).toBe("column-review");
 		expect(result.current.isDirty).toBe(true);
 	});
 
@@ -128,7 +204,12 @@ describe("useTaskForm create mode", () => {
 		vi.stubGlobal("fetch", fetchSpy);
 
 		const { result } = renderHook(
-			() => useTaskForm({ projectId: "project-1", mode: "create" }),
+			() =>
+				useTaskForm({
+					projectId: "project-1",
+					mode: "create",
+					workflowColumns: [{ id: "column-todo", name: "To Do" }],
+				}),
 			{ wrapper: createWrapper(queryClient) },
 		);
 
@@ -166,6 +247,10 @@ describe("useTaskForm create mode", () => {
 				useTaskForm({
 					projectId: "project-1",
 					mode: "create",
+					workflowColumns: [
+						{ id: "column-todo", name: "To Do" },
+						{ id: "column-done", name: "Done" },
+					],
 					onSaved,
 				}),
 			{ wrapper: createWrapper(queryClient) },
@@ -173,7 +258,7 @@ describe("useTaskForm create mode", () => {
 
 		act(() => {
 			result.current.setField("title", "  Created task  ");
-			result.current.setField("status", "done");
+			result.current.setField("status", "column-done");
 			result.current.setField("priority", "high");
 			result.current.setField("description", "  Useful notes  ");
 			result.current.setField("acceptanceCriteria", "  Done means done  ");
@@ -187,7 +272,7 @@ describe("useTaskForm create mode", () => {
 		const [, init] = fetchSpy.mock.calls[0];
 		expect(JSON.parse(String(init?.body))).toEqual({
 			title: "Created task",
-			column_id: "done",
+			column_id: "column-done",
 			priority: "high",
 			description: "Useful notes",
 			acceptance_criteria: "Done means done",
@@ -213,7 +298,12 @@ describe("useTaskForm create mode", () => {
 		vi.stubGlobal("fetch", fetchSpy);
 
 		const { result } = renderHook(
-			() => useTaskForm({ projectId: "project-1", mode: "create" }),
+			() =>
+				useTaskForm({
+					projectId: "project-1",
+					mode: "create",
+					workflowColumns: [{ id: "column-todo", name: "To Do" }],
+				}),
 			{ wrapper: createWrapper(queryClient) },
 		);
 
@@ -229,7 +319,7 @@ describe("useTaskForm create mode", () => {
 
 		expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toEqual({
 			title: "Minimal task",
-			column_id: "todo",
+			column_id: "column-todo",
 			priority: "medium",
 		});
 

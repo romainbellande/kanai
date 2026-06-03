@@ -1,11 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
-import { type Task, useKanaiApi } from "#/api/client";
-
-const taskStatuses = ["todo", "in-progress", "done"] as const;
-
-type TaskStatus = (typeof taskStatuses)[number];
+import { type ProjectColumn, type Task, useKanaiApi } from "#/api/client";
 
 export type TaskFormValues = {
 	title: string;
@@ -16,11 +12,27 @@ export type TaskFormValues = {
 	tag: string;
 };
 
+export type TaskFormWorkflowColumn = Pick<ProjectColumn, "id" | "name">;
+
+type TaskFormWorkflowInput = {
+	columns: readonly TaskFormWorkflowColumn[] | undefined;
+	isLoading: boolean;
+	selectedColumnId: string;
+};
+
+type TaskFormWorkflowState = {
+	selectedColumnId: string;
+	isBlocked: boolean;
+	message: string | null;
+};
+
 type UseTaskFormInput =
 	| {
 			projectId: string;
 			mode: "create";
 			initialStatus?: string;
+			workflowColumns?: readonly TaskFormWorkflowColumn[];
+			isWorkflowLoading?: boolean;
 			onSaved?: (task: Task) => void;
 	  }
 	| {
@@ -30,9 +42,43 @@ type UseTaskFormInput =
 			task?: Task | null;
 			onSaved?: (task: Task) => void;
 	  };
+export function getTaskFormWorkflowState({
+	columns,
+	isLoading,
+	selectedColumnId,
+}: TaskFormWorkflowInput): TaskFormWorkflowState {
+	if (isLoading) {
+		return {
+			selectedColumnId: "",
+			isBlocked: true,
+			message: "Loading project workflow columns...",
+		};
+	}
 
-function getInitialTaskStatus(status: string | undefined): TaskStatus {
-	return taskStatuses.find((taskStatus) => taskStatus === status) ?? "todo";
+	if (!columns) {
+		return {
+			selectedColumnId: "",
+			isBlocked: true,
+			message: "Project workflow columns could not be loaded.",
+		};
+	}
+
+	if (columns.length === 0) {
+		return {
+			selectedColumnId: "",
+			isBlocked: true,
+			message:
+				"This project has no workflow columns. Add a workflow column before creating tasks.",
+		};
+	}
+
+	const selectedColumn = columns.find(({ id }) => id === selectedColumnId);
+
+	return {
+		selectedColumnId: selectedColumn?.id ?? columns[0].id,
+		isBlocked: false,
+		message: null,
+	};
 }
 
 function createInitialValues(
@@ -40,7 +86,7 @@ function createInitialValues(
 ): TaskFormValues {
 	return {
 		title: "",
-		status: getInitialTaskStatus(initialStatus),
+		status: initialStatus ?? "",
 		priority: "medium",
 		description: "",
 		acceptanceCriteria: "",
@@ -74,6 +120,18 @@ export function useTaskForm(input: UseTaskFormInput) {
 		input.mode === "edit" ? (input.task?.id ?? null) : null,
 	);
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
+	const workflowState =
+		input.mode === "create"
+			? getTaskFormWorkflowState({
+					columns: input.workflowColumns,
+					isLoading: input.isWorkflowLoading ?? false,
+					selectedColumnId: values.status,
+				})
+			: {
+					selectedColumnId: values.status,
+					isBlocked: false,
+					message: null,
+				};
 	const createTaskMutation = useMutation({
 		mutationFn: (payload: Parameters<typeof api.tasks.create>[1]) =>
 			api.tasks.create(input.projectId, payload),
@@ -82,6 +140,22 @@ export function useTaskForm(input: UseTaskFormInput) {
 		mutationFn: (payload: Parameters<typeof api.tasks.update>[1]) =>
 			api.tasks.update(input.projectId, payload),
 	});
+
+	useEffect(() => {
+		if (input.mode !== "create") {
+			return;
+		}
+
+		if (
+			workflowState.selectedColumnId &&
+			values.status !== workflowState.selectedColumnId
+		) {
+			setValues((currentValues) => ({
+				...currentValues,
+				status: workflowState.selectedColumnId,
+			}));
+		}
+	}, [input.mode, values.status, workflowState.selectedColumnId]);
 
 	useEffect(() => {
 		if (input.mode !== "edit" || !editTask) {
@@ -113,6 +187,11 @@ export function useTaskForm(input: UseTaskFormInput) {
 			return null;
 		}
 
+		if (workflowState.isBlocked) {
+			setErrorMessage(workflowState.message);
+			return null;
+		}
+
 		try {
 			if (input.mode === "edit") {
 				const task = await updateTaskMutation.mutateAsync({
@@ -136,7 +215,7 @@ export function useTaskForm(input: UseTaskFormInput) {
 
 			const task = await createTaskMutation.mutateAsync({
 				title,
-				columnId: values.status,
+				columnId: workflowState.selectedColumnId,
 				priority: values.priority,
 				description: description || undefined,
 				acceptanceCriteria: acceptanceCriteria || undefined,
@@ -162,6 +241,7 @@ export function useTaskForm(input: UseTaskFormInput) {
 				? createTaskMutation.isPending
 				: updateTaskMutation.isPending,
 		errorMessage,
+		workflowState,
 		setField,
 		submit,
 	};

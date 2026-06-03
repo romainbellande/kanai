@@ -11,7 +11,12 @@ import {
 import type { AnchorHTMLAttributes, ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { currentUserQueryOptions, projectQueryOptions } from "#/api/client";
+import {
+	currentUserQueryOptions,
+	type ProjectColumn,
+	projectColumnsQueryOptions,
+	projectQueryOptions,
+} from "#/api/client";
 
 const routerMocks = vi.hoisted(() => ({
 	navigate: vi.fn(),
@@ -51,7 +56,25 @@ function getCreateTaskForm(): HTMLFormElement {
 	return form;
 }
 
-function renderWithQueryClient(ui: ReactNode) {
+function column(overrides: Partial<ProjectColumn>): ProjectColumn {
+	return {
+		id: "column-todo",
+		projectId: "project-1",
+		name: "To Do",
+		position: 0,
+		createdAt: null,
+		updatedAt: null,
+		...overrides,
+	};
+}
+
+function renderWithQueryClient(
+	ui: ReactNode,
+	columns: ProjectColumn[] | null = [
+		column({ id: "column-backlog", name: "Backlog", position: 0 }),
+		column({ id: "column-review", name: "Review", position: 1 }),
+	],
+) {
 	const queryClient = new QueryClient({
 		defaultOptions: {
 			queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },
@@ -74,6 +97,12 @@ function renderWithQueryClient(ui: ReactNode) {
 		createdAt: null,
 		updatedAt: null,
 	});
+	if (columns !== null) {
+		queryClient.setQueryData(
+			projectColumnsQueryOptions("project-1").queryKey,
+			columns,
+		);
+	}
 
 	return render(
 		<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>,
@@ -96,7 +125,7 @@ describe("CreateTaskPage", () => {
 		window.sessionStorage.clear();
 	});
 
-	it("submits schema-compatible task data for the route project", async () => {
+	it("renders loaded project columns and submits the selected column ID", async () => {
 		const { CreateTaskPage } = await import(
 			"#/domains/workspace/ui/CreateTaskPage"
 		);
@@ -107,7 +136,7 @@ describe("CreateTaskPage", () => {
 					id: "task-1",
 					project_id: "project-1",
 					title: "Persist task",
-					column_id: "todo",
+					column_id: "column-review",
 					priority: "medium",
 					rank: "0|hzzzzz:",
 					assignee_id: null,
@@ -123,8 +152,23 @@ describe("CreateTaskPage", () => {
 		vi.stubGlobal("fetch", fetchSpy);
 
 		renderWithQueryClient(<CreateTaskPage />);
+		const workflowSelect = screen.getByLabelText(
+			/workflow/i,
+		) as HTMLSelectElement;
+		expect(
+			Array.from(workflowSelect.options).map((option) => [
+				option.value,
+				option.textContent,
+			]),
+		).toEqual([
+			["column-backlog", "Backlog"],
+			["column-review", "Review"],
+		]);
 		fireEvent.change(screen.getByLabelText(/task title/i), {
 			target: { value: "Persist task" },
+		});
+		fireEvent.change(workflowSelect, {
+			target: { value: "column-review" },
 		});
 		fireEvent.change(screen.getByLabelText(/description/i), {
 			target: { value: "Task notes" },
@@ -150,7 +194,7 @@ describe("CreateTaskPage", () => {
 		) ?? [null, undefined];
 		expect(JSON.parse(String(init?.body))).toEqual({
 			title: "Persist task",
-			column_id: "todo",
+			column_id: "column-review",
 			priority: "medium",
 			description: "Task notes",
 			acceptance_criteria: "Done means done",
@@ -161,7 +205,7 @@ describe("CreateTaskPage", () => {
 		});
 	});
 
-	it("uses the source board column as the initial task status", async () => {
+	it("uses the source board column as the initial workflow column", async () => {
 		const { CreateTaskPage } = await import(
 			"#/domains/workspace/ui/CreateTaskPage"
 		);
@@ -172,7 +216,7 @@ describe("CreateTaskPage", () => {
 					id: "task-1",
 					project_id: "project-1",
 					title: "Column task",
-					column_id: "in-progress",
+					column_id: "column-review",
 					priority: "medium",
 					rank: "0|hzzzzz:",
 					assignee_id: null,
@@ -187,7 +231,12 @@ describe("CreateTaskPage", () => {
 		);
 		vi.stubGlobal("fetch", fetchSpy);
 
-		renderWithQueryClient(<CreateTaskPage initialStatus="in-progress" />);
+		renderWithQueryClient(<CreateTaskPage initialStatus="column-review" />);
+		await waitFor(() =>
+			expect(
+				(screen.getByLabelText(/workflow/i) as HTMLSelectElement).value,
+			).toBe("column-review"),
+		);
 		fireEvent.change(screen.getByLabelText(/task title/i), {
 			target: { value: "Column task" },
 		});
@@ -209,9 +258,78 @@ describe("CreateTaskPage", () => {
 		) ?? [null, undefined];
 		expect(JSON.parse(String(init?.body))).toEqual({
 			title: "Column task",
-			column_id: "in-progress",
+			column_id: "column-review",
 			priority: "medium",
 		});
+	});
+
+	it("blocks submission when workflow columns are empty", async () => {
+		const { CreateTaskPage } = await import(
+			"#/domains/workspace/ui/CreateTaskPage"
+		);
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		const fetchSpy = vi.fn<typeof fetch>();
+		vi.stubGlobal("fetch", fetchSpy);
+
+		renderWithQueryClient(<CreateTaskPage />, []);
+		fireEvent.change(screen.getByLabelText(/task title/i), {
+			target: { value: "Blocked task" },
+		});
+		fireEvent.submit(getCreateTaskForm());
+
+		expect(
+			screen.getByText(
+				"This project has no workflow columns. Add a workflow column before creating tasks.",
+			),
+		).toBeTruthy();
+		expect(
+			(
+				screen.getByRole("button", {
+					name: /create task/i,
+				}) as HTMLButtonElement
+			).disabled,
+		).toBe(true);
+		expect(
+			fetchSpy.mock.calls.some(
+				([url, init]) =>
+					String(url).endsWith("/projects/project-1/tasks") &&
+					init?.method === "POST",
+			),
+		).toBe(false);
+	});
+
+	it("blocks submission when workflow columns cannot be loaded", async () => {
+		const { CreateTaskPage } = await import(
+			"#/domains/workspace/ui/CreateTaskPage"
+		);
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		const fetchSpy = vi
+			.fn<typeof fetch>()
+			.mockResolvedValue(
+				new Response(JSON.stringify({ detail: "No columns" }), { status: 500 }),
+			);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		renderWithQueryClient(<CreateTaskPage />, null);
+
+		expect(
+			await screen.findByText("Project workflow columns could not be loaded."),
+		).toBeTruthy();
+		expect(
+			(
+				screen.getByRole("button", {
+					name: /create task/i,
+				}) as HTMLButtonElement
+			).disabled,
+		).toBe(true);
+		fireEvent.submit(getCreateTaskForm());
+		expect(
+			fetchSpy.mock.calls.some(
+				([url, init]) =>
+					String(url).endsWith("/projects/project-1/tasks") &&
+					init?.method === "POST",
+			),
+		).toBe(false);
 	});
 
 	it("shows validation failure without submitting", async () => {
