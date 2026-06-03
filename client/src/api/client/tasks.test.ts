@@ -18,7 +18,7 @@ describe("tasks client", () => {
 		window.sessionStorage.clear();
 	});
 
-	it("lists project tasks with the API base URL and stored bearer token", async () => {
+	it("lists project tasks with the API base URL, stored bearer token, and column IDs", async () => {
 		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test/");
 		window.sessionStorage.setItem(
 			"kanai.openid-client.auth-session",
@@ -32,7 +32,7 @@ describe("tasks client", () => {
 						id: "task-1",
 						project_id: "project-1",
 						title: "API Task",
-						status: "todo",
+						column_id: "column-todo",
 						priority: "high",
 						rank: "U",
 						assignee_id: null,
@@ -48,9 +48,18 @@ describe("tasks client", () => {
 		);
 		vi.stubGlobal("fetch", fetchSpy);
 
-		await expect(listProjectTasks("project-1")).resolves.toMatchObject([
-			{ id: "task-1", projectId: "project-1", title: "API Task", rank: "U" },
+		const tasks = await listProjectTasks("project-1");
+
+		expect(tasks).toMatchObject([
+			{
+				id: "task-1",
+				projectId: "project-1",
+				title: "API Task",
+				columnId: "column-todo",
+				rank: "U",
+			},
 		]);
+		expect(tasks[0]).not.toHaveProperty("status");
 		const [url, init] = fetchSpy.mock.calls[0];
 
 		expect(url).toBe("https://api.example.test/projects/project-1/tasks");
@@ -60,7 +69,7 @@ describe("tasks client", () => {
 		);
 	});
 
-	it("creates tasks with schema-compatible JSON and no invented assignee", async () => {
+	it("creates tasks with column IDs and no legacy status payload", async () => {
 		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
 		window.sessionStorage.setItem(
 			"kanai.openid-client.auth-session",
@@ -72,7 +81,7 @@ describe("tasks client", () => {
 					id: "task-1",
 					project_id: "project-1",
 					title: "Created Task",
-					status: "todo",
+					column_id: "column-todo",
 					priority: "medium",
 					rank: "U",
 					assignee_id: null,
@@ -91,7 +100,7 @@ describe("tasks client", () => {
 			projectId: "project-1",
 			taskCreate: {
 				title: "Created Task",
-				status: "todo",
+				columnId: "column-todo",
 				priority: "medium",
 				description: "Notes",
 				acceptanceCriteria: "Done means shipped",
@@ -104,14 +113,14 @@ describe("tasks client", () => {
 		expect(init?.method).toBe("POST");
 		expect(JSON.parse(String(init?.body))).toEqual({
 			title: "Created Task",
-			status: "todo",
+			column_id: "column-todo",
 			priority: "medium",
 			description: "Notes",
 			acceptance_criteria: "Done means shipped",
 		});
 	});
 
-	it("updates task status and rank with schema-compatible JSON", async () => {
+	it("updates task column and rank with no legacy status payload", async () => {
 		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
 		window.sessionStorage.setItem(
 			"kanai.openid-client.auth-session",
@@ -123,7 +132,7 @@ describe("tasks client", () => {
 					id: "task-1",
 					project_id: "project-1",
 					title: "Moved Task",
-					status: "done",
+					column_id: "column-done",
 					priority: "medium",
 					rank: "j",
 					assignee_id: null,
@@ -141,7 +150,7 @@ describe("tasks client", () => {
 		await updateProjectTask({
 			projectId: "project-1",
 			taskId: "task-1",
-			taskUpdate: { status: "done", rank: "j" },
+			taskUpdate: { columnId: "column-done", rank: "j" },
 		});
 
 		const [url, init] = fetchSpy.mock.calls[0];
@@ -151,7 +160,7 @@ describe("tasks client", () => {
 		);
 		expect(init?.method).toBe("PATCH");
 		expect(JSON.parse(String(init?.body))).toEqual({
-			status: "done",
+			column_id: "column-done",
 			rank: "j",
 		});
 	});

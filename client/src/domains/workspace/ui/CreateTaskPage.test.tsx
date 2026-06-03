@@ -107,7 +107,7 @@ describe("CreateTaskPage", () => {
 					id: "task-1",
 					project_id: "project-1",
 					title: "Persist task",
-					status: "todo",
+					column_id: "todo",
 					priority: "medium",
 					rank: "0|hzzzzz:",
 					assignee_id: null,
@@ -150,7 +150,7 @@ describe("CreateTaskPage", () => {
 		) ?? [null, undefined];
 		expect(JSON.parse(String(init?.body))).toEqual({
 			title: "Persist task",
-			status: "todo",
+			column_id: "todo",
 			priority: "medium",
 			description: "Task notes",
 			acceptance_criteria: "Done means done",
@@ -172,7 +172,7 @@ describe("CreateTaskPage", () => {
 					id: "task-1",
 					project_id: "project-1",
 					title: "Column task",
-					status: "in-progress",
+					column_id: "in-progress",
 					priority: "medium",
 					rank: "0|hzzzzz:",
 					assignee_id: null,
@@ -209,7 +209,7 @@ describe("CreateTaskPage", () => {
 		) ?? [null, undefined];
 		expect(JSON.parse(String(init?.body))).toEqual({
 			title: "Column task",
-			status: "in-progress",
+			column_id: "in-progress",
 			priority: "medium",
 		});
 	});

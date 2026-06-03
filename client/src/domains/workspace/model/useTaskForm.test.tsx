@@ -30,7 +30,7 @@ function createdTask(overrides: Record<string, unknown> = {}) {
 		projectId: "project-1",
 		project_id: "project-1",
 		title: "Created task",
-		status: "todo",
+		column_id: "todo",
 		priority: "medium",
 		rank: "0|hzzzzz:",
 		assignee_id: null,
@@ -48,7 +48,7 @@ function task(overrides: Record<string, unknown> = {}) {
 		id: "task-1",
 		projectId: "project-1",
 		title: "Existing task",
-		status: "in-progress",
+		columnId: "in-progress",
 		priority: "high",
 		rank: "0|hzzzzz:",
 		assigneeId: null,
@@ -150,7 +150,7 @@ describe("useTaskForm create mode", () => {
 				JSON.stringify(
 					createdTask({
 						title: "Created task",
-						status: "done",
+						column_id: "done",
 						priority: "high",
 						description: "Useful notes",
 						acceptance_criteria: "Done means done",
@@ -187,7 +187,7 @@ describe("useTaskForm create mode", () => {
 		const [, init] = fetchSpy.mock.calls[0];
 		expect(JSON.parse(String(init?.body))).toEqual({
 			title: "Created task",
-			status: "done",
+			column_id: "done",
 			priority: "high",
 			description: "Useful notes",
 			acceptance_criteria: "Done means done",
@@ -229,7 +229,7 @@ describe("useTaskForm create mode", () => {
 
 		expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toEqual({
 			title: "Minimal task",
-			status: "todo",
+			column_id: "todo",
 			priority: "medium",
 		});
 
@@ -296,7 +296,7 @@ describe("useTaskForm edit mode", () => {
 				JSON.stringify(
 					createdTask({
 						title: "Updated task",
-						status: "done",
+						column_id: "done",
 						priority: "urgent",
 						description: null,
 						acceptance_criteria: null,
@@ -337,7 +337,7 @@ describe("useTaskForm edit mode", () => {
 		const [, init] = fetchSpy.mock.calls[0];
 		expect(JSON.parse(String(init?.body))).toEqual({
 			title: "Updated task",
-			status: "done",
+			column_id: "done",
 			priority: "urgent",
 			description: null,
 			acceptance_criteria: null,
