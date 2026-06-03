@@ -58,7 +58,6 @@ async def test_move_task_persists_cross_column_top_placement(
             project_id=project.id,
             column_id=todo_column.id,
             title="Moved",
-            status="todo",
             priority="medium",
             rank="U",
         )
@@ -66,7 +65,6 @@ async def test_move_task_persists_cross_column_top_placement(
             project_id=project.id,
             column_id=done_column.id,
             title="First done",
-            status="done",
             priority="medium",
             rank="U",
         )
@@ -89,6 +87,7 @@ async def test_move_task_persists_cross_column_top_placement(
         )
 
         assert updated.column_id == done_column.id
+        assert "status" not in updated.model_dump()
         assert updated.rank < first_done.rank
         persisted = await session.get(Task, moved.id)
         assert persisted is not None
@@ -127,7 +126,6 @@ async def test_move_task_allows_member_access_and_preserves_noop_rank(
             project_id=project.id,
             column_id=todo_column.id,
             title="Moved",
-            status="todo",
             priority="medium",
             rank="U",
         )
@@ -135,7 +133,6 @@ async def test_move_task_allows_member_access_and_preserves_noop_rank(
             project_id=project.id,
             column_id=todo_column.id,
             title="After",
-            status="todo",
             priority="medium",
             rank="j",
         )
@@ -184,7 +181,6 @@ async def test_move_task_persists_within_column_bottom_placement(
             project_id=project.id,
             column_id=todo_column.id,
             title="First",
-            status="todo",
             priority="medium",
             rank="U",
         )
@@ -192,7 +188,6 @@ async def test_move_task_persists_within_column_bottom_placement(
             project_id=project.id,
             column_id=todo_column.id,
             title="Moved",
-            status="todo",
             priority="medium",
             rank="j",
         )
@@ -200,7 +195,6 @@ async def test_move_task_persists_within_column_bottom_placement(
             project_id=project.id,
             column_id=todo_column.id,
             title="Last",
-            status="todo",
             priority="medium",
             rank="z",
         )
@@ -252,7 +246,6 @@ async def test_move_task_denies_users_without_project_access(
             project_id=project.id,
             column_id=todo_column.id,
             title="Moved",
-            status="todo",
             priority="medium",
             rank="U",
         )
