@@ -31,7 +31,6 @@ class Task(SQLModel, table=True):
         ),
     )
     title: str = Field(sa_column=Column(String(), nullable=False))
-    status: str = Field(sa_column=Column(String(), nullable=False))
     priority: str = Field(sa_column=Column(String(), nullable=False))
     rank: str = Field(
         default="U",

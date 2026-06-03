@@ -74,8 +74,9 @@ def test_task_model_uses_client_fields_without_due_columns() -> None:
     assert Task.__tablename__ == "tasks"
     assert isinstance(columns.id.type, Uuid)
     assert columns.project_id.nullable is False
+    assert columns.column_id.nullable is False
     assert columns.title.nullable is False
-    assert columns.status.nullable is False
+    assert "status" not in columns
     assert columns.priority.nullable is False
     assert columns.task_rank.nullable is False
     assert "rank" not in columns

@@ -38,8 +38,7 @@ class TaskService:
         if payload.assignee_id is not None:
             await self._project_access.validate_users_exist({payload.assignee_id})
 
-        column = await self._resolve_column(project_id, payload.column_id)
-        column_id = column.id
+        column_id = (await self._resolve_column(project_id, payload.column_id)).id
         if column_id is None:
             raise RuntimeError("Project column ID is missing")
 
@@ -47,7 +46,6 @@ class TaskService:
             project_id=project_id,
             column_id=column_id,
             title=payload.title,
-            status=column.name,
             priority=payload.priority,
             rank=payload.rank
             or await next_task_rank(self._repository, project_id, column_id),
@@ -96,8 +94,7 @@ class TaskService:
             await self._project_access.validate_users_exist({assignee_id})
         column_id = updates.get("column_id")
         if isinstance(column_id, UUID):
-            column = await self._resolve_column(project_id, column_id)
-            updates["status"] = column.name
+            await self._resolve_column(project_id, column_id)
 
         for field_name, value in updates.items():
             setattr(task, field_name, value)
@@ -120,7 +117,7 @@ class TaskService:
                 status_code=status.HTTP_404_NOT_FOUND, detail="Task not found"
             )
 
-        column = await self._resolve_column(project_id, destination.column_id)
+        await self._resolve_column(project_id, destination.column_id)
         ordered_destination_tasks = await self._repository.list_by_project_and_column(
             project_id, destination.column_id
         )
@@ -146,7 +143,6 @@ class TaskService:
             )
 
         task.column_id = destination.column_id
-        task.status = column.name
         task.rank = rank_between(before_rank, after_rank)
         return task_to_read(await self._repository.update(task))
 

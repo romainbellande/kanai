@@ -67,6 +67,7 @@ async def test_create_task_defaults_to_first_project_column(
         )
 
         assert created.column_id == first_column.id
+        assert "status" not in created.model_dump()
         persisted = await session.get(Task, created.id)
         assert persisted is not None
         assert persisted.column_id == first_column.id
@@ -180,7 +181,6 @@ async def test_update_task_moves_to_project_column(
             project_id=project.id,
             column_id=first_column.id,
             title="Move me",
-            status="Backlog",
             priority="medium",
             rank="U",
         )
@@ -198,6 +198,21 @@ async def test_update_task_moves_to_project_column(
 
         assert updated.column_id == second_column.id
         assert "status" not in updated.model_dump()
+
+        listed = await TaskService(session).list(
+            project_id=project.id,
+            user_id=owner.id,
+        )
+        assert [task.column_id for task in listed] == [second_column.id]
+        assert "status" not in listed[0].model_dump()
+
+        fetched = await TaskService(session).get(
+            project_id=project.id,
+            task_id=task.id,
+            user_id=owner.id,
+        )
+        assert fetched.column_id == second_column.id
+        assert "status" not in fetched.model_dump()
 
 
 def test_task_api_payloads_reject_legacy_status() -> None:
@@ -244,7 +259,6 @@ async def test_update_task_rejects_foreign_project_column(
             project_id=project.id,
             column_id=project_column.id,
             title="Move me",
-            status="Backlog",
             priority="medium",
             rank="U",
         )
@@ -293,7 +307,6 @@ async def test_delete_project_column_rejects_non_empty_column(
             project_id=project.id,
             column_id=first_column.id,
             title="Blocks deletion",
-            status="Backlog",
             priority="medium",
             rank="U",
         )
