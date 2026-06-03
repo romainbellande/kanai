@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Uuid, func
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, UniqueConstraint, Uuid, func
 from sqlmodel import Field, SQLModel
 
 
@@ -61,6 +61,9 @@ class ProjectColumn(SQLModel, table=True):
     """Represents an ordered workflow column owned by a project."""
 
     __tablename__ = "project_columns"  # type: ignore[bad-override]
+    __table_args__ = (
+        UniqueConstraint("project_id", "name", name="uq_project_columns_project_id_name"),
+    )
 
     id: UUID | None = Field(
         default=None,

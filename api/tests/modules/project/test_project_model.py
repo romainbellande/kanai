@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import Uuid, select
+from sqlalchemy import UniqueConstraint, Uuid, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel
@@ -58,6 +58,7 @@ def test_project_owners_and_members_are_separate_tables() -> None:
 
 def test_project_column_model_uses_expected_columns() -> None:
     columns = SQLModel.metadata.tables["project_columns"].c
+    constraints = SQLModel.metadata.tables["project_columns"].constraints
 
     assert ProjectColumn.__tablename__ == "project_columns"
     assert isinstance(columns.id.type, Uuid)
@@ -66,6 +67,11 @@ def test_project_column_model_uses_expected_columns() -> None:
     assert columns.position.nullable is False
     assert columns.created_at.nullable is False
     assert columns.updated_at.nullable is False
+    assert {"project_id", "name"} in [
+        {column.name for column in constraint.columns}
+        for constraint in constraints
+        if isinstance(constraint, UniqueConstraint)
+    ]
 
 
 def test_task_model_uses_client_fields_without_due_columns() -> None:
@@ -95,6 +101,52 @@ async def test_project_code_is_globally_unique(session: AsyncSession) -> None:
 
     with pytest.raises(IntegrityError):
         await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_project_column_names_are_unique_within_project(
+    session: AsyncSession,
+) -> None:
+    project = Project(name="First", code="ONE", priority="medium")
+    session.add(project)
+    await session.commit()
+    await session.refresh(project)
+
+    assert project.id is not None
+
+    session.add_all(
+        [
+            ProjectColumn(project_id=project.id, name="Review", position=0),
+            ProjectColumn(project_id=project.id, name="Review", position=1),
+        ]
+    )
+
+    with pytest.raises(IntegrityError):
+        await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_project_column_names_can_repeat_across_projects(
+    session: AsyncSession,
+) -> None:
+    first_project = Project(name="First", code="ONE", priority="medium")
+    second_project = Project(name="Second", code="TWO", priority="high")
+    session.add_all([first_project, second_project])
+    await session.commit()
+    await session.refresh(first_project)
+    await session.refresh(second_project)
+
+    assert first_project.id is not None
+    assert second_project.id is not None
+
+    session.add_all(
+        [
+            ProjectColumn(project_id=first_project.id, name="Review", position=0),
+            ProjectColumn(project_id=second_project.id, name="Review", position=0),
+        ]
+    )
+
+    await session.commit()
 
 
 @pytest.mark.asyncio
