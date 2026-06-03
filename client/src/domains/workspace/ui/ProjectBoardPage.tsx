@@ -25,6 +25,7 @@ import {
 	Share2,
 	Target,
 	TrendingUp,
+	TriangleAlert,
 	User,
 	UserPlus,
 } from "lucide-react";
@@ -41,7 +42,9 @@ import {
 	type BoardColumn,
 	type ColumnId,
 	getRankForDestination,
+	getTasksWithMissingColumns,
 	groupTasksByColumn,
+	type InvalidBoardTask,
 	rankBetween,
 	useProjectTaskBoard,
 } from "#/domains/workspace/model/useProjectTaskBoard";
@@ -49,7 +52,12 @@ import { WorkspaceIconButton } from "#/domains/workspace/ui/atoms/WorkspaceIconB
 import { SidebarNavItem } from "#/domains/workspace/ui/molecules/SidebarNavItem";
 import type { SidebarItem } from "#/domains/workspace/ui/types";
 
-export { getRankForDestination, groupTasksByColumn, rankBetween };
+export {
+	getRankForDestination,
+	getTasksWithMissingColumns,
+	groupTasksByColumn,
+	rankBetween,
+};
 
 const sidebarItems: SidebarItem[] = [
 	{ label: "Projects", icon: LayoutDashboard, active: true, to: "/" },
@@ -277,6 +285,42 @@ function BoardColumnView({
 	);
 }
 
+function InvalidTasksView({ tasks }: { tasks: InvalidBoardTask[] }) {
+	if (tasks.length === 0) {
+		return null;
+	}
+
+	return (
+		<section className="mb-4 min-w-[1100px] rounded-[1.5rem] border border-[var(--error-container)] bg-[var(--surface-container-lowest)] p-4 text-[var(--on-surface)]">
+			<h3 className="flex items-center gap-2 text-sm font-bold uppercase tracking-[0.18em] text-[var(--on-error-container)]">
+				<TriangleAlert className="h-4 w-4" /> Workflow Integrity Errors
+			</h3>
+			<p className="mt-2 text-sm text-[var(--on-surface-variant)]">
+				These tasks are excluded from normal board columns until their workflow
+				column references are repaired.
+			</p>
+			<div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+				{tasks.map(({ task, missingColumnId }) => (
+					<Link
+						key={task.id}
+						to="/projects/$projectId/tasks/$taskId"
+						params={{ projectId: task.projectId, taskId: task.id }}
+						className="rounded-2xl border border-[var(--outline-variant)] bg-[var(--error-container)] p-4 text-[var(--on-error-container)] no-underline"
+					>
+						<p className="text-sm font-semibold">{task.title}</p>
+						<p className="mt-2 text-xs font-semibold">
+							Workflow column missing: {missingColumnId}
+						</p>
+						<p className="mt-1 text-xs">
+							This task references a project column that no longer exists.
+						</p>
+					</Link>
+				))}
+			</div>
+		</section>
+	);
+}
+
 export function ProjectBoardPage() {
 	const auth = useAuthBoundary();
 	const { projectId } = useParams({ from: "/projects/$projectId" });
@@ -287,7 +331,7 @@ export function ProjectBoardPage() {
 	const { columnsQuery, tasksQuery } = board;
 	const { draggingTaskId, activeDropColumnId } = board.dragState;
 	const projectName = projectQuery.data?.name ?? "Project";
-	const { columns } = board;
+	const { columns, invalidTasks } = board;
 	const isProjectAuthError = projectQuery.error instanceof CurrentUserAuthError;
 	const isTasksAuthError = tasksQuery.error instanceof CurrentUserAuthError;
 	const isColumnsAuthError = columnsQuery.error instanceof CurrentUserAuthError;
@@ -559,6 +603,12 @@ export function ProjectBoardPage() {
 									Retry
 								</button>
 							</div>
+						) : null}
+						{!columnsQuery.isPending &&
+						!columnsQuery.isError &&
+						!tasksQuery.isPending &&
+						!tasksQuery.isError ? (
+							<InvalidTasksView tasks={invalidTasks} />
 						) : null}
 						<div className="flex min-w-[1100px] gap-6">
 							{columnsQuery.isPending ? (

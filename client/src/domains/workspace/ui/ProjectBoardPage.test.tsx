@@ -215,6 +215,42 @@ describe("ProjectBoardPage", () => {
 		expect(screen.queryByText("Security Audit Phase 1")).toBeNull();
 	});
 
+	it("surfaces tasks that reference missing project columns", async () => {
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project({ name: "API Board" }),
+		);
+		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
+			task({ id: "todo-task", title: "API Todo", columnId: "column-todo" }),
+			task({
+				id: "stale-task",
+				title: "Stale Workflow Task",
+				columnId: "missing-column",
+			}),
+		]);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({ id: "column-todo", name: "Backlog", position: 0 }),
+		]);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+
+		expect(screen.getByText("Stale Workflow Task")).toBeTruthy();
+		expect(
+			screen.getByText("Workflow column missing: missing-column"),
+		).toBeTruthy();
+		expect(
+			screen.getByText(
+				"This task references a project column that no longer exists.",
+			),
+		).toBeTruthy();
+		expect(screen.getByText("Backlog")).toBeTruthy();
+		expect(screen.getByText("API Todo")).toBeTruthy();
+	});
+
 	it("links column task creation to the persisted column id", async () => {
 		const { ProjectBoardPage } = await import(
 			"#/domains/workspace/ui/ProjectBoardPage"
