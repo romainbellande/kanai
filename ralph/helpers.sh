@@ -245,3 +245,66 @@ ralph_wave_summary() {
       "$issue" "$branch" "$worktree" "$log" "$result"
   done
 }
+
+ralph_run_merge_agent() {
+  local repo="$1"
+  local wave_output="$2"
+  local commits="$3"
+  local prompt="$4"
+
+  local base_commit short_commit log_rel log_abs
+  base_commit="$(git -C "$repo" rev-parse HEAD)" || return 1
+  short_commit="$(git -C "$repo" rev-parse --short HEAD)" || return 1
+  log_rel=".ralph/logs/merge-$short_commit.jsonl"
+  log_abs="$repo/$log_rel"
+
+  local -a worker_records
+  local line record result complete_count=0
+  while IFS= read -r line; do
+    [[ "$line" == finished\|* ]] || continue
+    record="${line#finished|}"
+    result="${record##*|}"
+    worker_records+=("$record")
+    if [ "$result" = complete ]; then
+      complete_count=$((complete_count + 1))
+    fi
+  done <<< "$wave_output"
+
+  if [ "$complete_count" -eq 0 ]; then
+    printf 'merge|skipped|no_complete_workers\n'
+    return 0
+  fi
+
+  mkdir -p "$(dirname "$log_abs")"
+
+  local summary tmpfile exit_code output merge_result
+  summary="$(ralph_wave_summary "$base_commit" "${worker_records[@]}")"
+  tmpfile="$(mktemp)"
+
+  printf 'merge_started|%s\n' "$log_rel"
+  set +e
+  opencode-sandbox "$repo" run \
+    --dangerously-skip-permissions \
+    --format json \
+    "Previous commits: $commits Ralph worker wave summary: $summary $prompt" \
+    | grep --line-buffered '^{' \
+    | tee "$log_abs" "$tmpfile" \
+    | jq --unbuffered -rj 'select(.type == "text").part.text // empty | gsub("\\n"; "\\r\\n") | . + "\\r\\n\n"' >&2
+  exit_code=${PIPESTATUS[0]}
+  set -e
+
+  output="$(jq -r 'select(.type == "text").part.text // empty' "$tmpfile")"
+  rm -f "$tmpfile"
+
+  merge_result="$(ralph_merge_result "$exit_code" "$output")"
+  printf 'merge_finished|%s|%s\n' "$log_rel" "$merge_result"
+
+  case "$merge_result" in
+    complete|partial)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
