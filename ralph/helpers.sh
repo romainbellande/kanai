@@ -319,3 +319,83 @@ ralph_run_merge_agent() {
       ;;
   esac
 }
+
+ralph_run_afk_loop() {
+  local iterations="$1"
+  local repo="${2:-.}"
+
+  ralph_require_positive_integer iterations "$iterations" || return 1
+  ralph_require_tools bd git jq || return 1
+
+  local parallelism
+  parallelism="$(ralph_parallelism_cap)" || return 1
+
+  local i assignment commits prompt merge_prompt wave_output merge_output complete_workers line worker_record issue_id result
+  for ((i=1; i<=iterations; i++)); do
+    assignment="$(ralph_claim_ready_afk_issues "$parallelism")" || return 1
+
+    if [ "$assignment" = "no_more_tasks" ]; then
+      printf 'Ralph complete after %s iterations.\n' "$i"
+      return 0
+    fi
+
+    if [[ "$assignment" == no_ready_tasks* ]]; then
+      printf 'Ralph has no ready AFK tasks.\n'
+      printf '%s\n' "$assignment"
+      return 0
+    fi
+
+    if [[ "$assignment" != assigned\|* ]]; then
+      printf 'Unexpected Ralph assignment result: %s\n' "$assignment" >&2
+      return 1
+    fi
+
+    ralph_require_tools opencode-sandbox || return 1
+
+    commits="$(git -C "$repo" log -n 5 --format="%H%n%ad%n%B---" --date=short 2>/dev/null || printf 'No commits found')"
+    prompt="$(cat "$repo/ralph/worker-prompt.md")" || return 1
+    merge_prompt="$(cat "$repo/ralph/merge-prompt.md")" || return 1
+    if ! wave_output="$(ralph_run_worker_wave "$repo" "$assignment" "$commits" "$prompt")"; then
+      printf '%s\n' "$wave_output"
+      printf 'Ralph worker wave failed.\n' >&2
+      return 1
+    fi
+    printf '%s\n' "$wave_output"
+
+    complete_workers=0
+    while IFS= read -r line; do
+      [[ "$line" == finished\|* ]] || continue
+      worker_record="${line#finished|}"
+      IFS='|' read -r issue_id _ _ _ result <<< "$worker_record"
+      if [ "$result" = complete ]; then
+        complete_workers=$((complete_workers + 1))
+      else
+        printf 'Ralph worker did not complete assigned issue %s: %s\n' "$issue_id" "$result" >&2
+      fi
+    done <<< "$wave_output"
+
+    if [ "$complete_workers" -eq 0 ]; then
+      printf 'Ralph worker wave produced no completed branches.\n' >&2
+      return 1
+    fi
+
+    if ! merge_output="$(ralph_run_merge_agent "$repo" "$wave_output" "$commits" "$merge_prompt")"; then
+      printf '%s\n' "$merge_output"
+      printf 'Ralph merge agent failed.\n' >&2
+      return 1
+    fi
+    printf '%s\n' "$merge_output"
+
+    if [[ "$merge_output" == *'merge_finished|'*'|partial'* ]]; then
+      ralph_require_clean_checkout "$repo" || return 1
+      printf 'Ralph merge partially completed wave %s.\n' "$i"
+    elif [[ "$merge_output" == *'merge_finished|'*'|complete'* ]]; then
+      printf 'Ralph merge completed wave %s.\n' "$i"
+    else
+      printf 'Ralph merge agent returned an unexpected result for wave %s.\n' "$i" >&2
+      return 1
+    fi
+  done
+
+  printf 'Ralph stopped after %s iterations.\n' "$iterations"
+}
