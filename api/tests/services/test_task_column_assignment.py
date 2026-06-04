@@ -125,7 +125,9 @@ async def test_create_task_rejects_foreign_project_column(
         assert owner.id is not None
         assert project.id is not None
         assert other_project.id is not None
-        project_column = ProjectColumn(project_id=project.id, name="Backlog", position=0)
+        project_column = ProjectColumn(
+            project_id=project.id, name="Backlog", position=0
+        )
         foreign_column = ProjectColumn(
             project_id=other_project.id, name="Foreign", position=0
         )
@@ -239,7 +241,9 @@ async def test_update_task_rejects_foreign_project_column(
         assert owner.id is not None
         assert project.id is not None
         assert other_project.id is not None
-        project_column = ProjectColumn(project_id=project.id, name="Backlog", position=0)
+        project_column = ProjectColumn(
+            project_id=project.id, name="Backlog", position=0
+        )
         foreign_column = ProjectColumn(
             project_id=other_project.id, name="Foreign", position=0
         )

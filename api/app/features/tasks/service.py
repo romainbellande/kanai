@@ -136,7 +136,11 @@ class TaskService:
             destination_tasks, destination.after_task_id, "after_task_id"
         )
 
-        if before_rank is not None and after_rank is not None and before_rank >= after_rank:
+        if (
+            before_rank is not None
+            and after_rank is not None
+            and before_rank >= after_rank
+        ):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Task destination neighbors are out of order",
@@ -168,7 +172,9 @@ class TaskService:
                 )
             column = columns[0]
         else:
-            column = next((column for column in columns if column.id == column_id), None)
+            column = next(
+                (column for column in columns if column.id == column_id), None
+            )
 
         if column is None or column.id is None:
             raise HTTPException(

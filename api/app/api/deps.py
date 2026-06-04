@@ -19,7 +19,9 @@ class _NoopAuthenticateRequest:
 
 DatabaseSession = Annotated[AsyncSession, Depends(get_db)]
 
-request_auth_boundary = RequestAuthBoundary(authenticate_request=_NoopAuthenticateRequest())
+request_auth_boundary = RequestAuthBoundary(
+    authenticate_request=_NoopAuthenticateRequest()
+)
 
 
 async def get_current_user(request: Request, session: DatabaseSession) -> User:

@@ -57,7 +57,9 @@ class ProjectColumnService:
             )
 
         existing_columns = await self._repository.list_columns_by_project(project_id)
-        if column_name.casefold() in {column.name.casefold() for column in existing_columns}:
+        if column_name.casefold() in {
+            column.name.casefold() for column in existing_columns
+        }:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Column name already exists",
@@ -124,7 +126,9 @@ class ProjectColumnService:
         columns = await self._repository.list_columns_by_project(project_id)
         columns_by_id = {column.id: column for column in columns}
 
-        if len(column_ids) != len(columns_by_id) or set(column_ids) != set(columns_by_id):
+        if len(column_ids) != len(columns_by_id) or set(column_ids) != set(
+            columns_by_id
+        ):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Column reorder must include each project column exactly once",
@@ -164,7 +168,9 @@ class ProjectColumnService:
             )
 
         await self._repository.delete_column(column)
-        remaining_columns = [existing for existing in columns if existing.id != column_id]
+        remaining_columns = [
+            existing for existing in columns if existing.id != column_id
+        ]
         for position, remaining_column in enumerate(remaining_columns):
             remaining_column.position = position
         await self._repository.commit()
