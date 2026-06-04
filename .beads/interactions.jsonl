@@ -1,1 +1,2 @@
 {"id":"int-0963aa11","kind":"field_change","created_at":"2026-06-04T20:01:41.933836425Z","actor":"naimor","issue_id":"kanai-1ra.1","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Completed: added deterministic Ralph helper validation and parsing baseline"}}
+{"id":"int-814da849","kind":"field_change","created_at":"2026-06-04T20:06:50.397892417Z","actor":"naimor","issue_id":"kanai-1ra.2","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Completed: added AFK ready issue assignment and no-work handling"}}

@@ -43,6 +43,51 @@ ralph_require_clean_checkout() {
   fi
 }
 
+ralph_compact_json() {
+  jq -c .
+}
+
+ralph_claim_ready_afk_issues() {
+  local limit="$1"
+  ralph_require_positive_integer limit "$limit" || return 1
+
+  local ready_json ready_count
+  ready_json="$(bd ready --json --label afk --exclude-label hitl)" || return 1
+  ready_count="$(printf '%s' "$ready_json" | jq 'length')" || return 1
+
+  if [ "$ready_count" -eq 0 ]; then
+    local remaining_json remaining_count
+    remaining_json="$(bd list --json --status open,in_progress,blocked --label afk --exclude-label hitl)" || return 1
+    remaining_count="$(printf '%s' "$remaining_json" | jq 'length')" || return 1
+
+    if [ "$remaining_count" -eq 0 ]; then
+      printf 'no_more_tasks\n'
+    else
+      printf 'no_ready_tasks|%s\n' "$(printf '%s' "$remaining_json" | ralph_compact_json)"
+    fi
+    return 0
+  fi
+
+  local index=0
+  local assigned=0
+  while [ "$index" -lt "$ready_count" ] && [ "$assigned" -lt "$limit" ]; do
+    local issue_json issue_id claim_json
+    issue_json="$(printf '%s' "$ready_json" | jq -c ".[$index]")" || return 1
+    issue_id="$(printf '%s' "$issue_json" | jq -r '.id')" || return 1
+
+    if claim_json="$(bd update "$issue_id" --claim --json 2>/dev/null)"; then
+      printf 'assigned|%s|%s\n' "$issue_id" "$(printf '%s' "$claim_json" | ralph_compact_json)"
+      assigned=$((assigned + 1))
+    fi
+
+    index=$((index + 1))
+  done
+
+  if [ "$assigned" -eq 0 ]; then
+    printf 'no_ready_tasks|[]\n'
+  fi
+}
+
 ralph_worker_result() {
   local exit_code="$1"
   local output="${2:-}"
