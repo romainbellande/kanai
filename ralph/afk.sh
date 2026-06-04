@@ -11,9 +11,10 @@ fi
 
 ralph_require_positive_integer iterations "$1"
 ralph_require_tools bd git jq
+parallelism="$(ralph_parallelism_cap)"
 
 for ((i=1; i<=$1; i++)); do
-  assignment="$(ralph_claim_ready_afk_issues 1)"
+  assignment="$(ralph_claim_ready_afk_issues "$parallelism")"
 
   if [ "$assignment" = "no_more_tasks" ]; then
     echo "Ralph complete after $i iterations."
@@ -31,21 +32,24 @@ for ((i=1; i<=$1; i++)); do
     exit 1
   fi
 
-  issue_id="${assignment#assigned|}"
-  issue_id="${issue_id%%|*}"
-  issue_json="${assignment#assigned|$issue_id|}"
-
   ralph_require_tools opencode-sandbox
 
   commits=$(git log -n 5 --format="%H%n%ad%n%B---" --date=short 2>/dev/null || echo "No commits found")
   prompt=$(cat ralph/prompt.md)
-  worker_record="$(ralph_run_isolated_worker . "$issue_id" "$issue_json" "$commits" "$prompt")"
-  echo "$worker_record"
-
-  IFS='|' read -r _ _ _ _ result <<< "$worker_record"
-
-  if [ "$result" != complete ]; then
-    echo "Ralph worker did not complete assigned issue $issue_id: $result" >&2
+  if ! wave_output="$(ralph_run_worker_wave . "$assignment" "$commits" "$prompt")"; then
+    echo "$wave_output"
+    echo "Ralph worker wave failed." >&2
     exit 1
   fi
+  echo "$wave_output"
+
+  while IFS= read -r line; do
+    [[ "$line" == finished\|* ]] || continue
+    worker_record="${line#finished|}"
+    IFS='|' read -r issue_id _ _ _ result <<< "$worker_record"
+    if [ "$result" != complete ]; then
+      echo "Ralph worker did not complete assigned issue $issue_id: $result" >&2
+      exit 1
+    fi
+  done <<< "$wave_output"
 done

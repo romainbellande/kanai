@@ -157,6 +157,63 @@ ralph_run_isolated_worker() {
   printf '%s|%s|%s|%s|%s\n' "$issue_id" "$branch" "$worktree_rel" "$log_rel" "$result"
 }
 
+ralph_run_worker_wave() {
+  local repo="$1"
+  local assignments="$2"
+  local commits="$3"
+  local prompt="$4"
+
+  local tmpdir
+  tmpdir="$(mktemp -d)"
+
+  local -a pids issues outputs
+  local assignment issue_id issue_json safe_id stderr_log
+  while IFS= read -r assignment; do
+    [ -n "$assignment" ] || continue
+    if [[ "$assignment" != assigned\|* ]]; then
+      printf 'Unexpected Ralph assignment result: %s\n' "$assignment" >&2
+      rm -rf "$tmpdir"
+      return 1
+    fi
+
+    issue_id="${assignment#assigned|}"
+    issue_id="${issue_id%%|*}"
+    issue_json="${assignment#assigned|$issue_id|}"
+    safe_id="$(ralph_safe_issue_path "$issue_id")"
+    stderr_log="$repo/.ralph/logs/$safe_id.stderr.log"
+    mkdir -p "$(dirname "$stderr_log")"
+
+    printf 'started|%s\n' "$issue_id"
+    ralph_run_isolated_worker "$repo" "$issue_id" "$issue_json" "$commits" "$prompt" \
+      > "$tmpdir/$safe_id.out" 2> "$stderr_log" &
+    pids+=("$!")
+    issues+=("$issue_id")
+    outputs+=("$tmpdir/$safe_id.out")
+  done <<< "$assignments"
+
+  local index status record failed=0
+  for index in "${!pids[@]}"; do
+    if wait "${pids[$index]}"; then
+      status=0
+    else
+      status=$?
+    fi
+
+    record="$(cat "${outputs[$index]}" 2>/dev/null || true)"
+    if [ "$status" -ne 0 ]; then
+      failed=1
+      if [ -z "$record" ]; then
+        record="${issues[$index]}||||failed"
+      fi
+    fi
+
+    printf 'finished|%s\n' "$record"
+  done
+
+  rm -rf "$tmpdir"
+  [ "$failed" -eq 0 ]
+}
+
 ralph_merge_result() {
   local exit_code="$1"
   local output="${2:-}"
