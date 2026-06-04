@@ -336,6 +336,35 @@ complete_marker_without_commit_is_not_success() {
   rm -rf "$repo" "$worktree_seen" "$args_seen"
 }
 
+wave_launches_workers_concurrently() {
+  [ "$(type -t ralph_run_worker_wave 2>/dev/null)" = function ] || return 1
+
+  local events output
+  events="$(mktemp /tmp/opencode/ralph-wave-events.XXXXXX)"
+
+  ralph_run_isolated_worker() {
+    local _repo="$1"
+    local issue_id="$2"
+
+    printf 'start %s\n' "$issue_id" >> "$RALPH_FAKE_WAVE_EVENTS"
+    sleep 0.2
+    printf 'finish %s\n' "$issue_id" >> "$RALPH_FAKE_WAVE_EVENTS"
+    printf '%s|ralph/%s|.worktrees/%s|.ralph/logs/%s.jsonl|complete\n' \
+      "$issue_id" "$issue_id" "$issue_id" "$issue_id"
+  }
+
+  output="$(RALPH_FAKE_WAVE_EVENTS="$events" ralph_run_worker_wave . $'assigned|kanai-a|[{"id":"kanai-a"}]\nassigned|kanai-b|[{"id":"kanai-b"}]' 'abc123' 'Prompt body')"
+
+  [ "$(sed -n '1p' "$events")" = 'start kanai-a' ] || return 1
+  [ "$(sed -n '2p' "$events")" = 'start kanai-b' ] || return 1
+  [[ "$output" == *'started|kanai-a'* ]] || return 1
+  [[ "$output" == *'started|kanai-b'* ]] || return 1
+  [[ "$output" == *'finished|kanai-a|ralph/kanai-a|.worktrees/kanai-a|.ralph/logs/kanai-a.jsonl|complete'* ]] || return 1
+  [[ "$output" == *'finished|kanai-b|ralph/kanai-b|.worktrees/kanai-b|.ralph/logs/kanai-b.jsonl|complete'* ]] || return 1
+
+  rm -f "$events"
+}
+
 afk_exits_without_sandbox_when_no_more_work_remains() {
   local calls output
   calls="$(mktemp /tmp/opencode/ralph-bd-calls.XXXXXX)"
@@ -380,6 +409,7 @@ check "blocked AFK issues report no ready tasks" reports_no_ready_work_when_afk_
 check "single worker runs in deterministic isolated worktree" runs_single_worker_in_isolated_worktree
 check "existing worker branch skips sandbox launch" skips_existing_worker_branch_without_sandbox
 check "complete marker without worker commit is not success" complete_marker_without_commit_is_not_success
+check "worker wave launches assigned workers concurrently" wave_launches_workers_concurrently
 check "afk runner exits without sandbox when no AFK issues remain" afk_exits_without_sandbox_when_no_more_work_remains
 check "afk runner exits without sandbox when no ready AFK work exists" afk_exits_without_sandbox_when_no_ready_work_exists
 check "afk runner rejects invalid iteration counts" afk_rejects_invalid_iterations
