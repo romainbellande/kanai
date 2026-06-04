@@ -103,6 +103,60 @@ ralph_worker_result() {
   fi
 }
 
+ralph_safe_issue_path() {
+  printf '%s' "$1" | tr -c 'A-Za-z0-9._-' '-'
+}
+
+ralph_run_isolated_worker() {
+  local repo="$1"
+  local issue_id="$2"
+  local issue_json="$3"
+  local commits="$4"
+  local prompt="$5"
+
+  local safe_id branch worktree_rel worktree_abs log_rel log_abs base_commit
+  safe_id="$(ralph_safe_issue_path "$issue_id")"
+  branch="ralph/$safe_id"
+  worktree_rel=".worktrees/$safe_id"
+  worktree_abs="$repo/$worktree_rel"
+  log_rel=".ralph/logs/$safe_id.jsonl"
+  log_abs="$repo/$log_rel"
+  base_commit="$(git -C "$repo" rev-parse HEAD)" || return 1
+
+  if git -C "$repo" show-ref --verify --quiet "refs/heads/$branch" || [ -e "$worktree_abs" ]; then
+    printf '%s|%s|%s|%s|skipped\n' "$issue_id" "$branch" "$worktree_rel" "$log_rel"
+    return 0
+  fi
+
+  mkdir -p "$(dirname "$log_abs")"
+  git -C "$repo" worktree add --quiet -b "$branch" "$worktree_abs" "$base_commit" || return 1
+
+  local tmpfile exit_code output result head_commit
+  tmpfile="$(mktemp)"
+
+  set +e
+  opencode-sandbox "$worktree_abs" run \
+    --dangerously-skip-permissions \
+    --format json \
+    "Previous commits: $commits Assigned AFK issue JSON: $issue_json Work only on assigned issue $issue_id. Do not select or claim another issue. Issue tracking is read-only after assignment; do not run bd update, bd close, or bd create. $prompt" \
+    | grep --line-buffered '^{' \
+    | tee "$log_abs" "$tmpfile" \
+    | jq --unbuffered -rj 'select(.type == "text").part.text // empty | gsub("\\n"; "\\r\\n") | . + "\\r\\n\n"' >&2
+  exit_code=${PIPESTATUS[0]}
+  set -e
+
+  output="$(jq -r 'select(.type == "text").part.text // empty' "$tmpfile")"
+  rm -f "$tmpfile"
+
+  result="$(ralph_worker_result "$exit_code" "$output")"
+  head_commit="$(git -C "$repo" rev-parse "$branch")" || return 1
+  if [ "$result" = complete ] && [ "$head_commit" = "$base_commit" ]; then
+    result="no_commit"
+  fi
+
+  printf '%s|%s|%s|%s|%s\n' "$issue_id" "$branch" "$worktree_rel" "$log_rel" "$result"
+}
+
 ralph_merge_result() {
   local exit_code="$1"
   local output="${2:-}"

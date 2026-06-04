@@ -10,13 +10,7 @@ if [ -z "$1" ]; then
 fi
 
 ralph_require_positive_integer iterations "$1"
-ralph_require_tools bd jq
-
-# jq filter to extract streaming text from opencode JSON events
-stream_text='select(.type == "text").part.text // empty | gsub("\n"; "\r\n") | . + "\r\n\n"'
-
-# jq filter to extract final result
-final_result='select(.type == "text").part.text // empty'
+ralph_require_tools bd git jq
 
 for ((i=1; i<=$1; i++)); do
   assignment="$(ralph_claim_ready_afk_issues 1)"
@@ -43,24 +37,15 @@ for ((i=1; i<=$1; i++)); do
 
   ralph_require_tools opencode-sandbox
 
-  tmpfile=$(mktemp)
-  trap "rm -f $tmpfile" EXIT
-
   commits=$(git log -n 5 --format="%H%n%ad%n%B---" --date=short 2>/dev/null || echo "No commits found")
   prompt=$(cat ralph/prompt.md)
+  worker_record="$(ralph_run_isolated_worker . "$issue_id" "$issue_json" "$commits" "$prompt")"
+  echo "$worker_record"
 
-  opencode-sandbox . run \
-    --dangerously-skip-permissions \
-    --format json \
-    "Previous commits: $commits Assigned AFK issue JSON: $issue_json Work only on assigned issue $issue_id. Do not select or claim another issue. $prompt" \
-  | grep --line-buffered '^{' \
-  | tee "$tmpfile" \
-  | jq --unbuffered -rj "$stream_text"
+  IFS='|' read -r _ _ _ _ result <<< "$worker_record"
 
-  result=$(jq -r "$final_result" "$tmpfile")
-
-  if [[ "$result" == *"<promise>NO MORE TASKS</promise>"* ]]; then
-    echo "Ralph complete after $i iterations."
-    exit 0
+  if [ "$result" != complete ]; then
+    echo "Ralph worker did not complete assigned issue $issue_id: $result" >&2
+    exit 1
   fi
 done
