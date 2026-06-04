@@ -267,8 +267,11 @@ shift
 
 printf '%s\n' "$repo" > "$RALPH_FAKE_MERGE_REPO"
 printf '%s\n' "$*" > "$RALPH_FAKE_MERGE_ARGS"
+if [ "${RALPH_FAKE_MERGE_LEAVE_CONFLICT:-0}" = 1 ]; then
+  git -C "$repo" merge conflict >/dev/null 2>&1 || true
+fi
 printf '%s\n' '{"type":"text","part":{"text":"merge output"}}'
-printf '%s\n' '{"type":"text","part":{"text":"<promise>MERGE COMPLETE</promise>"}}'
+printf '%s\n' "{\"type\":\"text\",\"part\":{\"text\":\"${RALPH_FAKE_MERGE_MARKER:-<promise>MERGE COMPLETE</promise>}\"}}"
 EOF
   chmod +x "$bin_dir/opencode-sandbox"
 
@@ -328,6 +331,46 @@ merge_agent_receives_complete_wave_summary() {
   grep -Fq 'issue=kanai-b branch=ralph/kanai-b worktree=.worktrees/kanai-b log=.ralph/logs/kanai-b.jsonl result=failed' "$args_seen" || return 1
   grep -Fq 'Merge prompt body' "$args_seen" || return 1
   grep -Fq '<promise>MERGE COMPLETE</promise>' "$repo/.ralph/logs/merge-$(git -C "$repo" rev-parse --short HEAD).jsonl" || return 1
+
+  rm -rf "$repo" "$repo_seen" "$args_seen"
+}
+
+merge_agent_aborts_unresolved_merge_state_on_failure() {
+  [ "$(type -t ralph_run_merge_agent 2>/dev/null)" = function ] || return 1
+
+  local repo repo_seen args_seen output status
+  repo="$(mktemp -d /tmp/opencode/ralph-merge-conflict.XXXXXX)"
+  repo_seen="$(mktemp /tmp/opencode/ralph-merge-repo.XXXXXX)"
+  args_seen="$(mktemp /tmp/opencode/ralph-merge-args.XXXXXX)"
+
+  git -C "$repo" init --quiet --initial-branch=main
+  git -C "$repo" config user.email ralph@example.test
+  git -C "$repo" config user.name Ralph
+  printf '.ralph/\n' > "$repo/.git/info/exclude"
+  printf 'base\n' > "$repo/file.txt"
+  git -C "$repo" add file.txt
+  git -C "$repo" commit --quiet -m base
+  git -C "$repo" branch conflict
+  printf 'main\n' > "$repo/file.txt"
+  git -C "$repo" commit --quiet -am main
+  git -C "$repo" switch --quiet conflict
+  printf 'branch\n' > "$repo/file.txt"
+  git -C "$repo" commit --quiet -am conflict
+  git -C "$repo" switch --quiet main
+
+  set +e
+  output="$(RALPH_FAKE_MERGE_REPO="$repo_seen" RALPH_FAKE_MERGE_ARGS="$args_seen" \
+    RALPH_FAKE_MERGE_LEAVE_CONFLICT=1 RALPH_FAKE_MERGE_MARKER='<promise>MERGE FAILED</promise>' \
+    with_fake_merge_sandbox ralph_run_merge_agent "$repo" \
+      $'finished|kanai-a|conflict|.worktrees/kanai-a|.ralph/logs/kanai-a.jsonl|complete' \
+      'abc123' 'Merge prompt body')"
+  status=$?
+  set -e
+
+  [ "$status" -ne 0 ] || return 1
+  [[ "$output" == *'|failed'* ]] || return 1
+  [ ! -e "$repo/.git/MERGE_HEAD" ] || return 1
+  [ -z "$(git -C "$repo" status --porcelain --untracked-files=no)" ] || return 1
 
   rm -rf "$repo" "$repo_seen" "$args_seen"
 }
@@ -482,6 +525,7 @@ check "merge marker parsing distinguishes complete partial failed missing and fa
 check "wave summary includes base commit and worker records" builds_wave_summary
 check "merge agent skips waves without complete workers" merge_agent_skips_when_no_workers_completed
 check "merge agent receives structured complete wave summary" merge_agent_receives_complete_wave_summary
+check "merge agent aborts unresolved merge state on failure" merge_agent_aborts_unresolved_merge_state_on_failure
 check "ready AFK issues are claimed in bd output order" claims_ready_afk_issues_in_bd_order
 check "failed claims are skipped without duplicate assignments" skips_failed_claims_without_duplicates
 check "no remaining AFK issues reports no more tasks" reports_no_more_work_when_no_afk_issues_remain

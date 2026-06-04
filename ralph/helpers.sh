@@ -246,6 +246,14 @@ ralph_wave_summary() {
   done
 }
 
+ralph_abort_merge_if_needed() {
+  local repo="$1"
+
+  if git -C "$repo" rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1; then
+    git -C "$repo" merge --abort >/dev/null 2>&1 || return 1
+  fi
+}
+
 ralph_run_merge_agent() {
   local repo="$1"
   local wave_output="$2"
@@ -301,9 +309,12 @@ ralph_run_merge_agent() {
 
   case "$merge_result" in
     complete|partial)
+      ralph_abort_merge_if_needed "$repo" || return 1
+      ralph_require_clean_checkout "$repo" || return 1
       return 0
       ;;
     *)
+      ralph_abort_merge_if_needed "$repo" || return 1
       return 1
       ;;
   esac
