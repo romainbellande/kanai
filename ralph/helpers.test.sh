@@ -254,6 +254,84 @@ EOF
   return "$status"
 }
 
+with_fake_merge_sandbox() {
+  local bin_dir
+  bin_dir="$(mktemp -d /tmp/opencode/ralph-merge.XXXXXX)"
+
+  cat > "$bin_dir/opencode-sandbox" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo="$1"
+shift
+
+printf '%s\n' "$repo" > "$RALPH_FAKE_MERGE_REPO"
+printf '%s\n' "$*" > "$RALPH_FAKE_MERGE_ARGS"
+printf '%s\n' '{"type":"text","part":{"text":"merge output"}}'
+printf '%s\n' '{"type":"text","part":{"text":"<promise>MERGE COMPLETE</promise>"}}'
+EOF
+  chmod +x "$bin_dir/opencode-sandbox"
+
+  PATH="$bin_dir:$PATH" "$@"
+  local status=$?
+  rm -rf "$bin_dir"
+  return "$status"
+}
+
+merge_agent_skips_when_no_workers_completed() {
+  [ "$(type -t ralph_run_merge_agent 2>/dev/null)" = function ] || return 1
+
+  local repo output
+  repo="$(mktemp -d /tmp/opencode/ralph-merge-skip.XXXXXX)"
+
+  git -C "$repo" init --quiet
+  git -C "$repo" config user.email ralph@example.test
+  git -C "$repo" config user.name Ralph
+  printf 'base\n' > "$repo/base.txt"
+  git -C "$repo" add base.txt
+  git -C "$repo" commit --quiet -m base
+
+  output="$(ralph_run_merge_agent "$repo" $'finished|kanai-a|ralph/kanai-a|.worktrees/kanai-a|.ralph/logs/kanai-a.jsonl|incomplete' 'abc123' 'Prompt body')"
+
+  [ "$output" = 'merge|skipped|no_complete_workers' ] || return 1
+  [ ! -e "$repo/.ralph/logs" ] || return 1
+
+  rm -rf "$repo"
+}
+
+merge_agent_receives_complete_wave_summary() {
+  [ "$(type -t ralph_run_merge_agent 2>/dev/null)" = function ] || return 1
+
+  local repo repo_seen args_seen output
+  repo="$(mktemp -d /tmp/opencode/ralph-merge-run.XXXXXX)"
+  repo_seen="$(mktemp /tmp/opencode/ralph-merge-repo.XXXXXX)"
+  args_seen="$(mktemp /tmp/opencode/ralph-merge-args.XXXXXX)"
+
+  git -C "$repo" init --quiet
+  git -C "$repo" config user.email ralph@example.test
+  git -C "$repo" config user.name Ralph
+  printf '.ralph/\n' > "$repo/.git/info/exclude"
+  printf 'base\n' > "$repo/base.txt"
+  git -C "$repo" add base.txt
+  git -C "$repo" commit --quiet -m base
+
+  output="$(RALPH_FAKE_MERGE_REPO="$repo_seen" RALPH_FAKE_MERGE_ARGS="$args_seen" \
+    with_fake_merge_sandbox ralph_run_merge_agent "$repo" \
+      $'started|kanai-a\nfinished|kanai-a|ralph/kanai-a|.worktrees/kanai-a|.ralph/logs/kanai-a.jsonl|complete\nfinished|kanai-b|ralph/kanai-b|.worktrees/kanai-b|.ralph/logs/kanai-b.jsonl|failed' \
+      'abc123' 'Merge prompt body')"
+
+  [[ "$output" == merge_started\|.ralph/logs/merge-* ]] || return 1
+  [[ "$output" == *$'merge_finished|.ralph/logs/merge-'*'|complete'* ]] || return 1
+  [ "$(cat "$repo_seen")" = "$repo" ] || return 1
+  grep -Fq 'Ralph worker wave summary: Base commit:' "$args_seen" || return 1
+  grep -Fq 'issue=kanai-a branch=ralph/kanai-a worktree=.worktrees/kanai-a log=.ralph/logs/kanai-a.jsonl result=complete' "$args_seen" || return 1
+  grep -Fq 'issue=kanai-b branch=ralph/kanai-b worktree=.worktrees/kanai-b log=.ralph/logs/kanai-b.jsonl result=failed' "$args_seen" || return 1
+  grep -Fq 'Merge prompt body' "$args_seen" || return 1
+  grep -Fq '<promise>MERGE COMPLETE</promise>' "$repo/.ralph/logs/merge-$(git -C "$repo" rev-parse --short HEAD).jsonl" || return 1
+
+  rm -rf "$repo" "$repo_seen" "$args_seen"
+}
+
 runs_single_worker_in_isolated_worktree() {
   [ "$(type -t ralph_run_isolated_worker 2>/dev/null)" = function ] || return 1
 
@@ -402,6 +480,8 @@ check "clean checkout validation ignores runtime paths" ignores_ignored_runtime_
 check "worker marker parsing distinguishes complete incomplete missing and failed" parses_worker_markers
 check "merge marker parsing distinguishes complete partial failed missing and failed exit" parses_merge_markers
 check "wave summary includes base commit and worker records" builds_wave_summary
+check "merge agent skips waves without complete workers" merge_agent_skips_when_no_workers_completed
+check "merge agent receives structured complete wave summary" merge_agent_receives_complete_wave_summary
 check "ready AFK issues are claimed in bd output order" claims_ready_afk_issues_in_bd_order
 check "failed claims are skipped without duplicate assignments" skips_failed_claims_without_duplicates
 check "no remaining AFK issues reports no more tasks" reports_no_more_work_when_no_afk_issues_remain
