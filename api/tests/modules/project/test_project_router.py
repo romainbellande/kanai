@@ -321,7 +321,9 @@ async def test_project_owner_can_create_column_at_end(
         headers={"Authorization": "Bearer member-token"},
     )
 
-    assert [(column["name"], column["position"]) for column in list_response.json()] == [
+    assert [
+        (column["name"], column["position"]) for column in list_response.json()
+    ] == [
         ("To Do", 0),
         ("In Progress", 1),
         ("Done", 2),
@@ -410,7 +412,9 @@ async def test_project_owner_can_rename_column_without_reordering(
         headers={"Authorization": "Bearer member-token"},
     )
 
-    assert [(column["name"], column["position"]) for column in list_response.json()] == [
+    assert [
+        (column["name"], column["position"]) for column in list_response.json()
+    ] == [
         ("To Do", 0),
         ("Active", 1),
         ("Done", 2),
@@ -526,7 +530,9 @@ async def test_project_owner_can_reorder_columns(
         headers={"Authorization": "Bearer token"},
     )
 
-    assert [(column["name"], column["position"]) for column in list_response.json()] == [
+    assert [
+        (column["name"], column["position"]) for column in list_response.json()
+    ] == [
         ("Done", 0),
         ("To Do", 1),
         ("In Progress", 2),
@@ -634,7 +640,9 @@ async def test_project_owner_can_delete_empty_column_and_positions_are_normalize
         headers={"Authorization": "Bearer token"},
     )
 
-    assert [(column["name"], column["position"]) for column in list_response.json()] == [
+    assert [
+        (column["name"], column["position"]) for column in list_response.json()
+    ] == [
         ("To Do", 0),
         ("Done", 1),
     ]

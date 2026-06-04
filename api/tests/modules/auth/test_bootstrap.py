@@ -47,7 +47,9 @@ def test_get_auth_whitelist_paths_matches_public_docs_routes() -> None:
 def test_build_request_auth_boundary_wires_authenticator_and_whitelist_paths() -> None:
     redis_service = RedisService()
 
-    boundary = build_request_auth_boundary(settings=settings, redis_service=redis_service)
+    boundary = build_request_auth_boundary(
+        settings=settings, redis_service=redis_service
+    )
 
     assert isinstance(boundary, RequestAuthBoundary)
     assert isinstance(boundary._authenticate_request, AuthenticateRequest)

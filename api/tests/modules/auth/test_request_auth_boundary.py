@@ -98,8 +98,7 @@ def build_boundary(
             user_provisioner=user_provisioner,
         ),
         whitelist_paths=whitelist_paths,
-        user_repository_factory=lambda session: user_repository
-        or StubUserRepository(),
+        user_repository_factory=lambda session: user_repository or StubUserRepository(),
     )
 
 
@@ -147,7 +146,9 @@ async def test_cached_session_authenticates_scope_without_token_verification() -
 
 
 @pytest.mark.asyncio
-async def test_missing_session_verifies_token_saves_session_and_provisions_user() -> None:
+async def test_missing_session_verifies_token_saves_session_and_provisions_user() -> (
+    None
+):
     repository = StubSessionRepository()
     verified_context = AuthenticatedContext.from_session(build_session())
     verifier = StubTokenVerifier(verified_context)
@@ -234,7 +235,9 @@ async def test_current_user_resolves_authenticated_scope_subject() -> None:
     scope["auth"] = AuthenticatedContext.from_session(build_session(subject="user-1"))
     request = Request(scope)
 
-    current_user = await boundary.current_user(request, session=cast(AsyncSession, object()))
+    current_user = await boundary.current_user(
+        request, session=cast(AsyncSession, object())
+    )
 
     assert current_user is user
     assert user_repository.external_ids == ["user-1"]
