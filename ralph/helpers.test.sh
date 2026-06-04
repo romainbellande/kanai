@@ -512,6 +512,66 @@ afk_rejects_invalid_iterations() {
   ! bash "$ROOT_DIR/ralph/afk.sh" nope >/dev/null 2>&1
 }
 
+afk_loop_runs_one_wave_per_iteration_and_stops_at_limit() {
+  [ "$(type -t ralph_run_afk_loop 2>/dev/null)" = function ] || return 1
+
+  local repo bin_dir claims waves merges output
+  repo="$(mktemp -d /tmp/opencode/ralph-afk-loop.XXXXXX)"
+  bin_dir="$(mktemp -d /tmp/opencode/ralph-afk-bin.XXXXXX)"
+  claims="$(mktemp /tmp/opencode/ralph-afk-claims.XXXXXX)"
+  waves="$(mktemp /tmp/opencode/ralph-afk-waves.XXXXXX)"
+  merges="$(mktemp /tmp/opencode/ralph-afk-merges.XXXXXX)"
+
+  git -C "$repo" init --quiet
+  git -C "$repo" config user.email ralph@example.test
+  git -C "$repo" config user.name Ralph
+  mkdir -p "$repo/ralph"
+  printf 'worker prompt\n' > "$repo/ralph/worker-prompt.md"
+  printf 'merge prompt\n' > "$repo/ralph/merge-prompt.md"
+  printf 'base\n' > "$repo/base.txt"
+  git -C "$repo" add base.txt ralph/worker-prompt.md ralph/merge-prompt.md
+  git -C "$repo" commit --quiet -m base
+  printf '#!/usr/bin/env sh\n' > "$bin_dir/opencode-sandbox"
+  chmod +x "$bin_dir/opencode-sandbox"
+
+  ralph_claim_ready_afk_issues() {
+    local claim_count
+    claim_count="$(wc -l < "$RALPH_FAKE_AFK_CLAIMS")"
+    printf 'claim %s limit=%s\n' "$((claim_count + 1))" "$1" >> "$RALPH_FAKE_AFK_CLAIMS"
+    printf 'assigned|kanai-%s|[{"id":"kanai-%s"}]\n' "$((claim_count + 1))" "$((claim_count + 1))"
+  }
+
+  ralph_run_worker_wave() {
+    printf 'wave repo=%s assignment=%s prompt=%s\n' "$1" "$2" "$4" >> "$RALPH_FAKE_AFK_WAVES"
+    local issue_id
+    issue_id="${2#assigned|}"
+    issue_id="${issue_id%%|*}"
+    printf 'started|%s\nfinished|%s|ralph/%s|.worktrees/%s|.ralph/logs/%s.jsonl|complete\n' \
+      "$issue_id" "$issue_id" "$issue_id" "$issue_id" "$issue_id"
+  }
+
+  ralph_run_merge_agent() {
+    printf 'merge repo=%s prompt=%s wave=%s\n' "$1" "$4" "$2" >> "$RALPH_FAKE_AFK_MERGES"
+    printf 'merge_started|.ralph/logs/merge-test.jsonl\nmerge_finished|.ralph/logs/merge-test.jsonl|complete\n'
+  }
+
+  output="$(RALPH_FAKE_AFK_CLAIMS="$claims" RALPH_FAKE_AFK_WAVES="$waves" RALPH_FAKE_AFK_MERGES="$merges" \
+    RALPH_PARALLELISM=3 PATH="$bin_dir:$PATH" ralph_run_afk_loop 2 "$repo")"
+
+  [ "$(wc -l < "$claims")" -eq 2 ] || return 1
+  [ "$(wc -l < "$waves")" -eq 2 ] || return 1
+  [ "$(grep -c '^merge repo=' "$merges")" -eq 2 ] || return 1
+  grep -Fq 'claim 1 limit=3' "$claims" || return 1
+  grep -Fq 'claim 2 limit=3' "$claims" || return 1
+  grep -Fq 'prompt=worker prompt' "$waves" || return 1
+  grep -Fq 'prompt=merge prompt' "$merges" || return 1
+  [[ "$output" == *'Ralph merge completed wave 1.'* ]] || return 1
+  [[ "$output" == *'Ralph merge completed wave 2.'* ]] || return 1
+  [[ "$output" == *'Ralph stopped after 2 iterations.'* ]] || return 1
+
+  rm -rf "$repo" "$bin_dir" "$claims" "$waves" "$merges"
+}
+
 check "positive integer validation accepts positive values" accepts_positive_integer
 check "positive integer validation rejects missing zero negative and non-numeric values" rejects_invalid_positive_integer
 check "parallelism cap defaults to four" uses_default_parallelism_cap
@@ -537,5 +597,6 @@ check "worker wave launches assigned workers concurrently" wave_launches_workers
 check "afk runner exits without sandbox when no AFK issues remain" afk_exits_without_sandbox_when_no_more_work_remains
 check "afk runner exits without sandbox when no ready AFK work exists" afk_exits_without_sandbox_when_no_ready_work_exists
 check "afk runner rejects invalid iteration counts" afk_rejects_invalid_iterations
+check "afk loop runs one wave per iteration and stops at the iteration limit" afk_loop_runs_one_wave_per_iteration_and_stops_at_limit
 
 exit "$failures"

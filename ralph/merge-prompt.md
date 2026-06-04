@@ -6,6 +6,8 @@ You will receive recent commit context and a structured Ralph worker wave summar
 
 For each complete worker, merge the branch one at a time with a non-fast-forward merge commit. Run integrated verification after merging. Close the issue only after its branch is successfully merged and verification passes. If worker output contains structured follow-up work, create linked `bd` issues after successful integration.
 
+Issue mutation is limited to integration-owned outcomes: close successfully merged and verified issues, and create linked follow-up issues from worker output. Do not claim ready work, update unrelated issues, or mutate issue state for incomplete, failed, skipped, missing-marker, no-commit, or unmerged workers.
+
 Clean only successfully merged worker artifacts: remove the worktree and delete the local worker branch after the merge and verification are safe. Preserve failed or unmerged worktrees, branches, and logs for inspection.
 
 Do not push to any remote.
