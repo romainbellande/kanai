@@ -221,6 +221,121 @@ reports_no_ready_work_when_afk_issues_remain() {
   rm -f "$calls"
 }
 
+with_fake_opencode_sandbox() {
+  local bin_dir
+  bin_dir="$(mktemp -d /tmp/opencode/ralph-sandbox.XXXXXX)"
+
+  cat > "$bin_dir/opencode-sandbox" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+worktree="$1"
+shift
+
+printf '%s\n' "$worktree" > "$RALPH_FAKE_SANDBOX_WORKTREE"
+printf '%s\n' "$*" > "$RALPH_FAKE_SANDBOX_ARGS"
+
+git -C "$worktree" config user.email ralph@example.test
+git -C "$worktree" config user.name Ralph
+if [ "${RALPH_FAKE_SANDBOX_COMMIT:-1}" = 1 ]; then
+  printf 'worker change\n' > "$worktree/worker.txt"
+  git -C "$worktree" add worker.txt
+  git -C "$worktree" commit --quiet -m 'worker commit'
+fi
+
+printf '%s\n' '{"type":"text","part":{"text":"worker output"}}'
+printf '%s\n' '{"type":"text","part":{"text":"<promise>ISSUE COMPLETE</promise>"}}'
+EOF
+  chmod +x "$bin_dir/opencode-sandbox"
+
+  PATH="$bin_dir:$PATH" "$@"
+  local status=$?
+  rm -rf "$bin_dir"
+  return "$status"
+}
+
+runs_single_worker_in_isolated_worktree() {
+  [ "$(type -t ralph_run_isolated_worker 2>/dev/null)" = function ] || return 1
+
+  local repo worktree_seen args_seen record issue branch worktree log result
+  repo="$(mktemp -d /tmp/opencode/ralph-worker-repo.XXXXXX)"
+  worktree_seen="$(mktemp /tmp/opencode/ralph-worker-worktree.XXXXXX)"
+  args_seen="$(mktemp /tmp/opencode/ralph-worker-args.XXXXXX)"
+
+  git -C "$repo" init --quiet
+  git -C "$repo" config user.email ralph@example.test
+  git -C "$repo" config user.name Ralph
+  printf '.worktrees/\n.ralph/\n' > "$repo/.git/info/exclude"
+  printf 'base\n' > "$repo/base.txt"
+  git -C "$repo" add base.txt
+  git -C "$repo" commit --quiet -m base
+
+  record="$(RALPH_FAKE_SANDBOX_WORKTREE="$worktree_seen" RALPH_FAKE_SANDBOX_ARGS="$args_seen" \
+    with_fake_opencode_sandbox ralph_run_isolated_worker "$repo" kanai-1ra.3 '[{"id":"kanai-1ra.3"}]' 'abc123' 'Prompt body')"
+
+  IFS='|' read -r issue branch worktree log result <<< "$record"
+  [ "$issue" = kanai-1ra.3 ] || return 1
+  [ "$branch" = ralph/kanai-1ra.3 ] || return 1
+  [ "$worktree" = .worktrees/kanai-1ra.3 ] || return 1
+  [ "$log" = .ralph/logs/kanai-1ra.3.jsonl ] || return 1
+  [ "$result" = complete ] || return 1
+  [ "$(cat "$worktree_seen")" = "$repo/.worktrees/kanai-1ra.3" ] || return 1
+  grep -Fq 'Assigned AFK issue JSON: [{"id":"kanai-1ra.3"}]' "$args_seen" || return 1
+  grep -Fq 'Issue tracking is read-only after assignment' "$args_seen" || return 1
+  grep -Fq '<promise>ISSUE COMPLETE</promise>' "$repo/.ralph/logs/kanai-1ra.3.jsonl" || return 1
+  [ "$(git -C "$repo" rev-parse ralph/kanai-1ra.3)" != "$(git -C "$repo" rev-parse HEAD)" ] || return 1
+
+  git -C "$repo" worktree remove --force "$repo/.worktrees/kanai-1ra.3" >/dev/null 2>&1 || true
+  rm -rf "$repo" "$worktree_seen" "$args_seen"
+}
+
+skips_existing_worker_branch_without_sandbox() {
+  [ "$(type -t ralph_run_isolated_worker 2>/dev/null)" = function ] || return 1
+
+  local repo record
+  repo="$(mktemp -d /tmp/opencode/ralph-worker-skip.XXXXXX)"
+
+  git -C "$repo" init --quiet
+  git -C "$repo" config user.email ralph@example.test
+  git -C "$repo" config user.name Ralph
+  printf 'base\n' > "$repo/base.txt"
+  git -C "$repo" add base.txt
+  git -C "$repo" commit --quiet -m base
+  git -C "$repo" branch ralph/kanai-1ra.3
+
+  record="$(ralph_run_isolated_worker "$repo" kanai-1ra.3 '[{"id":"kanai-1ra.3"}]' 'abc123' 'Prompt body')"
+
+  [ "$record" = 'kanai-1ra.3|ralph/kanai-1ra.3|.worktrees/kanai-1ra.3|.ralph/logs/kanai-1ra.3.jsonl|skipped' ] || return 1
+  [ ! -e "$repo/.worktrees/kanai-1ra.3" ] || return 1
+
+  rm -rf "$repo"
+}
+
+complete_marker_without_commit_is_not_success() {
+  [ "$(type -t ralph_run_isolated_worker 2>/dev/null)" = function ] || return 1
+
+  local repo worktree_seen args_seen record result
+  repo="$(mktemp -d /tmp/opencode/ralph-worker-no-commit.XXXXXX)"
+  worktree_seen="$(mktemp /tmp/opencode/ralph-worker-worktree.XXXXXX)"
+  args_seen="$(mktemp /tmp/opencode/ralph-worker-args.XXXXXX)"
+
+  git -C "$repo" init --quiet
+  git -C "$repo" config user.email ralph@example.test
+  git -C "$repo" config user.name Ralph
+  printf 'base\n' > "$repo/base.txt"
+  git -C "$repo" add base.txt
+  git -C "$repo" commit --quiet -m base
+
+  record="$(RALPH_FAKE_SANDBOX_COMMIT=0 RALPH_FAKE_SANDBOX_WORKTREE="$worktree_seen" RALPH_FAKE_SANDBOX_ARGS="$args_seen" \
+    with_fake_opencode_sandbox ralph_run_isolated_worker "$repo" kanai-1ra.3 '[{"id":"kanai-1ra.3"}]' 'abc123' 'Prompt body')"
+
+  result="${record##*|}"
+  [ "$result" = no_commit ] || return 1
+
+  git -C "$repo" worktree remove --force "$repo/.worktrees/kanai-1ra.3" >/dev/null 2>&1 || true
+  rm -rf "$repo" "$worktree_seen" "$args_seen"
+}
+
 afk_exits_without_sandbox_when_no_more_work_remains() {
   local calls output
   calls="$(mktemp /tmp/opencode/ralph-bd-calls.XXXXXX)"
@@ -262,6 +377,9 @@ check "ready AFK issues are claimed in bd output order" claims_ready_afk_issues_
 check "failed claims are skipped without duplicate assignments" skips_failed_claims_without_duplicates
 check "no remaining AFK issues reports no more tasks" reports_no_more_work_when_no_afk_issues_remain
 check "blocked AFK issues report no ready tasks" reports_no_ready_work_when_afk_issues_remain
+check "single worker runs in deterministic isolated worktree" runs_single_worker_in_isolated_worktree
+check "existing worker branch skips sandbox launch" skips_existing_worker_branch_without_sandbox
+check "complete marker without worker commit is not success" complete_marker_without_commit_is_not_success
 check "afk runner exits without sandbox when no AFK issues remain" afk_exits_without_sandbox_when_no_more_work_remains
 check "afk runner exits without sandbox when no ready AFK work exists" afk_exits_without_sandbox_when_no_ready_work_exists
 check "afk runner rejects invalid iteration counts" afk_rejects_invalid_iterations
