@@ -1,16 +1,28 @@
 # ISSUES
 
-Local issue files from `issues/` are provided at start of context. Parse them to understand the open issues.
+Use `bd` as the source of truth for issues. Query dependency-aware ready work with:
+
+```bash
+bd ready --json --label afk --exclude-label hitl
+```
 
 You will work on the AFK issues only, not the HITL ones.
 
 You've also been passed a file containing the last few commits. Review these to understand what work has been done.
 
-If all AFK tasks are complete, output <promise>NO MORE TASKS</promise>.
+If `bd ready` returns no AFK issues, check whether any AFK issues remain open or blocked:
+
+```bash
+bd list --json --status open,in_progress,blocked --label afk --exclude-label hitl
+```
+
+If no AFK issues remain, output <promise>NO MORE TASKS</promise>.
+
+If AFK issues remain but none are ready, output <promise>NO READY TASKS</promise> and include the blocked issue IDs and blockers.
 
 # TASK SELECTION
 
-Pick the next task. Prioritize tasks in this order:
+Pick the next ready AFK task. Prioritize tasks in this order:
 
 1. Critical bugfixes
 2. Development infrastructure
@@ -25,6 +37,14 @@ TL;DR - build a tiny, end-to-end slice of the feature first, then expand it out.
 
 4. Polish and quick wins
 5. Refactors
+
+Claim the selected issue before implementation:
+
+```bash
+bd update <issue-id> --claim --json
+```
+
+If claiming fails because another worker claimed it, return to `bd ready --json --label afk --exclude-label hitl` and pick another issue.
 
 # EXPLORATION
 
@@ -51,9 +71,23 @@ Make a git commit. The commit message must:
 
 # THE ISSUE
 
-If the task is complete, move the issue file to `issues/done/`.
+If the task is complete, close the issue:
 
-If the task is not complete, add a note to the issue file with what was done.
+```bash
+bd close <issue-id> --reason "Completed: <short summary>" --json
+```
+
+If the task is not complete, append notes with what was done, what remains, and any blocker:
+
+```bash
+bd update <issue-id> --append-notes "<progress note>" --json
+```
+
+If new follow-up work is discovered, create a linked `bd` issue instead of a markdown TODO:
+
+```bash
+bd create "<follow-up title>" --description "<context>" --type task --priority 2 --deps discovered-from:<issue-id> --json
+```
 
 # FINAL RULES
 
