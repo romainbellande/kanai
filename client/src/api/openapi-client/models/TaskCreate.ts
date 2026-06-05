@@ -21,7 +21,6 @@ import { mapValues } from '../runtime';
  *     title: Task title.
  *     column_id: Optional workflow column ID. Defaults to the first project column.
  *     priority: Priority level for the task. Defaults to "medium".
- *     rank: Optional sortable LexoRank-style position. If omitted, appends to column.
  *     assignee_id: Optional user ID assigned to the task.
  *     description: Optional task details.
  *     acceptance_criteria: Optional criteria required to complete the task.
@@ -48,12 +47,6 @@ export interface TaskCreate {
      * @memberof TaskCreate
      */
     priority?: string;
-    /**
-     * 
-     * @type {string}
-     * @memberof TaskCreate
-     */
-    rank?: string | null;
     /**
      * 
      * @type {string}
@@ -101,7 +94,6 @@ export function TaskCreateFromJSONTyped(json: any, ignoreDiscriminator: boolean)
         'title': json['title'],
         'columnId': json['column_id'] == null ? undefined : json['column_id'],
         'priority': json['priority'] == null ? undefined : json['priority'],
-        'rank': json['rank'] == null ? undefined : json['rank'],
         'assigneeId': json['assignee_id'] == null ? undefined : json['assignee_id'],
         'description': json['description'] == null ? undefined : json['description'],
         'acceptanceCriteria': json['acceptance_criteria'] == null ? undefined : json['acceptance_criteria'],
@@ -123,7 +115,6 @@ export function TaskCreateToJSONTyped(value?: TaskCreate | null, ignoreDiscrimin
         'title': value['title'],
         'column_id': value['columnId'],
         'priority': value['priority'],
-        'rank': value['rank'],
         'assignee_id': value['assigneeId'],
         'description': value['description'],
         'acceptance_criteria': value['acceptanceCriteria'],

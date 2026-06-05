@@ -221,6 +221,188 @@ async def test_move_task_persists_within_column_bottom_placement(
 
 
 @pytest.mark.asyncio
+async def test_move_task_appends_when_neighbors_are_omitted(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with session_factory() as session:
+        owner = User(externalId="owner")
+        project = Project(name="Board", code="BRD", priority="medium")
+        session.add_all([owner, project])
+        await session.commit()
+        await session.refresh(owner)
+        await session.refresh(project)
+        assert owner.id is not None
+        assert project.id is not None
+        session.add(ProjectOwner(project_id=project.id, user_id=owner.id))
+        todo_column = ProjectColumn(project_id=project.id, name="todo", position=0)
+        done_column = ProjectColumn(project_id=project.id, name="done", position=1)
+        session.add_all([todo_column, done_column])
+        await session.commit()
+        await session.refresh(todo_column)
+        await session.refresh(done_column)
+        assert todo_column.id is not None
+        assert done_column.id is not None
+        moved = Task(
+            project_id=project.id,
+            column_id=todo_column.id,
+            title="Moved",
+            priority="medium",
+            rank="U",
+        )
+        last_done = Task(
+            project_id=project.id,
+            column_id=done_column.id,
+            title="Last done",
+            priority="medium",
+            rank="j",
+        )
+        session.add_all([moved, last_done])
+        await session.commit()
+        await session.refresh(moved)
+        await session.refresh(last_done)
+        assert moved.id is not None
+        assert last_done.id is not None
+
+        updated = await TaskService(session).move(
+            project_id=project.id,
+            task_id=moved.id,
+            user_id=owner.id,
+            destination=TaskDestination(column_id=done_column.id),
+        )
+
+        assert updated.column_id == done_column.id
+        assert updated.rank > last_done.rank
+
+
+@pytest.mark.asyncio
+async def test_move_task_rejects_non_adjacent_neighbors(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with session_factory() as session:
+        owner = User(externalId="owner")
+        project = Project(name="Board", code="BRD", priority="medium")
+        session.add_all([owner, project])
+        await session.commit()
+        await session.refresh(owner)
+        await session.refresh(project)
+        assert owner.id is not None
+        assert project.id is not None
+        session.add(ProjectOwner(project_id=project.id, user_id=owner.id))
+        todo_column = ProjectColumn(project_id=project.id, name="todo", position=0)
+        session.add(todo_column)
+        await session.commit()
+        await session.refresh(todo_column)
+        assert todo_column.id is not None
+        moved = Task(
+            project_id=project.id,
+            column_id=todo_column.id,
+            title="Moved",
+            priority="medium",
+            rank="U",
+        )
+        first = Task(
+            project_id=project.id,
+            column_id=todo_column.id,
+            title="First",
+            priority="medium",
+            rank="a",
+        )
+        middle = Task(
+            project_id=project.id,
+            column_id=todo_column.id,
+            title="Middle",
+            priority="medium",
+            rank="j",
+        )
+        last = Task(
+            project_id=project.id,
+            column_id=todo_column.id,
+            title="Last",
+            priority="medium",
+            rank="z",
+        )
+        session.add_all([moved, first, middle, last])
+        await session.commit()
+        await session.refresh(moved)
+        await session.refresh(first)
+        await session.refresh(last)
+        assert moved.id is not None
+        assert first.id is not None
+        assert last.id is not None
+
+        with pytest.raises(HTTPException) as error:
+            await TaskService(session).move(
+                project_id=project.id,
+                task_id=moved.id,
+                user_id=owner.id,
+                destination=TaskDestination(
+                    column_id=todo_column.id,
+                    before_task_id=first.id,
+                    after_task_id=last.id,
+                ),
+            )
+
+        assert error.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_move_task_rejects_neighbors_outside_destination_column(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with session_factory() as session:
+        owner = User(externalId="owner")
+        project = Project(name="Board", code="BRD", priority="medium")
+        session.add_all([owner, project])
+        await session.commit()
+        await session.refresh(owner)
+        await session.refresh(project)
+        assert owner.id is not None
+        assert project.id is not None
+        session.add(ProjectOwner(project_id=project.id, user_id=owner.id))
+        todo_column = ProjectColumn(project_id=project.id, name="todo", position=0)
+        done_column = ProjectColumn(project_id=project.id, name="done", position=1)
+        session.add_all([todo_column, done_column])
+        await session.commit()
+        await session.refresh(todo_column)
+        await session.refresh(done_column)
+        assert todo_column.id is not None
+        assert done_column.id is not None
+        moved = Task(
+            project_id=project.id,
+            column_id=todo_column.id,
+            title="Moved",
+            priority="medium",
+            rank="U",
+        )
+        wrong_column_neighbor = Task(
+            project_id=project.id,
+            column_id=todo_column.id,
+            title="Wrong column",
+            priority="medium",
+            rank="j",
+        )
+        session.add_all([moved, wrong_column_neighbor])
+        await session.commit()
+        await session.refresh(moved)
+        await session.refresh(wrong_column_neighbor)
+        assert moved.id is not None
+        assert wrong_column_neighbor.id is not None
+
+        with pytest.raises(HTTPException) as error:
+            await TaskService(session).move(
+                project_id=project.id,
+                task_id=moved.id,
+                user_id=owner.id,
+                destination=TaskDestination(
+                    column_id=done_column.id,
+                    before_task_id=wrong_column_neighbor.id,
+                ),
+            )
+
+        assert error.value.status_code == 400
+
+
+@pytest.mark.asyncio
 async def test_move_task_denies_users_without_project_access(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:

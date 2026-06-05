@@ -156,9 +156,9 @@ export function useProjectTaskBoard(projectId: string) {
 	const api = useKanaiApi();
 	const tasksQuery = useQuery(api.tasks.list(projectId));
 	const columnsQuery = useQuery(api.projectColumns.list(projectId));
-	const updateTaskMutation = useMutation({
-		mutationFn: (input: Parameters<typeof api.tasks.update>[1]) =>
-			api.tasks.update(projectId, input),
+	const moveTaskMutation = useMutation({
+		mutationFn: (input: Parameters<typeof api.tasks.move>[1]) =>
+			api.tasks.move(projectId, input),
 	});
 	const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
 	const [activeDropColumnId, setActiveDropColumnId] = useState<ColumnId | null>(
@@ -206,10 +206,14 @@ export function useProjectTaskBoard(projectId: string) {
 			rank,
 		});
 
-		updateTaskMutation.mutate(
+		moveTaskMutation.mutate(
 			{
 				taskId: input.taskId,
-				values: { columnId: input.toColumnId, rank },
+				destination: {
+					columnId: input.toColumnId,
+					beforeTaskId: input.beforeTaskId,
+					afterTaskId: input.afterTaskId,
+				},
 			},
 			{
 				onError: () => {

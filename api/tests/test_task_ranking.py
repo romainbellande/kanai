@@ -7,7 +7,7 @@ from pydantic import ValidationError
 
 from app.features.tasks.service import rank_between, task_to_read
 from app.models.task import Task
-from app.schemas.task import TaskUpdate
+from app.schemas.task import TaskCreate, TaskUpdate
 
 
 def test_rank_between_returns_sortable_midpoints() -> None:
@@ -44,3 +44,12 @@ def test_task_update_rejects_null_for_required_fields() -> None:
     """Required task fields can be omitted for PATCH, but not nulled."""
     with pytest.raises(ValidationError):
         TaskUpdate(title=None)
+
+
+def test_task_write_payloads_reject_client_authored_rank() -> None:
+    """Create and generic update cannot persist caller-provided ranks."""
+    with pytest.raises(ValidationError):
+        TaskCreate.model_validate({"title": "Ranked", "rank": "j"})
+
+    with pytest.raises(ValidationError):
+        TaskUpdate.model_validate({"rank": "j"})

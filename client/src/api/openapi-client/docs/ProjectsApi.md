@@ -16,6 +16,7 @@ All URIs are relative to *http://localhost*
 | [**listProjectColumnsProjectsProjectIdColumnsGet**](ProjectsApi.md#listprojectcolumnsprojectsprojectidcolumnsget) | **GET** /projects/{project_id}/columns | List Project Columns |
 | [**listProjectsProjectsGet**](ProjectsApi.md#listprojectsprojectsget) | **GET** /projects | List Projects |
 | [**listTasksEndpointProjectsProjectIdTasksGet**](ProjectsApi.md#listtasksendpointprojectsprojectidtasksget) | **GET** /projects/{project_id}/tasks | List Tasks Endpoint |
+| [**moveTaskEndpointProjectsProjectIdTasksTaskIdMovePut**](ProjectsApi.md#movetaskendpointprojectsprojectidtaskstaskidmoveput) | **PUT** /projects/{project_id}/tasks/{task_id}/move | Move Task Endpoint |
 | [**reorderProjectColumnsProjectsProjectIdColumnsReorderPut**](ProjectsApi.md#reorderprojectcolumnsprojectsprojectidcolumnsreorderput) | **PUT** /projects/{project_id}/columns/reorder | Reorder Project Columns |
 | [**updateProjectColumnProjectsProjectIdColumnsColumnIdPatch**](ProjectsApi.md#updateprojectcolumnprojectsprojectidcolumnscolumnidpatch) | **PATCH** /projects/{project_id}/columns/{column_id} | Update Project Column |
 | [**updateProjectProjectsProjectIdPatch**](ProjectsApi.md#updateprojectprojectsprojectidpatch) | **PATCH** /projects/{project_id} | Update Project |
@@ -836,6 +837,80 @@ No authorization required
 ### HTTP request headers
 
 - **Content-Type**: Not defined
+- **Accept**: `application/json`
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+| **200** | Successful Response |  -  |
+| **422** | Validation Error |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+
+## moveTaskEndpointProjectsProjectIdTasksTaskIdMovePut
+
+> TaskRead moveTaskEndpointProjectsProjectIdTasksTaskIdMovePut(projectId, taskId, taskDestination)
+
+Move Task Endpoint
+
+Move a task to a board destination accessible to the current user.
+
+### Example
+
+```ts
+import {
+  Configuration,
+  ProjectsApi,
+} from '';
+import type { MoveTaskEndpointProjectsProjectIdTasksTaskIdMovePutRequest } from '';
+
+async function example() {
+  console.log("🚀 Testing  SDK...");
+  const api = new ProjectsApi();
+
+  const body = {
+    // string
+    projectId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+    // string
+    taskId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+    // TaskDestination
+    taskDestination: ...,
+  } satisfies MoveTaskEndpointProjectsProjectIdTasksTaskIdMovePutRequest;
+
+  try {
+    const data = await api.moveTaskEndpointProjectsProjectIdTasksTaskIdMovePut(body);
+    console.log(data);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+// Run the test
+example().catch(console.error);
+```
+
+### Parameters
+
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **projectId** | `string` |  | [Defaults to `undefined`] |
+| **taskId** | `string` |  | [Defaults to `undefined`] |
+| **taskDestination** | [TaskDestination](TaskDestination.md) |  | |
+
+### Return type
+
+[**TaskRead**](TaskRead.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+- **Content-Type**: `application/json`
 - **Accept**: `application/json`
 
 

@@ -20,6 +20,8 @@ import {
 import {
 	type CreateTaskInput,
 	createProjectTask,
+	type MoveTaskInput,
+	moveProjectTask,
 	projectTasksQueryKey,
 	projectTasksQueryOptions,
 	type Task,
@@ -98,6 +100,20 @@ export function useKanaiApi() {
 					projectId,
 					taskId,
 					taskUpdate: values,
+				});
+				await queryClient.invalidateQueries({
+					queryKey: projectTasksQueryKey(projectId),
+				});
+				return task;
+			},
+			move: async (
+				projectId: string,
+				{ taskId, destination }: { taskId: string; destination: MoveTaskInput },
+			) => {
+				const task = await moveProjectTask({
+					projectId,
+					taskId,
+					destination,
 				});
 				await queryClient.invalidateQueries({
 					queryKey: projectTasksQueryKey(projectId),

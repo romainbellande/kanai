@@ -110,6 +110,39 @@ async def test_create_task_accepts_project_column(
 
 
 @pytest.mark.asyncio
+async def test_create_task_appends_rank_server_side(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with session_factory() as session:
+        owner = User(externalId="owner")
+        project = Project(name="Board", code="BRD", priority="medium")
+        session.add_all([owner, project])
+        await session.commit()
+        await session.refresh(owner)
+        await session.refresh(project)
+        assert owner.id is not None
+        assert project.id is not None
+        column = ProjectColumn(project_id=project.id, name="Backlog", position=0)
+        session.add_all([ProjectOwner(project_id=project.id, user_id=owner.id), column])
+        await session.commit()
+        await session.refresh(column)
+        assert column.id is not None
+
+        first = await TaskService(session).create(
+            project_id=project.id,
+            user_id=owner.id,
+            payload=TaskCreate(title="First", column_id=column.id),
+        )
+        second = await TaskService(session).create(
+            project_id=project.id,
+            user_id=owner.id,
+            payload=TaskCreate(title="Second", column_id=column.id),
+        )
+
+        assert second.rank > first.rank
+
+
+@pytest.mark.asyncio
 async def test_create_task_rejects_foreign_project_column(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:

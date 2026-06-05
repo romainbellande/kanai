@@ -17,7 +17,6 @@ class TaskCreate(BaseModel):
         title: Task title.
         column_id: Optional workflow column ID. Defaults to the first project column.
         priority: Priority level for the task. Defaults to "medium".
-        rank: Optional sortable LexoRank-style position. If omitted, appends to column.
         assignee_id: Optional user ID assigned to the task.
         description: Optional task details.
         acceptance_criteria: Optional criteria required to complete the task.
@@ -29,7 +28,6 @@ class TaskCreate(BaseModel):
     title: str
     column_id: UUID | None = None
     priority: str = "medium"
-    rank: str | None = None
     assignee_id: UUID | None = None
     description: str | None = None
     acceptance_criteria: str | None = None
@@ -43,7 +41,6 @@ class TaskUpdate(BaseModel):
         title: Optional replacement task title.
         column_id: Optional replacement workflow column ID.
         priority: Optional replacement priority level.
-        rank: Optional replacement sortable LexoRank-style position.
         assignee_id: Optional replacement user ID assigned to the task.
         description: Optional replacement task details.
         acceptance_criteria: Optional replacement completion criteria.
@@ -55,7 +52,6 @@ class TaskUpdate(BaseModel):
     title: str | None = None
     column_id: UUID | None = None
     priority: str | None = None
-    rank: str | None = None
     assignee_id: UUID | None = Field(
         default=None,
         json_schema_extra={NULLABLE_UPDATE_FIELD: True},

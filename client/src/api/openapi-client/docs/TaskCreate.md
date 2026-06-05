@@ -1,7 +1,7 @@
 
 # TaskCreate
 
-Request payload for creating a project task.  Parameters:     title: Task title.     column_id: Optional workflow column ID. Defaults to the first project column.     priority: Priority level for the task. Defaults to \"medium\".     rank: Optional sortable LexoRank-style position. If omitted, appends to column.     assignee_id: Optional user ID assigned to the task.     description: Optional task details.     acceptance_criteria: Optional criteria required to complete the task.     tag: Optional task tag.
+Request payload for creating a project task.  Parameters:     title: Task title.     column_id: Optional workflow column ID. Defaults to the first project column.     priority: Priority level for the task. Defaults to \"medium\".     assignee_id: Optional user ID assigned to the task.     description: Optional task details.     acceptance_criteria: Optional criteria required to complete the task.     tag: Optional task tag.
 
 ## Properties
 
@@ -10,7 +10,6 @@ Name | Type
 `title` | string
 `columnId` | string
 `priority` | string
-`rank` | string
 `assigneeId` | string
 `description` | string
 `acceptanceCriteria` | string
@@ -26,7 +25,6 @@ const example = {
   "title": null,
   "columnId": null,
   "priority": null,
-  "rank": null,
   "assigneeId": null,
   "description": null,
   "acceptanceCriteria": null,

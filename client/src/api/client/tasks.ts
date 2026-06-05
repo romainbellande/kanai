@@ -1,6 +1,10 @@
 import { queryOptions, useMutation, useQuery } from "@tanstack/react-query";
 
-import type { TaskCreate, TaskUpdate } from "#/api/openapi-client";
+import type {
+	TaskCreate,
+	TaskDestination,
+	TaskUpdate,
+} from "#/api/openapi-client";
 
 import { getAccessToken, getApiBaseUrl } from "./utils";
 
@@ -21,6 +25,7 @@ export type Task = {
 
 export type CreateTaskInput = TaskCreate;
 export type UpdateTaskInput = TaskUpdate;
+export type MoveTaskInput = TaskDestination;
 
 type TaskJson = {
 	id: string;
@@ -63,11 +68,18 @@ function taskInputToJson(values: CreateTaskInput | UpdateTaskInput) {
 		title: values.title,
 		column_id: values.columnId,
 		priority: values.priority,
-		rank: values.rank,
 		assignee_id: values.assigneeId,
 		description: values.description,
 		acceptance_criteria: values.acceptanceCriteria,
 		tag: values.tag,
+	};
+}
+
+function taskDestinationToJson(values: MoveTaskInput) {
+	return {
+		column_id: values.columnId,
+		before_task_id: values.beforeTaskId,
+		after_task_id: values.afterTaskId,
 	};
 }
 
@@ -142,6 +154,26 @@ export async function updateProjectTask({
 	return mapTask(task);
 }
 
+export async function moveProjectTask({
+	projectId,
+	taskId,
+	destination,
+}: {
+	projectId: string;
+	taskId: string;
+	destination: MoveTaskInput;
+}): Promise<Task> {
+	const task = await requestProjectTasks<TaskJson>(
+		`/projects/${projectId}/tasks/${taskId}/move`,
+		{
+			method: "PUT",
+			body: JSON.stringify(taskDestinationToJson(destination)),
+		},
+	);
+
+	return mapTask(task);
+}
+
 export function projectTasksQueryOptions(projectId: string) {
 	return queryOptions({
 		queryKey: projectTasksQueryKey(projectId),
@@ -159,4 +191,8 @@ export function useCreateProjectTaskMutation() {
 
 export function useUpdateProjectTaskMutation() {
 	return useMutation({ mutationFn: updateProjectTask });
+}
+
+export function useMoveProjectTaskMutation() {
+	return useMutation({ mutationFn: moveProjectTask });
 }

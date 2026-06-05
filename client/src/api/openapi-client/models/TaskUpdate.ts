@@ -21,7 +21,6 @@ import { mapValues } from '../runtime';
  *     title: Optional replacement task title.
  *     column_id: Optional replacement workflow column ID.
  *     priority: Optional replacement priority level.
- *     rank: Optional replacement sortable LexoRank-style position.
  *     assignee_id: Optional replacement user ID assigned to the task.
  *     description: Optional replacement task details.
  *     acceptance_criteria: Optional replacement completion criteria.
@@ -48,12 +47,6 @@ export interface TaskUpdate {
      * @memberof TaskUpdate
      */
     priority?: string | null;
-    /**
-     * 
-     * @type {string}
-     * @memberof TaskUpdate
-     */
-    rank?: string | null;
     /**
      * 
      * @type {string}
@@ -100,7 +93,6 @@ export function TaskUpdateFromJSONTyped(json: any, ignoreDiscriminator: boolean)
         'title': json['title'] == null ? undefined : json['title'],
         'columnId': json['column_id'] == null ? undefined : json['column_id'],
         'priority': json['priority'] == null ? undefined : json['priority'],
-        'rank': json['rank'] == null ? undefined : json['rank'],
         'assigneeId': json['assignee_id'] == null ? undefined : json['assignee_id'],
         'description': json['description'] == null ? undefined : json['description'],
         'acceptanceCriteria': json['acceptance_criteria'] == null ? undefined : json['acceptance_criteria'],
@@ -122,7 +114,6 @@ export function TaskUpdateToJSONTyped(value?: TaskUpdate | null, ignoreDiscrimin
         'title': value['title'],
         'column_id': value['columnId'],
         'priority': value['priority'],
-        'rank': value['rank'],
         'assignee_id': value['assigneeId'],
         'description': value['description'],
         'acceptance_criteria': value['acceptanceCriteria'],
