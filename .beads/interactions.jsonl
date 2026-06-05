@@ -8,3 +8,4 @@
 {"id":"int-295f083b","kind":"field_change","created_at":"2026-06-04T20:44:33.443711439Z","actor":"naimor","issue_id":"kanai-1ra.8","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Completed: hardened end-to-end AFK wave loop orchestration"}}
 {"id":"int-12e153a6","kind":"field_change","created_at":"2026-06-05T10:51:28.030050502Z","actor":"Romain Bellande","issue_id":"kanai-1ra","extra":{"field":"status","new_value":"closed","old_value":"open"}}
 {"id":"int-74ca4982","kind":"field_change","created_at":"2026-06-05T10:51:41.41092518Z","actor":"Romain Bellande","issue_id":"kanai-jxd.1","extra":{"field":"status","new_value":"open","old_value":"in_progress"}}
+{"id":"int-4a9b0abb","kind":"field_change","created_at":"2026-06-05T11:46:23.502008418Z","actor":"Romain Bellande","issue_id":"kanai-jxd.1","extra":{"field":"status","new_value":"closed","old_value":"open","reason":"Merged and verified in Ralph integration"}}
