@@ -822,3 +822,96 @@ async def test_task_crud_endpoints_do_not_expose_due_fields(
         task = await session.get(Task, UUID(created_task["id"]))
 
     assert task is None
+
+
+@pytest.mark.asyncio
+async def test_task_move_endpoint_returns_server_ranked_task(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    member_id = users["member"].id
+    assert member_id is not None
+
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "name": "Move Contract",
+            "code": "MOV",
+            "priority": "medium",
+            "member_ids": [str(member_id)],
+        },
+    )
+    project_id = project_response.json()["id"]
+    columns_response = await client.get(
+        f"/projects/{project_id}/columns",
+        headers={"Authorization": "Bearer token"},
+    )
+    todo_column_id = columns_response.json()[0]["id"]
+    done_column_id = columns_response.json()[2]["id"]
+    moved_response = await client.post(
+        f"/projects/{project_id}/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={"title": "Moved", "column_id": todo_column_id},
+    )
+    first_done_response = await client.post(
+        f"/projects/{project_id}/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={"title": "First done", "column_id": done_column_id},
+    )
+    last_done_response = await client.post(
+        f"/projects/{project_id}/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={"title": "Last done", "column_id": done_column_id},
+    )
+
+    move_response = await client.put(
+        f"/projects/{project_id}/tasks/{moved_response.json()['id']}/move",
+        headers={"Authorization": "Bearer member-token"},
+        json={
+            "column_id": done_column_id,
+            "before_task_id": first_done_response.json()["id"],
+            "after_task_id": last_done_response.json()["id"],
+        },
+    )
+
+    assert move_response.status_code == 200
+    moved_task = move_response.json()
+    assert moved_task["id"] == moved_response.json()["id"]
+    assert moved_task["column_id"] == done_column_id
+    assert first_done_response.json()["rank"] < moved_task["rank"]
+    assert moved_task["rank"] < last_done_response.json()["rank"]
+
+
+@pytest.mark.asyncio
+async def test_task_create_and_patch_reject_rank_payloads(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Rank Contract", "code": "RNK", "priority": "medium"},
+    )
+    project_id = project_response.json()["id"]
+
+    create_response = await client.post(
+        f"/projects/{project_id}/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={"title": "Ranked", "rank": "j"},
+    )
+    valid_create_response = await client.post(
+        f"/projects/{project_id}/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={"title": "Unranked"},
+    )
+    patch_response = await client.patch(
+        f"/projects/{project_id}/tasks/{valid_create_response.json()['id']}",
+        headers={"Authorization": "Bearer token"},
+        json={"rank": "z"},
+    )
+
+    assert create_response.status_code == 422
+    assert valid_create_response.status_code == 201
+    assert patch_response.status_code == 422

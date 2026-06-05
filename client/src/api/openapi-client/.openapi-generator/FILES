@@ -14,6 +14,7 @@ docs/ProjectRead.md
 docs/ProjectUpdate.md
 docs/ProjectsApi.md
 docs/TaskCreate.md
+docs/TaskDestination.md
 docs/TaskRead.md
 docs/TaskUpdate.md
 docs/TasksApi.md
@@ -34,6 +35,7 @@ models/ProjectMemberCreate.ts
 models/ProjectRead.ts
 models/ProjectUpdate.ts
 models/TaskCreate.ts
+models/TaskDestination.ts
 models/TaskRead.ts
 models/TaskUpdate.ts
 models/UserCreate.ts

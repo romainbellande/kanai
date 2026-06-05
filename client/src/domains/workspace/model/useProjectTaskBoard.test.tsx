@@ -181,10 +181,14 @@ describe("useProjectTaskBoard", () => {
 		).toMatchObject({ columnId: "column-done", rank: "F" });
 
 		await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
-		const [, init] = fetchSpy.mock.calls[0];
+		const [url, init] = fetchSpy.mock.calls[0];
+		expect(url).toBe(
+			"https://api.example.test/projects/project-1/tasks/moved/move",
+		);
+		expect(init?.method).toBe("PUT");
 		expect(JSON.parse(String(init?.body))).toEqual({
 			column_id: "column-done",
-			rank: "F",
+			after_task_id: "done-first",
 		});
 		await waitFor(() =>
 			expect(

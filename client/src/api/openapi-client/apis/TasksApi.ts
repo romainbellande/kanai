@@ -18,6 +18,7 @@ import * as runtime from '../runtime';
 import type {
   HTTPValidationError,
   TaskCreate,
+  TaskDestination,
   TaskRead,
   TaskUpdate,
 } from '../models/index';
@@ -26,6 +27,8 @@ import {
     HTTPValidationErrorToJSON,
     TaskCreateFromJSON,
     TaskCreateToJSON,
+    TaskDestinationFromJSON,
+    TaskDestinationToJSON,
     TaskReadFromJSON,
     TaskReadToJSON,
     TaskUpdateFromJSON,
@@ -49,6 +52,12 @@ export interface GetTaskEndpointProjectsProjectIdTasksTaskIdGetRequest {
 
 export interface ListTasksEndpointProjectsProjectIdTasksGetRequest {
     projectId: string;
+}
+
+export interface MoveTaskEndpointProjectsProjectIdTasksTaskIdMovePutRequest {
+    projectId: string;
+    taskId: string;
+    taskDestination: TaskDestination;
 }
 
 export interface UpdateTaskEndpointProjectsProjectIdTasksTaskIdPatchRequest {
@@ -272,6 +281,71 @@ export class TasksApi extends runtime.BaseAPI {
      */
     async listTasksEndpointProjectsProjectIdTasksGet(requestParameters: ListTasksEndpointProjectsProjectIdTasksGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Array<TaskRead>> {
         const response = await this.listTasksEndpointProjectsProjectIdTasksGetRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for moveTaskEndpointProjectsProjectIdTasksTaskIdMovePut without sending the request
+     */
+    async moveTaskEndpointProjectsProjectIdTasksTaskIdMovePutRequestOpts(requestParameters: MoveTaskEndpointProjectsProjectIdTasksTaskIdMovePutRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling moveTaskEndpointProjectsProjectIdTasksTaskIdMovePut().'
+            );
+        }
+
+        if (requestParameters['taskId'] == null) {
+            throw new runtime.RequiredError(
+                'taskId',
+                'Required parameter "taskId" was null or undefined when calling moveTaskEndpointProjectsProjectIdTasksTaskIdMovePut().'
+            );
+        }
+
+        if (requestParameters['taskDestination'] == null) {
+            throw new runtime.RequiredError(
+                'taskDestination',
+                'Required parameter "taskDestination" was null or undefined when calling moveTaskEndpointProjectsProjectIdTasksTaskIdMovePut().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+
+        let urlPath = `/projects/{project_id}/tasks/{task_id}/move`;
+        urlPath = urlPath.replace(`{${"project_id"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+        urlPath = urlPath.replace(`{${"task_id"}}`, encodeURIComponent(String(requestParameters['taskId'])));
+
+        return {
+            path: urlPath,
+            method: 'PUT',
+            headers: headerParameters,
+            query: queryParameters,
+            body: TaskDestinationToJSON(requestParameters['taskDestination']),
+        };
+    }
+
+    /**
+     * Move a task to a board destination accessible to the current user.
+     * Move Task Endpoint
+     */
+    async moveTaskEndpointProjectsProjectIdTasksTaskIdMovePutRaw(requestParameters: MoveTaskEndpointProjectsProjectIdTasksTaskIdMovePutRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<TaskRead>> {
+        const requestOptions = await this.moveTaskEndpointProjectsProjectIdTasksTaskIdMovePutRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => TaskReadFromJSON(jsonValue));
+    }
+
+    /**
+     * Move a task to a board destination accessible to the current user.
+     * Move Task Endpoint
+     */
+    async moveTaskEndpointProjectsProjectIdTasksTaskIdMovePut(requestParameters: MoveTaskEndpointProjectsProjectIdTasksTaskIdMovePutRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<TaskRead> {
+        const response = await this.moveTaskEndpointProjectsProjectIdTasksTaskIdMovePutRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

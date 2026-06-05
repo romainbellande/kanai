@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, status
 
 from app.api.deps import CurrentUser, DatabaseSession
-from app.schemas.task import TaskCreate, TaskRead, TaskUpdate
+from app.schemas.task import TaskCreate, TaskDestination, TaskRead, TaskUpdate
 
 
 task_router = APIRouter(prefix="/{project_id}/tasks", tags=["tasks"])
@@ -85,6 +85,25 @@ async def update_task_endpoint(
         task_id=task_id,
         user_id=_require_current_user_id(current_user.id),
         payload=payload,
+    )
+
+
+@task_router.put("/{task_id}/move", response_model=TaskRead)
+async def move_task_endpoint(
+    project_id: UUID,
+    task_id: UUID,
+    payload: TaskDestination,
+    session: DatabaseSession,
+    current_user: CurrentUser,
+) -> TaskRead:
+    """Move a task to a board destination accessible to the current user."""
+    from app.features.tasks import TaskService
+
+    return await TaskService(session).move(
+        project_id=project_id,
+        task_id=task_id,
+        user_id=_require_current_user_id(current_user.id),
+        destination=payload,
     )
 
 

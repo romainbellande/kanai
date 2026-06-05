@@ -47,8 +47,7 @@ class TaskService:
             column_id=column_id,
             title=payload.title,
             priority=payload.priority,
-            rank=payload.rank
-            or await next_task_rank(self._repository, project_id, column_id),
+            rank=await next_task_rank(self._repository, project_id, column_id),
             assignee_id=payload.assignee_id,
             description=payload.description,
             acceptance_criteria=payload.acceptance_criteria,
@@ -129,11 +128,8 @@ class TaskService:
             for destination_task in ordered_destination_tasks
             if destination_task.id != task_id
         ]
-        before_rank = _rank_for_neighbor(
-            destination_tasks, destination.before_task_id, "before_task_id"
-        )
-        after_rank = _rank_for_neighbor(
-            destination_tasks, destination.after_task_id, "after_task_id"
+        before_rank, after_rank = _destination_neighbor_ranks(
+            destination_tasks, destination
         )
 
         if (
@@ -242,19 +238,58 @@ def task_to_read(task: Task) -> TaskRead:
     )
 
 
-def _rank_for_neighbor(
+def _destination_neighbor_ranks(
+    tasks: list[Task], destination: TaskDestination
+) -> tuple[str | None, str | None]:
+    if destination.before_task_id is None and destination.after_task_id is None:
+        return (tasks[-1].rank if tasks else None, None)
+
+    before_task = _task_for_neighbor(
+        tasks, destination.before_task_id, "before_task_id"
+    )
+    after_task = _task_for_neighbor(tasks, destination.after_task_id, "after_task_id")
+
+    if before_task is not None and after_task is not None:
+        _require_adjacent_neighbors(tasks, before_task, after_task)
+
+    return (
+        before_task.rank if before_task is not None else None,
+        after_task.rank if after_task is not None else None,
+    )
+
+
+def _task_for_neighbor(
     tasks: list[Task], task_id: UUID | None, field_name: str
-) -> str | None:
+) -> Task | None:
     if task_id is None:
         return None
 
     for task in tasks:
         if task.id == task_id:
-            return task.rank
+            return task
 
     raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail=f"{field_name} not found",
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=f"{field_name} must belong to the destination column",
+    )
+
+
+def _require_adjacent_neighbors(
+    tasks: list[Task], before_task: Task, after_task: Task
+) -> None:
+    before_index = _task_index(tasks, before_task)
+    after_index = _task_index(tasks, after_task)
+    if before_index is None or after_index is None or after_index != before_index + 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Task destination neighbors must be adjacent",
+        )
+
+
+def _task_index(tasks: list[Task], target_task: Task) -> int | None:
+    return next(
+        (index for index, task in enumerate(tasks) if task.id == target_task.id),
+        None,
     )
 
 

@@ -12,6 +12,7 @@ export * from './ProjectMemberCreate';
 export * from './ProjectRead';
 export * from './ProjectUpdate';
 export * from './TaskCreate';
+export * from './TaskDestination';
 export * from './TaskRead';
 export * from './TaskUpdate';
 export * from './UserCreate';

@@ -6,6 +6,7 @@ import {
 	CurrentUserAuthError,
 	createProjectTask,
 	listProjectTasks,
+	moveProjectTask,
 	projectTasksQueryOptions,
 	updateProjectTask,
 } from "#/api/client";
@@ -120,7 +121,7 @@ describe("tasks client", () => {
 		});
 	});
 
-	it("updates task column and rank with no legacy status payload", async () => {
+	it("updates task fields without sending rank through PATCH", async () => {
 		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
 		window.sessionStorage.setItem(
 			"kanai.openid-client.auth-session",
@@ -150,7 +151,7 @@ describe("tasks client", () => {
 		await updateProjectTask({
 			projectId: "project-1",
 			taskId: "task-1",
-			taskUpdate: { columnId: "column-done", rank: "j" },
+			taskUpdate: { priority: "low" },
 		});
 
 		const [url, init] = fetchSpy.mock.calls[0];
@@ -160,8 +161,62 @@ describe("tasks client", () => {
 		);
 		expect(init?.method).toBe("PATCH");
 		expect(JSON.parse(String(init?.body))).toEqual({
+			priority: "low",
+		});
+	});
+
+	it("moves tasks with destination neighbors and maps the moved response", async () => {
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({ accessToken: "task-token" }),
+		);
+		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					id: "task-1",
+					project_id: "project-1",
+					title: "Moved Task",
+					column_id: "column-done",
+					priority: "medium",
+					rank: "b",
+					assignee_id: null,
+					description: null,
+					acceptance_criteria: null,
+					tag: null,
+					created_at: null,
+					updated_at: null,
+				}),
+				{ headers: { "content-type": "application/json" }, status: 200 },
+			),
+		);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		const movedTask = await moveProjectTask({
+			projectId: "project-1",
+			taskId: "task-1",
+			destination: {
+				columnId: "column-done",
+				beforeTaskId: "task-before",
+				afterTaskId: "task-after",
+			},
+		});
+
+		const [url, init] = fetchSpy.mock.calls[0];
+
+		expect(movedTask).toMatchObject({
+			id: "task-1",
+			columnId: "column-done",
+			rank: "b",
+		});
+		expect(url).toBe(
+			"https://api.example.test/projects/project-1/tasks/task-1/move",
+		);
+		expect(init?.method).toBe("PUT");
+		expect(JSON.parse(String(init?.body))).toEqual({
 			column_id: "column-done",
-			rank: "j",
+			before_task_id: "task-before",
+			after_task_id: "task-after",
 		});
 	});
 
