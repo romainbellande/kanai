@@ -38,9 +38,9 @@ This repository has two active workspaces: `client/` and `api/`.
 - [Workflow Notes](docs/agent-instructions/workflow.md)
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:full hash:0a1bbe8a -->
-## Issue Tracking with bd (beads)
+## Issue Tracking with br (beads)
 
-**IMPORTANT**: This project uses **bd (beads)** for ALL issue tracking. Do NOT use markdown TODOs, task lists, or other tracking methods.
+**IMPORTANT**: This project uses **br (beads rust)** for ALL issue tracking. Do NOT use markdown TODOs, task lists, or other tracking methods.
 
 ### Why bd?
 
@@ -54,27 +54,27 @@ This repository has two active workspaces: `client/` and `api/`.
 **Check for ready work:**
 
 ```bash
-bd ready --json
+br ready --json
 ```
 
 **Create new issues:**
 
 ```bash
-bd create "Issue title" --description="Detailed context" -t bug|feature|task -p 0-4 --json
-bd create "Issue title" --description="What this issue is about" -p 1 --deps discovered-from:bd-123 --json
+br create "Issue title" --description="Detailed context" -t bug|feature|task -p 0-4 --json
+br create "Issue title" --description="What this issue is about" -p 1 --deps discovered-from:bd-123 --json
 ```
 
 **Claim and update:**
 
 ```bash
-bd update <id> --claim --json
-bd update bd-42 --priority 1 --json
+br update <id> --claim --json
+br update bd-42 --priority 1 --json
 ```
 
 **Complete work:**
 
 ```bash
-bd close bd-42 --reason "Completed" --json
+br close bd-42 --reason "Completed" --json
 ```
 
 ### Issue Types
@@ -95,26 +95,26 @@ bd close bd-42 --reason "Completed" --json
 
 ### Workflow for AI Agents
 
-1. **Check ready work**: `bd ready` shows unblocked issues
-2. **Claim your task atomically**: `bd update <id> --claim`
+1. **Check ready work**: `br ready` shows unblocked issues
+2. **Claim your task atomically**: `br update <id> --claim`
 3. **Work on it**: Implement, test, document
 4. **Discover new work?** Create linked issue:
-   - `bd create "Found bug" --description="Details about what was found" -p 1 --deps discovered-from:<parent-id>`
-5. **Complete**: `bd close <id> --reason "Done"`
+   - `br create "Found bug" --description="Details about what was found" -p 1 --deps discovered-from:<parent-id>`
+5. **Complete**: `br close <id> --reason "Done"`
 
 ### Quality
 - Use `--acceptance` and `--design` fields when creating issues
 - Use `--validate` to check description completeness
 
 ### Lifecycle
-- `bd defer <id>` / `bd supersede <id>` for issue management
-- `bd stale` / `bd orphans` / `bd lint` for hygiene
-- `bd human <id>` to flag for human decisions
-- `bd formula list` / `bd mol pour <name>` for structured workflows
+- `br defer <id>` / `br supersede <id>` for issue management
+- `br stale` / `br orphans` / `br lint` for hygiene
+- `br human <id>` to flag for human decisions
+- `br formula list` / `br mol pour <name>` for structured workflows
 
 ### Auto-Sync
 
-bd automatically syncs via Dolt:
+br automatically syncs via Dolt:
 
 - Each write auto-commits to Dolt history
 - No manual export/import needed!
@@ -123,10 +123,10 @@ bd automatically syncs via Dolt:
 
 ### Important Rules
 
-- ✅ Use bd for ALL task tracking
+- ✅ Use br for ALL task tracking
 - ✅ Always use `--json` flag for programmatic use
 - ✅ Link discovered work with `discovered-from` dependencies
-- ✅ Check `bd ready` before asking "what should I work on?"
+- ✅ Check `br ready` before asking "what should I work on?"
 - ❌ Do NOT create markdown TODO lists
 - ❌ Do NOT use external issue trackers
 - ❌ Do NOT duplicate tracking systems
