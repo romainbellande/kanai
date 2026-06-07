@@ -277,6 +277,39 @@ describe("ProjectBoardPage", () => {
 		expect(screen.queryByText("Security Audit Phase 1")).toBeNull();
 	});
 
+	it("renders a dedicated move handle separate from the task detail link", async () => {
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project({ name: "API Board" }),
+		);
+		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
+			task({
+				id: "todo-task",
+				title: "API Todo",
+				columnId: "column-todo",
+				priority: "high",
+			}),
+		]);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({ id: "column-todo", name: "Backlog", position: 0 }),
+		]);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+
+		const moveHandle = screen.getByRole("button", { name: "Move task" });
+		const taskLink = screen.getByRole("link", {
+			name: "Open task API Todo",
+		}) as HTMLAnchorElement;
+
+		expect(taskLink.href).toContain("/projects/project-1/tasks/todo-task");
+		expect(moveHandle.closest("a")).toBeNull();
+		expect(taskLink.contains(moveHandle)).toBe(false);
+	});
+
 	it("surfaces tasks that reference missing project columns", async () => {
 		const { ProjectBoardPage } = await import(
 			"#/domains/workspace/ui/ProjectBoardPage"
@@ -311,6 +344,9 @@ describe("ProjectBoardPage", () => {
 		).toBeTruthy();
 		expect(screen.getByText("Backlog")).toBeTruthy();
 		expect(screen.getByText("API Todo")).toBeTruthy();
+		expect(screen.getAllByRole("button", { name: "Move task" })).toHaveLength(
+			1,
+		);
 	});
 
 	it("links column task creation to the persisted column id", async () => {

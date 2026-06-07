@@ -16,6 +16,7 @@ import {
 	ChevronRight,
 	CircleHelp,
 	Filter,
+	GripVertical,
 	LayoutDashboard,
 	LogOut,
 	MoreHorizontal,
@@ -29,7 +30,7 @@ import {
 	User,
 	UserPlus,
 } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, type Ref, useEffect, useRef, useState } from "react";
 
 import {
 	CurrentUserAuthError,
@@ -191,10 +192,12 @@ function BoardTaskCard({
 	onDragStateChange: (taskId: string | null) => void;
 }) {
 	const ref = useRef<HTMLElement | null>(null);
+	const dragHandleRef = useRef<HTMLButtonElement | null>(null);
 
 	useEffect(() => {
 		const element = ref.current;
-		if (!element) {
+		const dragHandle = dragHandleRef.current;
+		if (!element || !dragHandle) {
 			return;
 		}
 		if (isDragDisabled) {
@@ -204,6 +207,7 @@ function BoardTaskCard({
 		return combine(
 			draggable({
 				element,
+				dragHandle,
 				getInitialData: () => ({
 					type: "card",
 					taskId: card.id,
@@ -237,7 +241,7 @@ function BoardTaskCard({
 					? "scale-[0.99] opacity-45 ring-2 ring-[var(--primary)]"
 					: isDragDisabled
 						? "opacity-70"
-						: "cursor-grab active:cursor-grabbing",
+						: "",
 			].join(" ")}
 		>
 			{dropIndicatorEdge ? (
@@ -252,18 +256,40 @@ function BoardTaskCard({
 			<Link
 				to="/projects/$projectId/tasks/$taskId"
 				params={{ projectId: card.projectId, taskId: card.id }}
-				className="block text-inherit no-underline"
-			>
+				aria-label={`Open task ${card.title}`}
+				className="absolute inset-0 z-0 rounded-2xl text-inherit no-underline"
+			/>
+			<div className="pointer-events-none relative z-10">
 				{card.tag || card.priority ? (
-					<span
-						className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${getTagClass(card.priority)}`}
-					>
-						{card.tag || card.priority}
-					</span>
+					<div className="flex items-start justify-between gap-3">
+						<span
+							className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${getTagClass(card.priority)}`}
+						>
+							{card.tag || card.priority}
+						</span>
+						<TaskDragHandle
+							ref={dragHandleRef}
+							disabled={isDragDisabled}
+							isDragging={isDragging}
+						/>
+					</div>
 				) : null}
-				<p className="mt-3 text-sm leading-6 text-[var(--on-surface)]">
-					{card.title}
-				</p>
+				{card.tag || card.priority ? (
+					<p className="mt-3 text-sm leading-6 text-[var(--on-surface)]">
+						{card.title}
+					</p>
+				) : (
+					<div className="flex items-start justify-between gap-3">
+						<p className="text-sm leading-6 text-[var(--on-surface)]">
+							{card.title}
+						</p>
+						<TaskDragHandle
+							ref={dragHandleRef}
+							disabled={isDragDisabled}
+							isDragging={isDragging}
+						/>
+					</div>
+				)}
 				{card.description ? (
 					<p className="mt-2 text-xs leading-5 text-[var(--on-surface-variant)]">
 						{card.description}
@@ -273,8 +299,34 @@ function BoardTaskCard({
 					<Calendar className="h-3.5 w-3.5" />
 					{getTaskMeta(card)}
 				</div>
-			</Link>
+			</div>
 		</article>
+	);
+}
+
+function TaskDragHandle({
+	ref,
+	disabled,
+	isDragging,
+}: {
+	ref: Ref<HTMLButtonElement>;
+	disabled: boolean;
+	isDragging: boolean;
+}) {
+	return (
+		<button
+			ref={ref}
+			type="button"
+			aria-label="Move task"
+			title="Move task"
+			disabled={disabled}
+			className={[
+				"pointer-events-auto relative z-20 inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-[var(--outline-variant)] bg-[var(--surface-container)] text-[var(--on-surface-variant)] shadow-sm transition hover:bg-[var(--surface-container-high)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-50",
+				disabled ? "" : isDragging ? "cursor-grabbing" : "cursor-grab",
+			].join(" ")}
+		>
+			<GripVertical className="h-4 w-4" aria-hidden="true" />
+		</button>
 	);
 }
 
