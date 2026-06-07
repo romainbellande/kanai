@@ -1,9 +1,12 @@
 """Project API routes."""
 
+from json import JSONDecodeError
 from uuid import UUID
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, status
+from starlette.websockets import WebSocketState
 
+from app.api import deps
 from app.api.deps import CurrentUser, DatabaseSession
 from app.features.tasks import task_router
 from app.schemas.project import (
@@ -11,12 +14,16 @@ from app.schemas.project import (
     ProjectColumnRead,
     ProjectColumnReorder,
     ProjectColumnUpdate,
+    ProjectChatMessageRead,
     ProjectCreate,
     ProjectMemberCreate,
     ProjectRead,
     ProjectUpdate,
 )
+from app.services.project_chat_fanout import project_chat_fanout
+from app.services.project_chat_service import ProjectChatService
 from app.services.project_column_service import ProjectColumnService
+from app.services.project_access import ProjectAccess
 from app.services.project_service import (
     add_project_member_for_user,
     create_project_for_user,
@@ -27,10 +34,13 @@ from app.services.project_service import (
     require_project_access,
     update_project_for_user,
 )
+from app.services.auth_service import WebSocketAuthError
 
 
 project_router = APIRouter(prefix="/projects", tags=["projects"])
 project_router.include_router(task_router)
+
+PROJECT_CHAT_SUBPROTOCOL = "kanai.project-chat"
 
 
 @project_router.post(
@@ -95,6 +105,146 @@ async def list_project_columns(
     )
 
 
+@project_router.get(
+    "/{project_id}/chat/messages", response_model=list[ProjectChatMessageRead]
+)
+async def list_project_chat_messages(
+    project_id: UUID,
+    session: DatabaseSession,
+    current_user: CurrentUser,
+    cursor: UUID | None = None,
+) -> list[ProjectChatMessageRead]:
+    """List chat history for a project accessible to the current user."""
+    return await ProjectChatService(session).list_latest_messages(
+        project_id,
+        require_current_user_id(current_user.id),
+        cursor=cursor,
+    )
+
+
+@project_router.websocket("/{project_id}/chat/socket")
+async def project_chat_socket(
+    websocket: WebSocket,
+    project_id: UUID,
+    session: DatabaseSession,
+) -> None:
+    """Connect to project chat after subprotocol bearer authentication."""
+    try:
+        user = await deps.websocket_auth_boundary.current_user(websocket, session)
+        user_id = require_current_user_id(user.id)
+        await ProjectAccess(session).require_project(
+            project_id,
+            user_id,
+        )
+    except (HTTPException, WebSocketAuthError):
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    await websocket.accept(subprotocol=_accepted_chat_subprotocol(websocket))
+    await project_chat_fanout.connect(project_id, websocket)
+    await websocket.send_json({"type": "ready", "project_id": str(project_id)})
+
+    try:
+        while True:
+            try:
+                event = await websocket.receive_json()
+            except JSONDecodeError:
+                await _send_chat_error(
+                    websocket,
+                    code="invalid_json",
+                    message="Chat events must be valid JSON.",
+                )
+                continue
+
+            if not isinstance(event, dict) or not isinstance(event.get("type"), str):
+                await _send_chat_error(
+                    websocket,
+                    code="protocol_error",
+                    message="Chat events must include a string type.",
+                )
+                continue
+
+            if event["type"] != "create-message":
+                await _send_chat_error(
+                    websocket,
+                    code="unsupported_event",
+                    message="Unsupported chat event.",
+                )
+                continue
+
+            body = event.get("body")
+            if not isinstance(body, str):
+                await _send_chat_error(
+                    websocket,
+                    code="invalid_message",
+                    message="Message body is required.",
+                )
+                continue
+
+            client_message_id = event.get("client_message_id")
+            if client_message_id is not None and not isinstance(client_message_id, str):
+                await _send_chat_error(
+                    websocket,
+                    code="invalid_message",
+                    message="Client message id must be a string.",
+                )
+                continue
+
+            try:
+                message = await ProjectChatService(session).create_text_message(
+                    project_id,
+                    user,
+                    body,
+                )
+            except HTTPException as error:
+                await _send_chat_error(
+                    websocket,
+                    code="message_rejected",
+                    message=str(error.detail),
+                )
+                continue
+
+            created_event: dict[str, object] = {
+                "type": "created-message",
+                "message": message.model_dump(mode="json"),
+            }
+            if client_message_id is not None:
+                created_event["client_message_id"] = client_message_id
+
+            await project_chat_fanout.broadcast(project_id, created_event)
+    except WebSocketDisconnect:
+        return
+    finally:
+        await project_chat_fanout.disconnect(project_id, websocket)
+
+
+def _accepted_chat_subprotocol(websocket: WebSocket) -> str | None:
+    subprotocols = websocket.scope.get("subprotocols", [])
+    if isinstance(subprotocols, list) and PROJECT_CHAT_SUBPROTOCOL in subprotocols:
+        return PROJECT_CHAT_SUBPROTOCOL
+    return None
+
+
+async def _send_chat_error(
+    websocket: WebSocket,
+    *,
+    code: str,
+    message: str,
+) -> None:
+    if websocket.client_state != WebSocketState.CONNECTED:
+        return
+
+    await websocket.send_json(
+        {
+            "type": "error",
+            "error": {
+                "code": code,
+                "message": message,
+            },
+        }
+    )
+
+
 @project_router.post(
     "/{project_id}/columns",
     response_model=ProjectColumnRead,
@@ -111,6 +261,7 @@ async def create_project_column(
         project_id,
         require_current_user_id(current_user.id),
         name=payload.name,
+        description=payload.description,
     )
 
 
@@ -131,6 +282,8 @@ async def update_project_column(
         column_id,
         require_current_user_id(current_user.id),
         name=payload.name,
+        description=payload.description,
+        update_description="description" in payload.model_fields_set,
     )
 
 

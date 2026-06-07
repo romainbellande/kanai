@@ -232,6 +232,7 @@ async def delete_project_for_user(
     task_repository = TaskRepository(session)
     project = await require_project_owner(session, project_id, user_id)
     await task_repository.delete_by_project(project_id)
+    await project_repository.delete_chat_messages(project_id)
     await project_repository.delete_relationships(project_id)
     await project_repository.delete(project)
     await project_repository.commit()

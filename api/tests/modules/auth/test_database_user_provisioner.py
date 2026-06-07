@@ -74,6 +74,7 @@ async def test_provision_creates_user_with_preferred_username_display_name(
 
     assert user is not None
     assert user.display_name == "Jane Doe"
+    assert user.preferred_username == "Jane Doe"
 
 
 @pytest.mark.asyncio
@@ -95,6 +96,7 @@ async def test_provision_updates_existing_user_display_name_from_preferred_usern
 
     assert user is not None
     assert user.display_name == "New Name"
+    assert user.preferred_username == "New Name"
 
 
 @pytest.mark.asyncio
@@ -121,8 +123,10 @@ async def test_provision_preserves_existing_display_name_when_claim_is_blank_or_
 
     assert blank_user is not None
     assert blank_user.display_name == "Blank Name"
+    assert blank_user.preferred_username is None
     assert missing_user is not None
     assert missing_user.display_name == "Missing Name"
+    assert missing_user.preferred_username is None
 
 
 @pytest.mark.asyncio

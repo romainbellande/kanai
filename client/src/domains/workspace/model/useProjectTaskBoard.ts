@@ -8,6 +8,7 @@ export type ColumnId = string;
 export type BoardColumn = {
 	id: ColumnId;
 	title: string;
+	description: string | null;
 	cards: Task[];
 };
 
@@ -23,7 +24,20 @@ export type MoveTaskInput = {
 	afterTaskId?: string;
 };
 
+export type MoveColumnInput = {
+	columnId: ColumnId;
+	direction: "left" | "right";
+};
+
+export type ReorderColumnInput = {
+	sourceColumnId: ColumnId;
+	targetColumnId: ColumnId;
+	placement: "before" | "after";
+};
+
 const moveFailureMessage = "Task move failed. Your board was restored.";
+const columnReorderFailureMessage =
+	"Column reorder failed. Your board was restored.";
 
 const rankAlphabet =
 	"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
@@ -78,6 +92,7 @@ export function groupTasksByColumn(
 	const columns: BoardColumn[] = projectColumns.map((column) => ({
 		id: column.id,
 		title: column.name,
+		description: column.description,
 		cards: [],
 	}));
 
@@ -95,6 +110,69 @@ export function groupTasksByColumn(
 		...column,
 		cards: column.cards.sort(compareTasksByRank),
 	}));
+}
+
+export function reorderProjectColumnsForMove(
+	projectColumns: ProjectColumn[],
+	input: MoveColumnInput,
+): ProjectColumn[] | null {
+	const sourceIndex = projectColumns.findIndex(
+		(column) => column.id === input.columnId,
+	);
+	if (sourceIndex === -1) {
+		return null;
+	}
+
+	const destinationIndex =
+		input.direction === "left" ? sourceIndex - 1 : sourceIndex + 1;
+	if (destinationIndex < 0 || destinationIndex >= projectColumns.length) {
+		return null;
+	}
+
+	const columns = [...projectColumns];
+	const [movedColumn] = columns.splice(sourceIndex, 1);
+	columns.splice(destinationIndex, 0, movedColumn);
+
+	return columns.map((column, index) => ({ ...column, position: index }));
+}
+
+export function reorderProjectColumnsForPlacement(
+	projectColumns: ProjectColumn[],
+	input: ReorderColumnInput,
+): ProjectColumn[] | null {
+	if (input.sourceColumnId === input.targetColumnId) {
+		return null;
+	}
+
+	const sourceIndex = projectColumns.findIndex(
+		(column) => column.id === input.sourceColumnId,
+	);
+	const targetIndex = projectColumns.findIndex(
+		(column) => column.id === input.targetColumnId,
+	);
+	if (sourceIndex === -1 || targetIndex === -1) {
+		return null;
+	}
+
+	const columns = [...projectColumns];
+	const [movedColumn] = columns.splice(sourceIndex, 1);
+	const targetIndexAfterRemoval = columns.findIndex(
+		(column) => column.id === input.targetColumnId,
+	);
+	const destinationIndex =
+		input.placement === "before"
+			? targetIndexAfterRemoval
+			: targetIndexAfterRemoval + 1;
+
+	columns.splice(destinationIndex, 0, movedColumn);
+
+	if (
+		columns.every((column, index) => column.id === projectColumns[index]?.id)
+	) {
+		return null;
+	}
+
+	return columns.map((column, index) => ({ ...column, position: index }));
 }
 
 export function getTasksWithMissingColumns(
@@ -162,9 +240,17 @@ export function useProjectTaskBoard(projectId: string) {
 		mutationFn: (input: Parameters<typeof api.tasks.move>[1]) =>
 			api.tasks.move(projectId, input),
 	});
-	const inFlightMoveRef = useRef(false);
+	const reorderColumnsMutation = useMutation({
+		mutationFn: (input: Parameters<typeof api.projectColumns.reorder>[1]) =>
+			api.projectColumns.reorder(projectId, input),
+	});
+	const inFlightBoardMutationRef = useRef(false);
 	const [isMovePending, setIsMovePending] = useState(false);
+	const [isColumnReorderPending, setIsColumnReorderPending] = useState(false);
 	const [moveError, setMoveError] = useState<string | null>(null);
+	const [columnReorderError, setColumnReorderError] = useState<string | null>(
+		null,
+	);
 	const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
 	const [activeDropColumnId, setActiveDropColumnId] = useState<ColumnId | null>(
 		null,
@@ -181,7 +267,11 @@ export function useProjectTaskBoard(projectId: string) {
 	);
 
 	function moveTask(input: MoveTaskInput) {
-		if (inFlightMoveRef.current || moveTaskMutation.isPending) {
+		if (
+			inFlightBoardMutationRef.current ||
+			moveTaskMutation.isPending ||
+			reorderColumnsMutation.isPending
+		) {
 			return;
 		}
 
@@ -210,9 +300,10 @@ export function useProjectTaskBoard(projectId: string) {
 			return;
 		}
 
-		inFlightMoveRef.current = true;
+		inFlightBoardMutationRef.current = true;
 		setIsMovePending(true);
 		setMoveError(null);
+		setColumnReorderError(null);
 		const previousTasks = api.tasks.patchCached(projectId, input.taskId, {
 			columnId: input.toColumnId,
 			rank,
@@ -233,11 +324,59 @@ export function useProjectTaskBoard(projectId: string) {
 					setMoveError(moveFailureMessage);
 				},
 				onSettled: () => {
-					inFlightMoveRef.current = false;
+					inFlightBoardMutationRef.current = false;
 					setIsMovePending(false);
 					void api.tasks.invalidateProjectTasks(projectId);
 				},
 			},
+		);
+	}
+
+	function applyColumnReorder(reorderedColumns: ProjectColumn[] | null) {
+		if (
+			inFlightBoardMutationRef.current ||
+			moveTaskMutation.isPending ||
+			reorderColumnsMutation.isPending
+		) {
+			return;
+		}
+
+		const previousColumns = columnsQuery.data;
+		if (!previousColumns || !reorderedColumns) {
+			return;
+		}
+
+		inFlightBoardMutationRef.current = true;
+		setIsColumnReorderPending(true);
+		setMoveError(null);
+		setColumnReorderError(null);
+		api.projectColumns.replaceCached(projectId, reorderedColumns);
+
+		reorderColumnsMutation.mutate(
+			{ columnIds: reorderedColumns.map((column) => column.id) },
+			{
+				onError: () => {
+					api.projectColumns.replaceCached(projectId, previousColumns);
+					setColumnReorderError(columnReorderFailureMessage);
+				},
+				onSettled: () => {
+					inFlightBoardMutationRef.current = false;
+					setIsColumnReorderPending(false);
+					void api.projectColumns.invalidateProjectColumns(projectId);
+				},
+			},
+		);
+	}
+
+	function moveColumn(input: MoveColumnInput) {
+		applyColumnReorder(
+			reorderProjectColumnsForMove(columnsQuery.data ?? [], input),
+		);
+	}
+
+	function reorderColumn(input: ReorderColumnInput) {
+		applyColumnReorder(
+			reorderProjectColumnsForPlacement(columnsQuery.data ?? [], input),
 		);
 	}
 
@@ -256,6 +395,12 @@ export function useProjectTaskBoard(projectId: string) {
 			isMovePending,
 			moveError,
 		},
+		columnReorderState: {
+			isColumnReorderPending,
+			columnReorderError,
+		},
 		moveTask,
+		moveColumn,
+		reorderColumn,
 	};
 }

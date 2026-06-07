@@ -64,6 +64,7 @@ def test_project_column_model_uses_expected_columns() -> None:
     assert isinstance(columns.id.type, Uuid)
     assert columns.project_id.nullable is False
     assert columns.name.nullable is False
+    assert columns.description.nullable is True
     assert columns.position.nullable is False
     assert columns.created_at.nullable is False
     assert columns.updated_at.nullable is False

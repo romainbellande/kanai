@@ -12,13 +12,13 @@ from app.models.user import User
 from app.schemas.auth import AuthenticatedContext
 
 
-def _display_name_from_claims(context: AuthenticatedContext) -> str | None:
+def _preferred_username_from_claims(context: AuthenticatedContext) -> str | None:
     preferred_username = context.claims.get("preferred_username")
     if not isinstance(preferred_username, str):
         return None
 
-    display_name = preferred_username.strip()
-    return display_name or None
+    username = preferred_username.strip()
+    return username or None
 
 
 class UserRepository:
@@ -103,21 +103,26 @@ class DatabaseUserProvisioner:
         """
         async with self._session_factory() as session:
             try:
-                display_name = _display_name_from_claims(context)
+                preferred_username = _preferred_username_from_claims(context)
                 existing_user = await session.scalar(
                     select(User).filter_by(externalId=context.subject)
                 )
                 if existing_user is not None:
-                    if (
-                        display_name is not None
-                        and existing_user.display_name != display_name
+                    if preferred_username is not None and (
+                        existing_user.preferred_username != preferred_username
+                        or existing_user.display_name != preferred_username
                     ):
-                        existing_user.display_name = display_name
+                        existing_user.preferred_username = preferred_username
+                        existing_user.display_name = preferred_username
                         await session.commit()
                     return
 
                 session.add(
-                    User(externalId=context.subject, display_name=display_name)
+                    User(
+                        externalId=context.subject,
+                        display_name=preferred_username,
+                        preferred_username=preferred_username,
+                    )
                 )
                 await session.commit()
             except IntegrityError:

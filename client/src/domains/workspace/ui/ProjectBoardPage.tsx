@@ -12,13 +12,15 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import {
 	Bell,
+	ChevronLeft,
 	ChevronRight,
 	CircleHelp,
 	Filter,
 	GripVertical,
 	LayoutDashboard,
 	LogOut,
-	MoreHorizontal,
+	MessageCircle,
+	Pencil,
 	Plus,
 	Search,
 	Settings2,
@@ -29,7 +31,15 @@ import {
 	UserPlus,
 	X,
 } from "lucide-react";
-import { type ReactNode, type Ref, useEffect, useRef, useState } from "react";
+import {
+	type ReactNode,
+	type Ref,
+	type UIEvent,
+	useEffect,
+	useLayoutEffect,
+	useRef,
+	useState,
+} from "react";
 
 import {
 	CurrentUserAuthError,
@@ -44,6 +54,7 @@ import {
 	userSearchQueryOptions,
 } from "#/api/client";
 import { useAuthBoundary } from "#/domains/auth/model/auth-boundary";
+import { useProjectChat } from "#/domains/workspace/model/useProjectChat";
 import {
 	type BoardColumn,
 	type ColumnId,
@@ -82,6 +93,11 @@ type ColumnDropTargetData = {
 	columnId: ColumnId;
 };
 
+type ColumnDragData = {
+	type: "column-drag";
+	columnId: ColumnId;
+};
+
 type CardDropIndicator = {
 	taskId: string;
 	closestEdge: "top" | "bottom";
@@ -89,6 +105,11 @@ type CardDropIndicator = {
 
 type ColumnAppendDropIndicator = {
 	columnId: ColumnId;
+};
+
+type ColumnInsertionIndicator = {
+	columnId: ColumnId;
+	edge: "left" | "right";
 };
 
 function getTagClass(priority: string): string {
@@ -160,6 +181,25 @@ export function getColumnAppendDropIndicator(
 
 	const columnId = data.columnId;
 	return typeof columnId === "string" ? { columnId } : null;
+}
+
+export function getColumnInsertionIndicator(
+	data: Record<string | symbol, unknown> | undefined,
+	sourceColumnId: ColumnId | null,
+): ColumnInsertionIndicator | null {
+	if (data?.type !== "column" || sourceColumnId === null) {
+		return null;
+	}
+
+	const columnId = data.columnId;
+	if (typeof columnId !== "string" || columnId === sourceColumnId) {
+		return null;
+	}
+
+	return {
+		columnId,
+		edge: extractClosestEdge(data) === "right" ? "right" : "left",
+	};
 }
 
 function isTaskInBoardColumns(task: Task, columns: BoardColumn[]): boolean {
@@ -316,12 +356,89 @@ function TaskDragHandle({
 	);
 }
 
+function ColumnDragHandle({
+	ref,
+	disabled,
+	isDragging,
+	columnTitle,
+}: {
+	ref: Ref<HTMLButtonElement>;
+	disabled: boolean;
+	isDragging: boolean;
+	columnTitle: string;
+}) {
+	return (
+		<button
+			ref={ref}
+			type="button"
+			aria-label={`Reorder ${columnTitle} column`}
+			title="Reorder column"
+			disabled={disabled}
+			className={[
+				"inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] text-[var(--on-surface-variant)] transition hover:bg-[var(--surface-container-high)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-45",
+				disabled ? "" : isDragging ? "cursor-grabbing" : "cursor-grab",
+			].join(" ")}
+		>
+			<GripVertical className="h-4 w-4" aria-hidden="true" />
+		</button>
+	);
+}
+
+function ColumnTitleWithDescription({
+	title,
+	description,
+}: {
+	title: string;
+	description: string | null;
+}) {
+	const [isOpen, setIsOpen] = useState(false);
+	const hasDescription = description !== null && description.trim() !== "";
+
+	if (!hasDescription) {
+		return <h3 className="text-sm font-semibold">{title}</h3>;
+	}
+
+	return (
+		<div className="relative">
+			<button
+				type="button"
+				aria-expanded={isOpen}
+				aria-label={`${title} column description`}
+				className="rounded-md text-left text-sm font-semibold underline decoration-dotted underline-offset-4 hover:text-[var(--primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]"
+				onClick={() => setIsOpen((current) => !current)}
+				onMouseEnter={() => setIsOpen(true)}
+				onMouseLeave={() => setIsOpen(false)}
+				onFocus={() => setIsOpen(true)}
+				onBlur={() => setIsOpen(false)}
+			>
+				{title}
+			</button>
+			{isOpen ? (
+				<div
+					role="tooltip"
+					className="absolute left-0 top-full z-30 mt-2 max-w-[18rem] whitespace-pre-wrap break-words rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-4 py-3 text-sm font-medium leading-6 text-[var(--on-surface)] shadow-xl"
+				>
+					{description}
+				</div>
+			) : null}
+		</div>
+	);
+}
+
 function BoardColumnView({
 	column,
 	projectId,
 	isActiveDropTarget,
 	isAppendDropTarget,
 	isDropDisabled,
+	isProjectOwner,
+	isColumnReorderAvailable,
+	canMoveLeft,
+	canMoveRight,
+	isColumnDragging,
+	columnInsertionEdge,
+	isColumnMoveDisabled,
+	onMoveColumn,
 	children,
 }: {
 	column: BoardColumn;
@@ -329,53 +446,142 @@ function BoardColumnView({
 	isActiveDropTarget: boolean;
 	isAppendDropTarget: boolean;
 	isDropDisabled: boolean;
+	isProjectOwner: boolean;
+	isColumnReorderAvailable: boolean;
+	canMoveLeft: boolean;
+	canMoveRight: boolean;
+	isColumnDragging: boolean;
+	columnInsertionEdge: "left" | "right" | null;
+	isColumnMoveDisabled: boolean;
+	onMoveColumn: (columnId: ColumnId, direction: "left" | "right") => void;
 	children: ReactNode;
 }) {
 	const ref = useRef<HTMLElement | null>(null);
+	const dragHandleRef = useRef<HTMLButtonElement | null>(null);
 
 	useEffect(() => {
 		const element = ref.current;
+		const dragHandle = dragHandleRef.current;
 		if (!element) {
 			return;
 		}
-		if (isDropDisabled) {
-			return;
+
+		const cleanupFns = [];
+		if (!isDropDisabled) {
+			cleanupFns.push(
+				dropTargetForElements({
+					element,
+					canDrop: ({ source }) =>
+						source.data.type === "card" || source.data.type === "column-drag",
+					getData: ({ input }) =>
+						attachClosestEdge(
+							{
+								type: "column",
+								columnId: column.id,
+							} satisfies ColumnDropTargetData,
+							{ input, element, allowedEdges: ["left", "right"] },
+						),
+				}),
+			);
 		}
 
-		return dropTargetForElements({
-			element,
-			canDrop: ({ source }) => source.data.type === "card",
-			getData: () =>
-				({
-					type: "column",
-					columnId: column.id,
-				}) satisfies ColumnDropTargetData,
-		});
-	}, [column.id, isDropDisabled]);
+		if (dragHandle && isColumnReorderAvailable && !isColumnMoveDisabled) {
+			cleanupFns.push(
+				draggable({
+					element,
+					dragHandle,
+					getInitialData: () =>
+						({
+							type: "column-drag",
+							columnId: column.id,
+						}) satisfies ColumnDragData,
+				}),
+			);
+		}
+
+		return cleanupFns.length > 0 ? combine(...cleanupFns) : undefined;
+	}, [
+		column.id,
+		isColumnMoveDisabled,
+		isColumnReorderAvailable,
+		isDropDisabled,
+	]);
 
 	return (
 		<section
 			ref={ref}
 			className={[
-				"flex w-[340px] flex-shrink-0 flex-col rounded-[1.5rem] border border-transparent bg-[var(--surface-container)] p-4 transition",
+				"relative flex w-[340px] flex-shrink-0 flex-col rounded-[1.5rem] border border-transparent bg-[var(--surface-container)] p-4 transition",
 				isActiveDropTarget
 					? "border-[var(--primary)] bg-[color:color-mix(in_srgb,var(--primary-container)_34%,var(--surface-container))] ring-2 ring-[var(--primary)]"
 					: "",
+				isColumnDragging ? "opacity-55 ring-2 ring-[var(--primary)]" : "",
 			].join(" ")}
 		>
-			<div className="mb-4 flex items-center justify-between px-2">
+			{columnInsertionEdge ? (
+				<span
+					aria-hidden="true"
+					className={[
+						"absolute bottom-4 top-4 z-20 w-1 rounded-full bg-[var(--primary)] shadow-[0_0_0_4px_color-mix(in_srgb,var(--primary)_18%,transparent)]",
+						columnInsertionEdge === "left" ? "-left-3" : "-right-3",
+					].join(" ")}
+				/>
+			) : null}
+			<div className="mb-4 flex items-center justify-between gap-3 px-2">
 				<div className="flex items-center gap-2">
-					<h3 className="text-sm font-semibold">{column.title}</h3>
+					{isProjectOwner && isColumnReorderAvailable ? (
+						<ColumnDragHandle
+							ref={dragHandleRef}
+							disabled={isColumnMoveDisabled}
+							isDragging={isColumnDragging}
+							columnTitle={column.title}
+						/>
+					) : null}
+					<ColumnTitleWithDescription
+						title={column.title}
+						description={column.description}
+					/>
 					<span className="text-xs font-semibold text-[var(--on-surface-variant)]">
 						{column.cards.length}
 					</span>
 				</div>
-				<WorkspaceIconButton
-					size="sm"
-					className="bg-[var(--surface-container-lowest)] text-[var(--on-surface-variant)]"
-				>
-					<MoreHorizontal className="h-4 w-4" />
-				</WorkspaceIconButton>
+				{isProjectOwner ? (
+					<div className="flex items-center gap-1">
+						{isColumnReorderAvailable ? (
+							<>
+								<button
+									type="button"
+									aria-label={`Move ${column.title} column left`}
+									title="Move column left"
+									disabled={!canMoveLeft || isColumnMoveDisabled}
+									onClick={() => onMoveColumn(column.id, "left")}
+									className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] text-[var(--on-surface-variant)] transition hover:bg-[var(--surface-container-high)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-45"
+								>
+									<ChevronLeft className="h-4 w-4" aria-hidden="true" />
+								</button>
+								<button
+									type="button"
+									aria-label={`Move ${column.title} column right`}
+									title="Move column right"
+									disabled={!canMoveRight || isColumnMoveDisabled}
+									onClick={() => onMoveColumn(column.id, "right")}
+									className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] text-[var(--on-surface-variant)] transition hover:bg-[var(--surface-container-high)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-45"
+								>
+									<ChevronRight className="h-4 w-4" aria-hidden="true" />
+								</button>
+							</>
+						) : null}
+						<Link
+							to="/projects/$projectId/columns/$columnId"
+							params={{ projectId, columnId: column.id }}
+							aria-label={`Edit ${column.title} column`}
+							title="Edit column"
+							className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] text-[var(--on-surface-variant)] no-underline transition hover:bg-[var(--surface-container-high)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]"
+						>
+							<Pencil className="h-4 w-4" aria-hidden="true" />
+						</Link>
+					</div>
+				) : null}
 			</div>
 
 			<div className="flex flex-col gap-4">{children}</div>
@@ -875,6 +1081,301 @@ function ProjectMembersModal({
 	);
 }
 
+function formatChatTimestamp(date: Date): string {
+	return new Intl.DateTimeFormat(undefined, {
+		hour: "numeric",
+		minute: "2-digit",
+	}).format(date);
+}
+
+function formatChatTimestampTitle(date: Date): string {
+	return new Intl.DateTimeFormat(undefined, {
+		dateStyle: "medium",
+		timeStyle: "short",
+	}).format(date);
+}
+
+function ProjectChatPanel({
+	chat,
+	onClose,
+	projectName,
+}: {
+	chat: ReturnType<typeof useProjectChat>;
+	onClose: () => void;
+	projectName: string;
+}) {
+	const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+	const previousFirstMessageIdRef = useRef<string | null>(null);
+	const previousLastMessageIdRef = useRef<string | null>(null);
+	const previousScrollHeightRef = useRef<number | null>(null);
+	const wasNearBottomRef = useRef(true);
+	const [hasUnseenMessages, setHasUnseenMessages] = useState(false);
+	const firstMessageId = chat.messages[0]?.id ?? null;
+	const lastMessageId = chat.messages.at(-1)?.id ?? null;
+
+	useLayoutEffect(() => {
+		const container = messagesContainerRef.current;
+		if (!container) {
+			return;
+		}
+
+		const previousFirstMessageId = previousFirstMessageIdRef.current;
+		const previousLastMessageId = previousLastMessageIdRef.current;
+		const didPrependOlderMessages =
+			Boolean(previousFirstMessageId) &&
+			firstMessageId !== previousFirstMessageId;
+		const didAppendMessages =
+			Boolean(previousLastMessageId) && lastMessageId !== previousLastMessageId;
+
+		if (didPrependOlderMessages) {
+			const previousScrollHeight = previousScrollHeightRef.current;
+			if (previousScrollHeight !== null) {
+				container.scrollTop += container.scrollHeight - previousScrollHeight;
+			}
+		}
+
+		if (
+			!didPrependOlderMessages &&
+			didAppendMessages &&
+			wasNearBottomRef.current
+		) {
+			container.scrollTop = container.scrollHeight;
+			setHasUnseenMessages(false);
+		} else if (didAppendMessages && !wasNearBottomRef.current) {
+			setHasUnseenMessages(true);
+		}
+
+		if (!previousLastMessageId && lastMessageId) {
+			container.scrollTop = container.scrollHeight;
+		}
+
+		previousFirstMessageIdRef.current = firstMessageId;
+		previousLastMessageIdRef.current = lastMessageId;
+		previousScrollHeightRef.current = null;
+		wasNearBottomRef.current = isNearChatBottom(container);
+	}, [firstMessageId, lastMessageId]);
+
+	if (!chat.isOpen) {
+		return null;
+	}
+
+	function jumpToLatestMessages() {
+		const container = messagesContainerRef.current;
+		if (!container) {
+			return;
+		}
+
+		container.scrollTop = container.scrollHeight;
+		wasNearBottomRef.current = true;
+		setHasUnseenMessages(false);
+	}
+
+	function handleMessagesScroll(event: UIEvent<HTMLDivElement>) {
+		wasNearBottomRef.current = isNearChatBottom(event.currentTarget);
+		if (wasNearBottomRef.current) {
+			setHasUnseenMessages(false);
+		}
+
+		if (
+			event.currentTarget.scrollTop <= 64 &&
+			chat.hasOlderMessages &&
+			!chat.isLoadingOlderMessages
+		) {
+			previousScrollHeightRef.current = event.currentTarget.scrollHeight;
+			void chat.loadOlderMessages();
+		}
+	}
+
+	return (
+		<div className="fixed inset-0 z-40 bg-black/30 lg:bg-transparent">
+			<aside
+				aria-label="Project chat"
+				role="dialog"
+				aria-modal="true"
+				className="absolute inset-0 flex flex-col bg-[var(--surface-container-lowest)] shadow-2xl lg:left-auto lg:w-[30rem] lg:border-l lg:border-[var(--outline-variant)]"
+			>
+				<header className="flex items-start justify-between gap-4 border-b border-[var(--outline-variant)] px-5 py-4">
+					<div>
+						<p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--on-surface-variant)]">
+							Project chat
+						</p>
+						<h2 className="mt-1 font-display text-xl font-bold">
+							{projectName}
+						</h2>
+						{chat.isReconnecting ? (
+							<p className="mt-2 text-xs font-semibold text-[var(--on-surface-variant)]">
+								Reconnecting to chat...
+							</p>
+						) : null}
+					</div>
+					<button
+						type="button"
+						aria-label="Close chat"
+						onClick={onClose}
+						className="rounded-full p-2 text-[var(--on-surface-variant)] hover:bg-[var(--surface-container-high)]"
+					>
+						<X className="h-5 w-5" />
+					</button>
+				</header>
+
+				<div
+					data-testid="project-chat-messages"
+					ref={messagesContainerRef}
+					className="flex-1 overflow-y-auto px-5 py-4"
+					onScroll={handleMessagesScroll}
+				>
+					{chat.isLoadingOlderMessages ? (
+						<p className="mb-4 text-center text-xs font-semibold text-[var(--on-surface-variant)]">
+							Loading older messages...
+						</p>
+					) : null}
+					{chat.isLoading ? (
+						<p className="rounded-2xl bg-[var(--surface-container-low)] p-4 text-sm text-[var(--on-surface-variant)]">
+							Loading recent messages...
+						</p>
+					) : null}
+					{chat.isError ? (
+						<div className="rounded-2xl border border-[var(--error-container)] bg-[var(--error-container)] p-4 text-sm font-semibold text-[var(--on-error-container)]">
+							Chat history could not be loaded.
+							<button
+								type="button"
+								onClick={() => void chat.refetch()}
+								className="ml-3 rounded-full bg-[var(--surface-container-lowest)] px-3 py-1.5 text-xs text-[var(--on-surface)]"
+							>
+								Retry
+							</button>
+						</div>
+					) : null}
+					{!chat.isLoading && !chat.isError && chat.messages.length === 0 ? (
+						<p className="rounded-2xl border border-dashed border-[var(--outline-variant)] bg-[var(--surface-container-low)] p-4 text-sm text-[var(--on-surface-variant)]">
+							No messages yet.
+						</p>
+					) : null}
+					{chat.messages.length > 0 ? (
+						<ol className="space-y-4">
+							{chat.messages.map((message) => (
+								<li key={message.id} className="flex gap-3">
+									<span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-[var(--primary-container)] text-sm font-bold text-[var(--on-primary-container)]">
+										{message.author.initials}
+									</span>
+									<div className="min-w-0 flex-1 rounded-2xl bg-[var(--surface-container-low)] px-4 py-3">
+										<div className="flex flex-wrap items-baseline justify-between gap-2">
+											<p className="font-semibold">
+												{message.author.displayName}
+												{message.author.deleted ? " (deleted)" : ""}
+											</p>
+											<time
+												dateTime={message.createdAt.toISOString()}
+												title={formatChatTimestampTitle(message.createdAt)}
+												className="text-xs font-semibold text-[var(--on-surface-variant)]"
+											>
+												{formatChatTimestamp(message.createdAt)}
+											</time>
+										</div>
+										<p className="mt-2 whitespace-pre-wrap text-sm leading-6">
+											{message.body}
+										</p>
+									</div>
+								</li>
+							))}
+						</ol>
+					) : null}
+					{hasUnseenMessages ? (
+						<div className="sticky bottom-3 mt-4 flex justify-center">
+							<button
+								type="button"
+								onClick={jumpToLatestMessages}
+								className="rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-bold text-[var(--on-primary)] shadow-lg transition hover:brightness-105"
+							>
+								New messages
+							</button>
+						</div>
+					) : null}
+				</div>
+				<ChatComposer chat={chat} />
+			</aside>
+		</div>
+	);
+}
+
+function isNearChatBottom(container: HTMLDivElement): boolean {
+	return (
+		container.scrollHeight - container.scrollTop - container.clientHeight <= 96
+	);
+}
+
+function ChatComposer({ chat }: { chat: ReturnType<typeof useProjectChat> }) {
+	const [draft, setDraft] = useState("");
+	const [pendingClientMessageId, setPendingClientMessageId] = useState<
+		string | null
+	>(null);
+	const trimmedDraft = draft.trim();
+	const canSend =
+		chat.isConnected && trimmedDraft.length > 0 && trimmedDraft.length <= 4_000;
+
+	useEffect(() => {
+		if (
+			pendingClientMessageId !== null &&
+			chat.lastCreatedClientMessageId === pendingClientMessageId
+		) {
+			setDraft("");
+			setPendingClientMessageId(null);
+		}
+	}, [chat.lastCreatedClientMessageId, pendingClientMessageId]);
+
+	function sendDraft() {
+		const clientMessageId = chat.sendMessage(draft);
+		if (clientMessageId !== null) {
+			setPendingClientMessageId(clientMessageId);
+		}
+	}
+
+	return (
+		<footer className="border-t border-[var(--outline-variant)] px-5 py-4">
+			{chat.sendError ? (
+				<p className="mb-3 rounded-2xl bg-[var(--error-container)] px-4 py-2 text-sm font-semibold text-[var(--on-error-container)]">
+					{chat.sendError}
+				</p>
+			) : null}
+			<label className="sr-only" htmlFor="project-chat-message">
+				Message
+			</label>
+			<textarea
+				id="project-chat-message"
+				value={draft}
+				onChange={(event) => setDraft(event.currentTarget.value)}
+				maxLength={4_000}
+				onKeyDown={(event) => {
+					if (event.key === "Enter" && !event.shiftKey) {
+						event.preventDefault();
+						sendDraft();
+					}
+				}}
+				placeholder={
+					chat.isConnected ? "Write a message..." : "Connecting to chat..."
+				}
+				disabled={!chat.isConnected}
+				className="min-h-24 w-full resize-none rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-low)] px-4 py-3 text-sm leading-6 text-[var(--on-surface)] outline-none transition placeholder:text-[var(--on-surface-variant)] focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-60"
+			/>
+			<div className="mt-3 flex items-center justify-between gap-3">
+				<p className="text-xs font-semibold text-[var(--on-surface-variant)]">
+					{chat.isConnected
+						? `${trimmedDraft.length}/4000. Enter to send, Shift+Enter for a new line.`
+						: "Sending is disabled while disconnected."}
+				</p>
+				<button
+					type="button"
+					onClick={sendDraft}
+					disabled={!canSend}
+					className="rounded-full bg-[var(--primary)] px-5 py-2 text-sm font-bold text-[var(--on-primary)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+				>
+					Send
+				</button>
+			</div>
+		</footer>
+	);
+}
+
 export function ProjectBoardPage() {
 	const auth = useAuthBoundary();
 	const { projectId } = useParams({ from: "/projects/$projectId" });
@@ -885,12 +1386,21 @@ export function ProjectBoardPage() {
 	const { columnsQuery, tasksQuery } = board;
 	const { draggingTaskId, activeDropColumnId } = board.dragState;
 	const { isMovePending, moveError } = board.moveState;
+	const { isColumnReorderPending, columnReorderError } =
+		board.columnReorderState;
 	const [cardDropIndicator, setCardDropIndicator] =
 		useState<CardDropIndicator | null>(null);
 	const [columnAppendDropIndicator, setColumnAppendDropIndicator] =
 		useState<ColumnAppendDropIndicator | null>(null);
+	const [draggingColumnId, setDraggingColumnId] = useState<ColumnId | null>(
+		null,
+	);
+	const [columnInsertionIndicator, setColumnInsertionIndicator] =
+		useState<ColumnInsertionIndicator | null>(null);
 	const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
+	const [isChatOpen, setIsChatOpen] = useState(false);
 	const projectName = projectQuery.data?.name ?? "Project";
+	const chat = useProjectChat(projectId, isChatOpen);
 	const accessUserIds = getProjectAccessUserIds(projectQuery.data);
 	const accessUsersQuery = useQuery(
 		api.users.projectAccess(projectId, accessUserIds, accessUserIds.length > 0),
@@ -903,10 +1413,12 @@ export function ProjectBoardPage() {
 	const isTasksAuthError = tasksQuery.error instanceof CurrentUserAuthError;
 	const isColumnsAuthError = columnsQuery.error instanceof CurrentUserAuthError;
 	const accountInitials = getCurrentUserInitials(currentUser);
+	const isBoardMutationPending = isMovePending || isColumnReorderPending;
 
 	useEffect(() => {
 		return monitorForElements({
-			canMonitor: ({ source }) => !isMovePending && source.data.type === "card",
+			canMonitor: ({ source }) =>
+				!isBoardMutationPending && source.data.type === "card",
 			onDropTargetChange: ({ location, source }) => {
 				const activeTargetData = location.current.dropTargets[0]?.data;
 				const sourceTaskId =
@@ -991,7 +1503,56 @@ export function ProjectBoardPage() {
 				});
 			},
 		});
-	}, [board, columns, isMovePending, tasksQuery.data]);
+	}, [board, columns, isBoardMutationPending, tasksQuery.data]);
+
+	useEffect(() => {
+		return monitorForElements({
+			canMonitor: ({ source }) =>
+				!isBoardMutationPending && source.data.type === "column-drag",
+			onDragStart: ({ source }) => {
+				setDraggingColumnId(
+					typeof source.data.columnId === "string"
+						? source.data.columnId
+						: null,
+				);
+			},
+			onDropTargetChange: ({ location, source }) => {
+				const sourceColumnId =
+					typeof source.data.columnId === "string"
+						? source.data.columnId
+						: null;
+				const activeTargetData = location.current.dropTargets[0]?.data;
+
+				setColumnInsertionIndicator(
+					getColumnInsertionIndicator(activeTargetData, sourceColumnId),
+				);
+			},
+			onDrop: ({ source, location }) => {
+				setDraggingColumnId(null);
+				setColumnInsertionIndicator(null);
+
+				const sourceColumnId = source.data.columnId;
+				if (typeof sourceColumnId !== "string") {
+					return;
+				}
+
+				const targetData = location.current.dropTargets[0]?.data;
+				const insertionIndicator = getColumnInsertionIndicator(
+					targetData,
+					sourceColumnId,
+				);
+				if (!insertionIndicator) {
+					return;
+				}
+
+				board.reorderColumn({
+					sourceColumnId,
+					targetColumnId: insertionIndicator.columnId,
+					placement: insertionIndicator.edge === "left" ? "before" : "after",
+				});
+			},
+		});
+	}, [board, isBoardMutationPending]);
 
 	function handleLogout() {
 		auth.logout();
@@ -1007,6 +1568,12 @@ export function ProjectBoardPage() {
 		await api.projects.addMember(projectId, userId);
 	}
 
+	function handleMoveColumn(columnId: ColumnId, direction: "left" | "right") {
+		board.moveColumn({ columnId, direction });
+	}
+
+	const isColumnReorderAvailable = columns.length > 1;
+
 	return (
 		<main className="min-h-screen overflow-hidden bg-[var(--background)] text-[var(--on-surface)]">
 			<ProjectMembersModal
@@ -1017,6 +1584,11 @@ export function ProjectBoardPage() {
 				users={accessUsersQuery.data ?? []}
 				isLoading={accessUsersQuery.isPending && accessUserIds.length > 0}
 				isError={accessUsersQuery.isError}
+			/>
+			<ProjectChatPanel
+				chat={chat}
+				onClose={() => setIsChatOpen(false)}
+				projectName={projectName}
 			/>
 			<div className="flex min-h-screen flex-col lg:flex-row">
 				<aside className="border-[var(--outline-variant)] bg-[var(--surface-container-low)] px-4 py-4 lg:sticky lg:top-0 lg:h-screen lg:w-72 lg:flex-shrink-0 lg:border-r lg:px-6 lg:py-6">
@@ -1128,20 +1700,14 @@ export function ProjectBoardPage() {
 										: "Main Board"}
 								</h2>
 								<div className="flex items-center gap-3">
-									<div className="flex rounded-full border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-1 shadow-sm">
-										<button
-											type="button"
-											className="rounded-full bg-[var(--surface-variant)] px-3 py-1.5 text-sm font-semibold"
-										>
-											Board
-										</button>
-										<button
-											type="button"
-											className="rounded-full px-3 py-1.5 text-sm font-semibold text-[var(--on-surface-variant)] hover:bg-[var(--surface-bright)]"
-										>
-											Calendar
-										</button>
-									</div>
+									<button
+										type="button"
+										onClick={() => setIsChatOpen(true)}
+										className="inline-flex items-center gap-2 rounded-full border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-4 py-2 text-sm font-semibold hover:bg-[var(--surface-bright)]"
+									>
+										<MessageCircle className="h-4 w-4" />
+										Chat
+									</button>
 									<ProjectMemberAvatarStack
 										project={projectQuery.data}
 										users={accessUsersQuery.data ?? []}
@@ -1195,9 +1761,9 @@ export function ProjectBoardPage() {
 								</button>
 							</div>
 						) : null}
-						{moveError ? (
+						{moveError || columnReorderError ? (
 							<div className="mb-4 min-w-[1100px] rounded-xl border border-[var(--error-container)] bg-[var(--error-container)] p-4 text-sm font-semibold text-[var(--on-error-container)]">
-								{moveError}
+								{moveError ?? columnReorderError}
 							</div>
 						) : null}
 						{!columnsQuery.isPending &&
@@ -1213,7 +1779,7 @@ export function ProjectBoardPage() {
 								</p>
 							) : null}
 							{!columnsQuery.isError &&
-								columns.map((column) => (
+								columns.map((column, columnIndex) => (
 									<BoardColumnView
 										key={column.id}
 										column={column}
@@ -1222,7 +1788,19 @@ export function ProjectBoardPage() {
 										isAppendDropTarget={
 											columnAppendDropIndicator?.columnId === column.id
 										}
-										isDropDisabled={isMovePending}
+										isDropDisabled={isBoardMutationPending}
+										isProjectOwner={isProjectOwner}
+										isColumnReorderAvailable={isColumnReorderAvailable}
+										canMoveLeft={columnIndex > 0}
+										canMoveRight={columnIndex < columns.length - 1}
+										isColumnDragging={draggingColumnId === column.id}
+										columnInsertionEdge={
+											columnInsertionIndicator?.columnId === column.id
+												? columnInsertionIndicator.edge
+												: null
+										}
+										isColumnMoveDisabled={isBoardMutationPending}
+										onMoveColumn={handleMoveColumn}
 									>
 										{tasksQuery.isPending ? (
 											<p className="rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-4 text-sm text-[var(--on-surface-variant)]">
@@ -1249,7 +1827,7 @@ export function ProjectBoardPage() {
 												card={card}
 												columnId={column.id}
 												isDragging={draggingTaskId === card.id}
-												isDragDisabled={isMovePending}
+												isDragDisabled={isBoardMutationPending}
 												dropIndicatorEdge={
 													cardDropIndicator?.taskId === card.id
 														? cardDropIndicator.closestEdge
@@ -1261,13 +1839,16 @@ export function ProjectBoardPage() {
 									</BoardColumnView>
 								))}
 
-							<button
-								type="button"
-								className="flex min-h-32 w-[340px] flex-shrink-0 items-center justify-center gap-2 rounded-[1.5rem] border border-dashed border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-4 py-3 text-sm font-semibold text-[var(--on-surface-variant)] hover:bg-[var(--surface-bright)]"
-							>
-								<Plus className="h-4 w-4" />
-								Add another list
-							</button>
+							{isProjectOwner ? (
+								<Link
+									to="/projects/$projectId/columns/new"
+									params={{ projectId }}
+									className="flex min-h-32 w-[340px] flex-shrink-0 items-center justify-center gap-2 rounded-[1.5rem] border border-dashed border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-4 py-3 text-sm font-semibold text-[var(--on-surface-variant)] no-underline hover:bg-[var(--surface-bright)]"
+								>
+									<Plus className="h-4 w-4" />
+									Add another list
+								</Link>
+							) : null}
 						</div>
 					</div>
 				</section>

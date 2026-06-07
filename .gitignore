@@ -12,6 +12,7 @@ issues/
 *.db
 .beads-credential-key
 .beads
-.ralph-tui
+.ralph-tui/*
 tasks/
 ralph-prompt.hbs
+!.ralph-tui/worktrees/

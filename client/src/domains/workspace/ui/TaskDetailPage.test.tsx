@@ -82,6 +82,7 @@ function column(overrides: Partial<ProjectColumn> = {}): ProjectColumn {
 		id: "todo",
 		projectId: "project-1",
 		name: "Ready",
+		description: null,
 		position: 0,
 		createdAt: null,
 		updatedAt: null,

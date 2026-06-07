@@ -21,11 +21,16 @@ vi.mock("openid-client", () => ({
 }));
 
 import {
+	type ProjectColumn,
 	projectColumnsQueryOptions,
 	projectTasksQueryOptions,
 	type Task,
 } from "#/api/client";
-import { useProjectTaskBoard } from "#/domains/workspace/model/useProjectTaskBoard";
+import {
+	reorderProjectColumnsForMove,
+	reorderProjectColumnsForPlacement,
+	useProjectTaskBoard,
+} from "#/domains/workspace/model/useProjectTaskBoard";
 
 function createTestQueryClient() {
 	return new QueryClient({
@@ -60,6 +65,43 @@ function task(overrides: Partial<Task> = {}): Task {
 		updatedAt: null,
 		...overrides,
 	};
+}
+
+function projectColumn(overrides: Partial<ProjectColumn> = {}): ProjectColumn {
+	return {
+		id: "column-todo",
+		projectId: "project-1",
+		name: "To Do",
+		description: null,
+		position: 0,
+		createdAt: null,
+		updatedAt: null,
+		...overrides,
+	};
+}
+
+function projectColumnJson(overrides: Partial<ProjectColumn> = {}) {
+	const sourceColumn = projectColumn(overrides);
+
+	return {
+		id: sourceColumn.id,
+		project_id: sourceColumn.projectId,
+		name: sourceColumn.name,
+		description: sourceColumn.description,
+		position: sourceColumn.position,
+		created_at: sourceColumn.createdAt?.toISOString() ?? null,
+		updated_at: sourceColumn.updatedAt?.toISOString() ?? null,
+	};
+}
+
+function projectColumnsResponse(columns: ProjectColumn[]) {
+	return new Response(
+		JSON.stringify(columns.map((column) => projectColumnJson(column))),
+		{
+			headers: { "content-type": "application/json" },
+			status: 200,
+		},
+	);
 }
 
 function taskJson(overrides: Partial<Task> = {}) {
@@ -130,6 +172,7 @@ describe("useProjectTaskBoard", () => {
 				id: "column-todo",
 				projectId: "project-1",
 				name: "To Do",
+				description: null,
 				position: 0,
 				createdAt: null,
 				updatedAt: null,
@@ -138,6 +181,7 @@ describe("useProjectTaskBoard", () => {
 				id: "column-done",
 				projectId: "project-1",
 				name: "Done",
+				description: null,
 				position: 1,
 				createdAt: null,
 				updatedAt: null,
@@ -228,6 +272,7 @@ describe("useProjectTaskBoard", () => {
 				id: "column-todo",
 				projectId: "project-1",
 				name: "To Do",
+				description: null,
 				position: 0,
 				createdAt: null,
 				updatedAt: null,
@@ -236,6 +281,7 @@ describe("useProjectTaskBoard", () => {
 				id: "column-done",
 				projectId: "project-1",
 				name: "Done",
+				description: null,
 				position: 1,
 				createdAt: null,
 				updatedAt: null,
@@ -301,6 +347,7 @@ describe("useProjectTaskBoard", () => {
 				id: "column-backlog",
 				projectId: "project-1",
 				name: "Backlog",
+				description: "Ready for planning",
 				position: 0,
 				createdAt: null,
 				updatedAt: null,
@@ -309,6 +356,7 @@ describe("useProjectTaskBoard", () => {
 				id: "column-review",
 				projectId: "project-1",
 				name: "Review",
+				description: null,
 				position: 1,
 				createdAt: null,
 				updatedAt: null,
@@ -358,6 +406,7 @@ describe("useProjectTaskBoard", () => {
 				id: "column-todo",
 				projectId: "project-1",
 				name: "To Do",
+				description: null,
 				position: 0,
 				createdAt: null,
 				updatedAt: null,
@@ -366,6 +415,7 @@ describe("useProjectTaskBoard", () => {
 				id: "column-done",
 				projectId: "project-1",
 				name: "Done",
+				description: null,
 				position: 1,
 				createdAt: null,
 				updatedAt: null,
@@ -440,6 +490,7 @@ describe("useProjectTaskBoard", () => {
 				id: "column-todo",
 				projectId: "project-1",
 				name: "To Do",
+				description: null,
 				position: 0,
 				createdAt: null,
 				updatedAt: null,
@@ -448,6 +499,7 @@ describe("useProjectTaskBoard", () => {
 				id: "column-done",
 				projectId: "project-1",
 				name: "Done",
+				description: null,
 				position: 1,
 				createdAt: null,
 				updatedAt: null,
@@ -501,6 +553,7 @@ describe("useProjectTaskBoard", () => {
 				id: "column-todo",
 				projectId: "project-1",
 				name: "To Do",
+				description: null,
 				position: 0,
 				createdAt: null,
 				updatedAt: null,
@@ -509,6 +562,7 @@ describe("useProjectTaskBoard", () => {
 				id: "column-done",
 				projectId: "project-1",
 				name: "Done",
+				description: null,
 				position: 1,
 				createdAt: null,
 				updatedAt: null,
@@ -572,6 +626,7 @@ describe("useProjectTaskBoard", () => {
 				id: "column-todo",
 				projectId: "project-1",
 				name: "To Do",
+				description: null,
 				position: 0,
 				createdAt: null,
 				updatedAt: null,
@@ -580,6 +635,7 @@ describe("useProjectTaskBoard", () => {
 				id: "column-done",
 				projectId: "project-1",
 				name: "Done",
+				description: null,
 				position: 1,
 				createdAt: null,
 				updatedAt: null,
@@ -641,6 +697,329 @@ describe("useProjectTaskBoard", () => {
 					}),
 					{ headers: { "content-type": "application/json" }, status: 200 },
 				),
+			);
+		});
+
+		await waitFor(() =>
+			expect(result.current.moveState.isMovePending).toBe(false),
+		);
+	});
+
+	it("returns no reorder for missing columns and boundary moves", () => {
+		const columns = [
+			projectColumn({ id: "column-todo", name: "To Do", position: 0 }),
+			projectColumn({ id: "column-done", name: "Done", position: 1 }),
+		];
+
+		expect(
+			reorderProjectColumnsForMove(columns, {
+				columnId: "missing-column",
+				direction: "left",
+			}),
+		).toBeNull();
+		expect(
+			reorderProjectColumnsForMove(columns, {
+				columnId: "column-todo",
+				direction: "left",
+			}),
+		).toBeNull();
+		expect(
+			reorderProjectColumnsForMove(columns, {
+				columnId: "column-done",
+				direction: "right",
+			}),
+		).toBeNull();
+	});
+
+	it("computes column moves and refreshed positions", () => {
+		const reordered = reorderProjectColumnsForMove(
+			[
+				projectColumn({ id: "column-todo", name: "To Do", position: 0 }),
+				projectColumn({ id: "column-doing", name: "Doing", position: 1 }),
+				projectColumn({ id: "column-done", name: "Done", position: 2 }),
+			],
+			{ columnId: "column-doing", direction: "right" },
+		);
+
+		expect(reordered?.map((column) => column.id)).toEqual([
+			"column-todo",
+			"column-done",
+			"column-doing",
+		]);
+		expect(reordered?.map((column) => column.position)).toEqual([0, 1, 2]);
+	});
+
+	it("computes column placement reorders from before and after edges", () => {
+		const columns = [
+			projectColumn({ id: "column-todo", name: "To Do", position: 0 }),
+			projectColumn({ id: "column-doing", name: "Doing", position: 1 }),
+			projectColumn({ id: "column-done", name: "Done", position: 2 }),
+		];
+
+		expect(
+			reorderProjectColumnsForPlacement(columns, {
+				sourceColumnId: "column-done",
+				targetColumnId: "column-todo",
+				placement: "before",
+			})?.map((column) => column.id),
+		).toEqual(["column-done", "column-todo", "column-doing"]);
+		expect(
+			reorderProjectColumnsForPlacement(columns, {
+				sourceColumnId: "column-todo",
+				targetColumnId: "column-done",
+				placement: "after",
+			})?.map((column) => column.id),
+		).toEqual(["column-doing", "column-done", "column-todo"]);
+		expect(
+			reorderProjectColumnsForPlacement(columns, {
+				sourceColumnId: "column-doing",
+				targetColumnId: "column-doing",
+				placement: "before",
+			}),
+		).toBeNull();
+		expect(
+			reorderProjectColumnsForPlacement(columns, {
+				sourceColumnId: "column-doing",
+				targetColumnId: "column-done",
+				placement: "before",
+			}),
+		).toBeNull();
+	});
+
+	it("optimistically reorders columns and invalidates after success", async () => {
+		const queryClient = createTestQueryClient();
+		const originalColumns = [
+			projectColumn({ id: "column-todo", name: "To Do", position: 0 }),
+			projectColumn({ id: "column-doing", name: "Doing", position: 1 }),
+			projectColumn({ id: "column-done", name: "Done", position: 2 }),
+		];
+		queryClient.setQueryData(
+			projectColumnsQueryOptions("project-1").queryKey,
+			originalColumns,
+		);
+		queryClient.setQueryData(
+			projectTasksQueryOptions("project-1").queryKey,
+			[],
+		);
+		const reorderedColumns = [
+			originalColumns[1],
+			originalColumns[0],
+			originalColumns[2],
+		].map((column, index) => ({ ...column, position: index }));
+		const fetchSpy = vi
+			.fn<typeof fetch>()
+			.mockResolvedValue(projectColumnsResponse(reorderedColumns));
+		vi.stubGlobal("fetch", fetchSpy);
+
+		const { result } = renderHook(() => useProjectTaskBoard("project-1"), {
+			wrapper: createWrapper(queryClient),
+		});
+
+		act(() => {
+			result.current.moveColumn({
+				columnId: "column-doing",
+				direction: "left",
+			});
+		});
+
+		expect(result.current.columns.map((column) => column.id)).toEqual([
+			"column-doing",
+			"column-todo",
+			"column-done",
+		]);
+		expect(result.current.columnReorderState.isColumnReorderPending).toBe(true);
+		await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+		const [url, init] = fetchSpy.mock.calls[0];
+		expect(url).toBe(
+			"https://api.example.test/projects/project-1/columns/reorder",
+		);
+		expect(init?.method).toBe("PUT");
+		expect(JSON.parse(String(init?.body))).toEqual({
+			column_ids: ["column-doing", "column-todo", "column-done"],
+		});
+		await waitFor(() =>
+			expect(result.current.columnReorderState.isColumnReorderPending).toBe(
+				false,
+			),
+		);
+		expect(result.current.columnReorderState.columnReorderError).toBeNull();
+	});
+
+	it("optimistically reorders columns from pointer placement", async () => {
+		const queryClient = createTestQueryClient();
+		const originalColumns = [
+			projectColumn({ id: "column-todo", name: "To Do", position: 0 }),
+			projectColumn({ id: "column-doing", name: "Doing", position: 1 }),
+			projectColumn({ id: "column-done", name: "Done", position: 2 }),
+		];
+		queryClient.setQueryData(
+			projectColumnsQueryOptions("project-1").queryKey,
+			originalColumns,
+		);
+		queryClient.setQueryData(
+			projectTasksQueryOptions("project-1").queryKey,
+			[],
+		);
+		const fetchSpy = vi
+			.fn<typeof fetch>()
+			.mockResolvedValue(projectColumnsResponse(originalColumns));
+		vi.stubGlobal("fetch", fetchSpy);
+
+		const { result } = renderHook(() => useProjectTaskBoard("project-1"), {
+			wrapper: createWrapper(queryClient),
+		});
+
+		act(() => {
+			result.current.reorderColumn({
+				sourceColumnId: "column-done",
+				targetColumnId: "column-todo",
+				placement: "before",
+			});
+		});
+
+		expect(result.current.columns.map((column) => column.id)).toEqual([
+			"column-done",
+			"column-todo",
+			"column-doing",
+		]);
+		await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+		expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toEqual({
+			column_ids: ["column-done", "column-todo", "column-doing"],
+		});
+	});
+
+	it("rolls back optimistic column reordering on API failure", async () => {
+		const queryClient = createTestQueryClient();
+		const originalColumns = [
+			projectColumn({ id: "column-todo", name: "To Do", position: 0 }),
+			projectColumn({ id: "column-done", name: "Done", position: 1 }),
+		];
+		queryClient.setQueryData(
+			projectColumnsQueryOptions("project-1").queryKey,
+			originalColumns,
+		);
+		queryClient.setQueryData(
+			projectTasksQueryOptions("project-1").queryKey,
+			[],
+		);
+		vi.stubGlobal(
+			"fetch",
+			vi
+				.fn<typeof fetch>()
+				.mockResolvedValue(
+					new Response(JSON.stringify({ detail: "failed" }), { status: 500 }),
+				),
+		);
+
+		const { result } = renderHook(() => useProjectTaskBoard("project-1"), {
+			wrapper: createWrapper(queryClient),
+		});
+
+		act(() => {
+			result.current.moveColumn({ columnId: "column-done", direction: "left" });
+		});
+
+		await waitFor(() =>
+			expect(
+				queryClient.getQueryData(
+					projectColumnsQueryOptions("project-1").queryKey,
+				),
+			).toEqual(originalColumns),
+		);
+		expect(result.current.columnReorderState.columnReorderError).toBe(
+			"Column reorder failed. Your board was restored.",
+		);
+	});
+
+	it("locks task movement while a column reorder is pending", async () => {
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			projectColumn({ id: "column-todo", name: "To Do", position: 0 }),
+			projectColumn({ id: "column-done", name: "Done", position: 1 }),
+		]);
+		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
+			task({ id: "blocked", columnId: "column-todo", rank: "U" }),
+		]);
+		let resolveReorder: (response: Response) => void = () => undefined;
+		const reorderPromise = new Promise<Response>((resolve) => {
+			resolveReorder = resolve;
+		});
+		const fetchSpy = vi.fn<typeof fetch>().mockReturnValue(reorderPromise);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		const { result } = renderHook(() => useProjectTaskBoard("project-1"), {
+			wrapper: createWrapper(queryClient),
+		});
+
+		act(() => {
+			result.current.moveColumn({ columnId: "column-done", direction: "left" });
+			result.current.moveTask({ taskId: "blocked", toColumnId: "column-done" });
+		});
+
+		expect(result.current.columnReorderState.isColumnReorderPending).toBe(true);
+		await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+		expect(
+			queryClient
+				.getQueryData<Task[]>(projectTasksQueryOptions("project-1").queryKey)
+				?.find((cachedTask) => cachedTask.id === "blocked"),
+		).toMatchObject({ columnId: "column-todo" });
+
+		act(() => {
+			resolveReorder(
+				projectColumnsResponse([
+					projectColumn({ id: "column-done", name: "Done", position: 0 }),
+					projectColumn({ id: "column-todo", name: "To Do", position: 1 }),
+				]),
+			);
+		});
+
+		await waitFor(() =>
+			expect(result.current.columnReorderState.isColumnReorderPending).toBe(
+				false,
+			),
+		);
+	});
+
+	it("locks column reordering while a task move is pending", async () => {
+		const queryClient = createTestQueryClient();
+		const originalColumns = [
+			projectColumn({ id: "column-todo", name: "To Do", position: 0 }),
+			projectColumn({ id: "column-done", name: "Done", position: 1 }),
+		];
+		queryClient.setQueryData(
+			projectColumnsQueryOptions("project-1").queryKey,
+			originalColumns,
+		);
+		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
+			task({ id: "moving", columnId: "column-todo", rank: "U" }),
+		]);
+		let resolveMove: (response: Response) => void = () => undefined;
+		const movePromise = new Promise<Response>((resolve) => {
+			resolveMove = resolve;
+		});
+		const fetchSpy = vi.fn<typeof fetch>().mockReturnValue(movePromise);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		const { result } = renderHook(() => useProjectTaskBoard("project-1"), {
+			wrapper: createWrapper(queryClient),
+		});
+
+		act(() => {
+			result.current.moveTask({ taskId: "moving", toColumnId: "column-done" });
+			result.current.moveColumn({ columnId: "column-done", direction: "left" });
+		});
+
+		expect(result.current.moveState.isMovePending).toBe(true);
+		await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+		expect(
+			queryClient.getQueryData(
+				projectColumnsQueryOptions("project-1").queryKey,
+			),
+		).toEqual(originalColumns);
+
+		act(() => {
+			resolveMove(
+				taskResponse({ id: "moving", columnId: "column-done", rank: "U" }),
 			);
 		});
 

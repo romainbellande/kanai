@@ -6,7 +6,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import SQLModel
 
-from app.models.project import Project, ProjectColumn, ProjectMember, ProjectOwner
+from app.models.project import (
+    Project,
+    ProjectChatMessage,
+    ProjectColumn,
+    ProjectMember,
+    ProjectOwner,
+)
 
 
 class ProjectRepository:
@@ -113,6 +119,14 @@ class ProjectRepository:
             await self._session.delete(owner)
         for member in await self.list_member_rows_by_project(project_id):
             await self._session.delete(member)
+
+    async def delete_chat_messages(self, project_id: UUID) -> None:
+        """Delete chat messages for a project without committing."""
+        messages = await self._session.scalars(
+            select(ProjectChatMessage).filter_by(project_id=project_id)
+        )
+        for message in messages.all():
+            await self._session.delete(message)
 
     async def delete(self, project: Project) -> None:
         """Delete a project without committing."""

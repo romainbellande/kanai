@@ -108,11 +108,11 @@ describe("ProjectsPage", () => {
 		renderWithQueryClient(<ProjectsPage />, queryClient);
 
 		expect(screen.getByText("No projects yet.")).toBeTruthy();
-		expect(
-			screen
-				.getByRole("link", { name: /create a project/i })
-				.getAttribute("href"),
-		).toBe("/projects/new");
+		const createProjectLink = screen.getByRole("link", {
+			name: /create a project/i,
+		});
+		expect(createProjectLink.getAttribute("href")).toBe("/projects/new");
+		expect(createProjectLink.className).toContain("text-white");
 	});
 
 	it("renders an auth error with retry", async () => {

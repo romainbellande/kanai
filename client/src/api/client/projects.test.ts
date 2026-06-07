@@ -205,6 +205,7 @@ describe("projects client", () => {
 						id: "column-1",
 						project_id: "project-1",
 						name: "To Do",
+						description: "Ready to start",
 						position: 0,
 						created_at: null,
 						updated_at: null,
@@ -220,6 +221,7 @@ describe("projects client", () => {
 				id: "column-1",
 				projectId: "project-1",
 				name: "To Do",
+				description: "Ready to start",
 				position: 0,
 				createdAt: null,
 				updatedAt: null,
@@ -244,6 +246,7 @@ describe("projects client", () => {
 			id: "column-1",
 			project_id: "project-1",
 			name: "Review",
+			description: "Needs QA",
 			position: 3,
 			created_at: null,
 			updated_at: null,
@@ -271,8 +274,14 @@ describe("projects client", () => {
 			.mockResolvedValueOnce(new Response(null, { status: 204 }));
 		vi.stubGlobal("fetch", fetchSpy);
 
-		await createProjectColumn("project-1", { name: "Review" });
-		await updateProjectColumn("project-1", "column-1", { name: "QA" });
+		await createProjectColumn("project-1", {
+			name: "Review",
+			description: "Needs QA",
+		});
+		await updateProjectColumn("project-1", "column-1", {
+			name: "QA",
+			description: null,
+		});
 		await reorderProjectColumns("project-1", {
 			columnIds: ["column-2", "column-1"],
 		});
@@ -291,9 +300,11 @@ describe("projects client", () => {
 		]);
 		expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toEqual({
 			name: "Review",
+			description: "Needs QA",
 		});
 		expect(JSON.parse(String(fetchSpy.mock.calls[1][1]?.body))).toEqual({
 			name: "QA",
+			description: null,
 		});
 		expect(JSON.parse(String(fetchSpy.mock.calls[2][1]?.body))).toEqual({
 			column_ids: ["column-2", "column-1"],
@@ -315,6 +326,7 @@ describe("projects client", () => {
 			id: "column-1",
 			project_id: "project-1",
 			name: "Review",
+			description: "Needs QA",
 			position: 3,
 			created_at: null,
 			updated_at: null,

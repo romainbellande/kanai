@@ -124,7 +124,7 @@ export function ProjectsPage() {
 								</p>
 								<Link
 									to="/projects/new"
-									className="mt-3 inline-flex rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--on-primary)] no-underline"
+									className="mt-3 inline-flex rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white no-underline"
 								>
 									Create a project
 								</Link>

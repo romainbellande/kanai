@@ -1,5 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 
+import { projectChatMessagesQueryOptions } from "./chat";
 import { currentUserQueryOptions } from "./current-user";
 import {
 	addProjectMember,
@@ -8,6 +9,7 @@ import {
 	createProject,
 	createProjectColumn,
 	deleteProjectColumn,
+	type ProjectColumn,
 	projectColumnsQueryKey,
 	projectColumnsQueryOptions,
 	projectQueryOptions,
@@ -95,6 +97,12 @@ export function useKanaiApi() {
 					queryKey: projectColumnsQueryKey(projectId),
 				});
 			},
+			replaceCached: (
+				projectId: string,
+				columns: ProjectColumn[] | undefined,
+			) => {
+				queryClient.setQueryData(projectColumnsQueryKey(projectId), columns);
+			},
 			invalidateProjectColumns: (projectId: string) =>
 				queryClient.invalidateQueries({
 					queryKey: projectColumnsQueryKey(projectId),
@@ -165,6 +173,10 @@ export function useKanaiApi() {
 		},
 		currentUser: {
 			get: () => currentUserQueryOptions(),
+		},
+		chat: {
+			messages: (projectId: string, enabled = true) =>
+				projectChatMessagesQueryOptions(projectId, enabled),
 		},
 		users: {
 			projectAccess: (projectId: string, userIds: string[], enabled = true) =>

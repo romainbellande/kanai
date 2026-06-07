@@ -36,6 +36,7 @@ def test_user_model_uses_sqlmodel_metadata_with_expected_columns() -> None:
     assert columns.externalId.nullable is False
     assert columns.externalId.unique is True
     assert columns.display_name.nullable is True
+    assert columns.preferred_username.nullable is True
     assert columns.created_at.nullable is False
     assert columns.created_at.server_default is not None
     assert columns.updated_at.nullable is False
@@ -47,7 +48,11 @@ def test_user_model_uses_sqlmodel_metadata_with_expected_columns() -> None:
 async def test_user_model_persists_uuid_and_timestamp_defaults(
     session: AsyncSession,
 ) -> None:
-    user = User(externalId="sqlmodel-user", display_name="SQLModel User")
+    user = User(
+        externalId="sqlmodel-user",
+        display_name="SQLModel User",
+        preferred_username="sqlmodel-user-name",
+    )
     session.add(user)
 
     await session.commit()
@@ -56,6 +61,7 @@ async def test_user_model_persists_uuid_and_timestamp_defaults(
     assert isinstance(user.id, UUID)
     assert user.created_at is not None
     assert user.display_name == "SQLModel User"
+    assert user.preferred_username == "sqlmodel-user-name"
     assert user.updated_at is not None
 
     created_at = user.created_at

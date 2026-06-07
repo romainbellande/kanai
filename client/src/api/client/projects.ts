@@ -18,6 +18,7 @@ export type ProjectColumn = {
 	id: string;
 	projectId: string;
 	name: string;
+	description: string | null;
 	position: number;
 	createdAt: Date | null;
 	updatedAt: Date | null;
@@ -25,20 +26,35 @@ export type ProjectColumn = {
 
 export type CreateProjectColumnInput = {
 	name: string;
+	description?: string | null;
 };
 
 export type UpdateProjectColumnInput = {
 	name: string;
+	description?: string | null;
 };
 
 export type ReorderProjectColumnsInput = {
 	columnIds: string[];
 };
 
+export class ProjectColumnRequestError extends Error {
+	readonly status: number;
+	readonly detail: string | null;
+
+	constructor(status: number, detail: string | null) {
+		super(detail ?? `Project column request failed with ${status}.`);
+		this.name = "ProjectColumnRequestError";
+		this.status = status;
+		this.detail = detail;
+	}
+}
+
 type ProjectColumnJson = {
 	id: string;
 	project_id: string;
 	name: string;
+	description: string | null;
 	position: number;
 	created_at: string | null;
 	updated_at: string | null;
@@ -89,6 +105,7 @@ function mapProjectColumn(column: ProjectColumnJson): ProjectColumn {
 		id: column.id,
 		projectId: column.project_id,
 		name: column.name,
+		description: column.description,
 		position: column.position,
 		createdAt: column.created_at === null ? null : new Date(column.created_at),
 		updatedAt: column.updated_at === null ? null : new Date(column.updated_at),
@@ -111,7 +128,10 @@ async function requestProjectColumns<T>(
 	});
 
 	if (!response.ok) {
-		throw new Error(`Project column request failed with ${response.status}.`);
+		throw new ProjectColumnRequestError(
+			response.status,
+			await readProjectColumnErrorDetail(response),
+		);
 	}
 
 	if (response.status === 204) {
@@ -119,6 +139,17 @@ async function requestProjectColumns<T>(
 	}
 
 	return response.json() as Promise<T>;
+}
+
+async function readProjectColumnErrorDetail(
+	response: Response,
+): Promise<string | null> {
+	try {
+		const body = (await response.json()) as { detail?: unknown };
+		return typeof body.detail === "string" ? body.detail : null;
+	} catch {
+		return null;
+	}
 }
 
 export async function listProjectColumns(

@@ -9,6 +9,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    Text,
     UniqueConstraint,
     Uuid,
     func,
@@ -88,6 +89,10 @@ class ProjectColumn(SQLModel, table=True):
         ),
     )
     name: str = Field(sa_column=Column(String(length=80), nullable=False))
+    description: str | None = Field(
+        default=None,
+        sa_column=Column(String(length=500), nullable=True),
+    )
     position: int = Field(sa_column=Column(Integer(), nullable=False))
     updated_at: datetime | None = Field(
         default=None,
@@ -160,5 +165,44 @@ class ProjectMember(SQLModel, table=True):
             ForeignKey("users.id", ondelete="CASCADE"),
             primary_key=True,
             nullable=False,
+        ),
+    )
+
+
+class ProjectChatMessage(SQLModel, table=True):
+    """Persisted chat message scoped to one project."""
+
+    __tablename__ = "project_chat_messages"  # type: ignore[bad-override]
+
+    id: UUID | None = Field(
+        default=None,
+        sa_column=Column(Uuid(), primary_key=True, nullable=False, default=uuid4),
+    )
+    project_id: UUID = Field(
+        sa_column=Column(
+            Uuid(),
+            ForeignKey("projects.id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+        ),
+    )
+    author_id: UUID | None = Field(
+        default=None,
+        sa_column=Column(
+            Uuid(),
+            ForeignKey("users.id", ondelete="SET NULL"),
+            nullable=True,
+            index=True,
+        ),
+    )
+    author_display_name: str = Field(sa_column=Column(String(), nullable=False))
+    body: str = Field(sa_column=Column(Text(), nullable=False))
+    created_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(
+            DateTime(timezone=True),
+            server_default=func.now(),
+            nullable=False,
+            index=True,
         ),
     )

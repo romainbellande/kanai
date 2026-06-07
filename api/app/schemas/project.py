@@ -91,6 +91,7 @@ class ProjectColumnRead(BaseModel):
     id: UUID
     project_id: UUID
     name: str
+    description: str | None
     position: int
     created_at: datetime | None
     updated_at: datetime | None
@@ -100,12 +101,14 @@ class ProjectColumnCreate(BaseModel):
     """Request payload for creating a project workflow column."""
 
     name: str = Field(max_length=80)
+    description: str | None = None
 
 
 class ProjectColumnUpdate(BaseModel):
     """Request payload for updating a project workflow column."""
 
     name: str = Field(max_length=80)
+    description: str | None = None
 
 
 class ProjectColumnReorder(BaseModel):
@@ -118,3 +121,22 @@ class ProjectMemberCreate(BaseModel):
     """Request payload for adding a project member."""
 
     user_id: UUID
+
+
+class ProjectChatAuthorRead(BaseModel):
+    """Small author payload embedded in chat messages."""
+
+    id: UUID | None
+    display_name: str
+    initials: str
+    deleted: bool = False
+
+
+class ProjectChatMessageRead(BaseModel):
+    """Project chat history message response payload."""
+
+    id: UUID
+    project_id: UUID
+    body: str
+    created_at: datetime
+    author: ProjectChatAuthorRead
