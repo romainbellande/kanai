@@ -13,3 +13,5 @@ issues/
 .beads-credential-key
 .beads
 .ralph-tui
+tasks/
+ralph-prompt.hbs

@@ -10,6 +10,10 @@ This repository has two active workspaces: `client/` and `api/`.
 - Do not assume repo-root scripts exist.
 - Prefer per-command working directories over `cd` chains when tooling supports them.
 
+## Instructions
+
+- When API schema change, DO NOT require a database migration for now.
+
 ## Quick Reference
 
 - Frontend: React 19, Vite 7, TanStack Router, TypeScript, Vitest, Tailwind CSS v4, Biome.
