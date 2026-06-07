@@ -42,7 +42,7 @@ This repository has two active workspaces: `client/` and `api/`.
 
 **IMPORTANT**: This project uses **br (beads rust)** for ALL issue tracking. Do NOT use markdown TODOs, task lists, or other tracking methods.
 
-### Why bd?
+### Why br?
 
 - Dependency-aware: Track blockers and relationships between issues
 - Git-friendly: Dolt-powered version control with native sync
@@ -61,20 +61,20 @@ br ready --json
 
 ```bash
 br create "Issue title" --description="Detailed context" -t bug|feature|task -p 0-4 --json
-br create "Issue title" --description="What this issue is about" -p 1 --deps discovered-from:bd-123 --json
+br create "Issue title" --description="What this issue is about" -p 1 --deps discovered-from:br-123 --json
 ```
 
 **Claim and update:**
 
 ```bash
 br update <id> --claim --json
-br update bd-42 --priority 1 --json
+br update br-42 --priority 1 --json
 ```
 
 **Complete work:**
 
 ```bash
-br close bd-42 --reason "Completed" --json
+br close br-42 --reason "Completed" --json
 ```
 
 ### Issue Types

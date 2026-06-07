@@ -7,7 +7,7 @@ opencode.json
 !opencode.json
 issues/
 
-# Beads / Dolt files (added by bd init)
+# Beads / Dolt files (added by br init)
 .dolt/
 *.db
 .beads-credential-key
