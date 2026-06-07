@@ -34,7 +34,7 @@ function createdTask(overrides: Record<string, unknown> = {}) {
 		project_id: "project-1",
 		title: "Created task",
 		column_id: "todo",
-		priority: "medium",
+		priority: null,
 		rank: "0|hzzzzz:",
 		assignee_id: null,
 		description: null,
@@ -177,7 +177,7 @@ describe("useTaskForm create mode", () => {
 		expect(result.current.values).toEqual({
 			title: "",
 			status: "column-unknown",
-			priority: "medium",
+			priority: "",
 			description: "",
 			acceptanceCriteria: "",
 			tag: "",
@@ -301,7 +301,7 @@ describe("useTaskForm create mode", () => {
 		);
 	});
 
-	it("omits blank optional create fields and reports failed submit", async () => {
+	it("omits blank optional create fields and priority, then reports failed submit", async () => {
 		const queryClient = createTestQueryClient();
 		const fetchSpy = vi
 			.fn<typeof fetch>()
@@ -339,7 +339,6 @@ describe("useTaskForm create mode", () => {
 		expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toEqual({
 			title: "Minimal task",
 			column_id: "column-todo",
-			priority: "medium",
 		});
 
 		await act(async () => {
@@ -367,6 +366,7 @@ describe("useTaskForm edit mode", () => {
 
 	it("starts edit mode from the task and updates fields", () => {
 		const queryClient = createTestQueryClient();
+		const existingTask = task();
 
 		const { result } = renderHook(
 			() =>
@@ -374,7 +374,7 @@ describe("useTaskForm edit mode", () => {
 					projectId: "project-1",
 					mode: "edit",
 					taskId: "task-1",
-					task: task(),
+					task: existingTask,
 					workflowColumns: [{ id: "in-progress", name: "In Progress" }],
 				}),
 			{ wrapper: createWrapper(queryClient) },
@@ -401,13 +401,14 @@ describe("useTaskForm edit mode", () => {
 	it("normalizes edit payload with nullable clears and calls onSaved", async () => {
 		const queryClient = createTestQueryClient();
 		const onSaved = vi.fn();
+		const existingTask = task();
 		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
 			new Response(
 				JSON.stringify(
 					createdTask({
 						title: "Updated task",
 						column_id: "done",
-						priority: "urgent",
+						priority: "critical",
 						description: null,
 						acceptance_criteria: null,
 						tag: null,
@@ -424,7 +425,7 @@ describe("useTaskForm edit mode", () => {
 					projectId: "project-1",
 					mode: "edit",
 					taskId: "task-1",
-					task: task(),
+					task: existingTask,
 					workflowColumns: [
 						{ id: "in-progress", name: "In Progress" },
 						{ id: "done", name: "Done" },
@@ -437,7 +438,7 @@ describe("useTaskForm edit mode", () => {
 		act(() => {
 			result.current.setField("title", "  Updated task  ");
 			result.current.setField("status", "done");
-			result.current.setField("priority", "urgent");
+			result.current.setField("priority", "critical");
 			result.current.setField("description", "   ");
 			result.current.setField("acceptanceCriteria", "   ");
 			result.current.setField("tag", "   ");
@@ -452,7 +453,7 @@ describe("useTaskForm edit mode", () => {
 		expect(JSON.parse(String(init?.body))).toEqual({
 			title: "Updated task",
 			column_id: "done",
-			priority: "urgent",
+			priority: "critical",
 			description: null,
 			acceptance_criteria: null,
 			tag: null,
@@ -463,8 +464,110 @@ describe("useTaskForm edit mode", () => {
 		expect(result.current.isDirty).toBe(false);
 	});
 
+	it("normalizes legacy urgent task priority to critical", () => {
+		const queryClient = createTestQueryClient();
+		const legacyTask = task({ priority: "urgent" });
+
+		const { result } = renderHook(
+			() =>
+				useTaskForm({
+					projectId: "project-1",
+					mode: "edit",
+					taskId: "task-1",
+					task: legacyTask,
+					workflowColumns: [{ id: "in-progress", name: "In Progress" }],
+				}),
+			{ wrapper: createWrapper(queryClient) },
+		);
+
+		expect(result.current.values.priority).toBe("critical");
+	});
+
+	it("clears task priority on edit submit", async () => {
+		const queryClient = createTestQueryClient();
+		const existingTask = task();
+		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(
+				JSON.stringify(
+					createdTask({
+						title: "Existing task",
+						column_id: "in-progress",
+						priority: null,
+					}),
+				),
+				{ headers: { "content-type": "application/json" }, status: 200 },
+			),
+		);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		const { result } = renderHook(
+			() =>
+				useTaskForm({
+					projectId: "project-1",
+					mode: "edit",
+					taskId: "task-1",
+					task: existingTask,
+					workflowColumns: [{ id: "in-progress", name: "In Progress" }],
+				}),
+			{ wrapper: createWrapper(queryClient) },
+		);
+
+		act(() => {
+			result.current.setField("priority", "");
+		});
+
+		await act(async () => {
+			await result.current.submit();
+		});
+
+		const [, init] = fetchSpy.mock.calls[0];
+		expect(JSON.parse(String(init?.body))).toEqual(
+			expect.objectContaining({ priority: null }),
+		);
+	});
+
+	it.each([
+		"low",
+		"medium",
+		"high",
+		"critical",
+	])("submits %s as a supported create priority", async (priority) => {
+		const queryClient = createTestQueryClient();
+		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(JSON.stringify(createdTask({ priority })), {
+				headers: { "content-type": "application/json" },
+				status: 200,
+			}),
+		);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		const { result } = renderHook(
+			() =>
+				useTaskForm({
+					projectId: "project-1",
+					mode: "create",
+					workflowColumns: [{ id: "column-todo", name: "To Do" }],
+				}),
+			{ wrapper: createWrapper(queryClient) },
+		);
+
+		act(() => {
+			result.current.setField("title", "Prioritized task");
+			result.current.setField("priority", priority);
+		});
+
+		await act(async () => {
+			await result.current.submit();
+		});
+
+		expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toEqual(
+			expect.objectContaining({ priority }),
+		);
+	});
+
 	it("reports failed edit submit", async () => {
 		const queryClient = createTestQueryClient();
+		const existingTask = task();
 		const fetchSpy = vi
 			.fn<typeof fetch>()
 			.mockResolvedValue(
@@ -478,7 +581,7 @@ describe("useTaskForm edit mode", () => {
 					projectId: "project-1",
 					mode: "edit",
 					taskId: "task-1",
-					task: task(),
+					task: existingTask,
 					workflowColumns: [{ id: "in-progress", name: "In Progress" }],
 				}),
 			{ wrapper: createWrapper(queryClient) },

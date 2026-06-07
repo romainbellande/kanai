@@ -12,7 +12,6 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import {
 	Bell,
-	ChevronLeft,
 	ChevronRight,
 	CircleHelp,
 	Filter,
@@ -82,6 +81,8 @@ const sidebarItems: SidebarItem[] = [
 	{ label: "Analytics", icon: TrendingUp },
 ];
 
+const PROJECT_DESCRIPTION_FALLBACK = "No project description yet.";
+
 type CardDropTargetData = {
 	type: "card";
 	taskId: string;
@@ -112,10 +113,29 @@ type ColumnInsertionIndicator = {
 	edge: "left" | "right";
 };
 
-function getTagClass(priority: string): string {
-	return /urgent|high/i.test(priority)
-		? "bg-[var(--error-container)] text-[var(--on-error-container)]"
-		: "bg-[var(--secondary-container)] text-[var(--on-secondary-container)]";
+function getPriorityTagClass(priority: string): string {
+	if (priority === "critical") {
+		return "border border-[color:color-mix(in_srgb,var(--error,#ba1a1a)_34%,var(--outline-variant))] bg-[color:color-mix(in_srgb,var(--error,#ba1a1a)_14%,var(--surface-container-lowest))] text-[var(--error,#ba1a1a)]";
+	}
+	if (priority === "high") {
+		return "border border-[color:color-mix(in_srgb,var(--tertiary-container)_34%,var(--outline-variant))] bg-[color:color-mix(in_srgb,var(--tertiary-container)_14%,var(--surface-container-lowest))] text-[var(--tertiary-container)]";
+	}
+	if (priority === "medium") {
+		return "bg-[var(--primary-fixed)] text-[var(--on-primary-fixed)]";
+	}
+	return "border border-[var(--outline-variant)] bg-[var(--surface-container-high)] text-[var(--on-surface-variant)]";
+}
+
+function getPriorityLabel(priority: string): string {
+	return priority.charAt(0).toUpperCase() + priority.slice(1);
+}
+
+function normalizeBoardPriority(priority: string | null): string | null {
+	const normalizedPriority = priority?.trim().toLowerCase() ?? "";
+	if (!normalizedPriority) {
+		return null;
+	}
+	return normalizedPriority === "urgent" ? "critical" : normalizedPriority;
 }
 
 export function getDestinationIndex({
@@ -223,6 +243,8 @@ function BoardTaskCard({
 }) {
 	const ref = useRef<HTMLElement | null>(null);
 	const dragHandleRef = useRef<HTMLButtonElement | null>(null);
+	const priority = normalizeBoardPriority(card.priority);
+	const hasTags = Boolean(priority || card.tag);
 
 	useEffect(() => {
 		const element = ref.current;
@@ -290,13 +312,22 @@ function BoardTaskCard({
 				className="absolute inset-0 z-0 rounded-2xl text-inherit no-underline"
 			/>
 			<div className="pointer-events-none relative z-10">
-				{card.tag || card.priority ? (
+				{hasTags ? (
 					<div className="flex items-start justify-between gap-3">
-						<span
-							className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${getTagClass(card.priority)}`}
-						>
-							{card.tag || card.priority}
-						</span>
+						<div className="flex flex-wrap gap-2">
+							{priority ? (
+								<span
+									className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${getPriorityTagClass(priority)}`}
+								>
+									{getPriorityLabel(priority)}
+								</span>
+							) : null}
+							{card.tag ? (
+								<span className="inline-flex rounded-full bg-[var(--surface-container-high)] px-2 py-1 text-xs font-semibold text-[var(--on-surface-variant)]">
+									{card.tag}
+								</span>
+							) : null}
+						</div>
 						<TaskDragHandle
 							ref={dragHandleRef}
 							disabled={isDragDisabled}
@@ -304,7 +335,7 @@ function BoardTaskCard({
 						/>
 					</div>
 				) : null}
-				{card.tag || card.priority ? (
+				{hasTags ? (
 					<p className="mt-3 text-sm leading-6 text-[var(--on-surface)]">
 						{card.title}
 					</p>
@@ -433,12 +464,9 @@ function BoardColumnView({
 	isDropDisabled,
 	isProjectOwner,
 	isColumnReorderAvailable,
-	canMoveLeft,
-	canMoveRight,
 	isColumnDragging,
 	columnInsertionEdge,
 	isColumnMoveDisabled,
-	onMoveColumn,
 	children,
 }: {
 	column: BoardColumn;
@@ -448,12 +476,9 @@ function BoardColumnView({
 	isDropDisabled: boolean;
 	isProjectOwner: boolean;
 	isColumnReorderAvailable: boolean;
-	canMoveLeft: boolean;
-	canMoveRight: boolean;
 	isColumnDragging: boolean;
 	columnInsertionEdge: "left" | "right" | null;
 	isColumnMoveDisabled: boolean;
-	onMoveColumn: (columnId: ColumnId, direction: "left" | "right") => void;
 	children: ReactNode;
 }) {
 	const ref = useRef<HTMLElement | null>(null);
@@ -547,30 +572,6 @@ function BoardColumnView({
 				</div>
 				{isProjectOwner ? (
 					<div className="flex items-center gap-1">
-						{isColumnReorderAvailable ? (
-							<>
-								<button
-									type="button"
-									aria-label={`Move ${column.title} column left`}
-									title="Move column left"
-									disabled={!canMoveLeft || isColumnMoveDisabled}
-									onClick={() => onMoveColumn(column.id, "left")}
-									className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] text-[var(--on-surface-variant)] transition hover:bg-[var(--surface-container-high)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-45"
-								>
-									<ChevronLeft className="h-4 w-4" aria-hidden="true" />
-								</button>
-								<button
-									type="button"
-									aria-label={`Move ${column.title} column right`}
-									title="Move column right"
-									disabled={!canMoveRight || isColumnMoveDisabled}
-									onClick={() => onMoveColumn(column.id, "right")}
-									className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] text-[var(--on-surface-variant)] transition hover:bg-[var(--surface-container-high)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-45"
-								>
-									<ChevronRight className="h-4 w-4" aria-hidden="true" />
-								</button>
-							</>
-						) : null}
 						<Link
 							to="/projects/$projectId/columns/$columnId"
 							params={{ projectId, columnId: column.id }}
@@ -1399,7 +1400,19 @@ export function ProjectBoardPage() {
 		useState<ColumnInsertionIndicator | null>(null);
 	const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
 	const [isChatOpen, setIsChatOpen] = useState(false);
+	const [isMetadataEditing, setIsMetadataEditing] = useState(false);
+	const [metadataName, setMetadataName] = useState("");
+	const [metadataDescription, setMetadataDescription] = useState("");
+	const [metadataError, setMetadataError] = useState<string | null>(null);
+	const [metadataSuccess, setMetadataSuccess] = useState<string | null>(null);
+	const [isMetadataSaving, setIsMetadataSaving] = useState(false);
+	const metadataSuccessTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+		null,
+	);
 	const projectName = projectQuery.data?.name ?? "Project";
+	const projectDescription = projectQuery.data?.description?.trim()
+		? projectQuery.data.description
+		: PROJECT_DESCRIPTION_FALLBACK;
 	const chat = useProjectChat(projectId, isChatOpen);
 	const accessUserIds = getProjectAccessUserIds(projectQuery.data);
 	const accessUsersQuery = useQuery(
@@ -1414,6 +1427,14 @@ export function ProjectBoardPage() {
 	const isColumnsAuthError = columnsQuery.error instanceof CurrentUserAuthError;
 	const accountInitials = getCurrentUserInitials(currentUser);
 	const isBoardMutationPending = isMovePending || isColumnReorderPending;
+
+	useEffect(() => {
+		return () => {
+			if (metadataSuccessTimerRef.current) {
+				clearTimeout(metadataSuccessTimerRef.current);
+			}
+		};
+	}, []);
 
 	useEffect(() => {
 		return monitorForElements({
@@ -1564,12 +1585,56 @@ export function ProjectBoardPage() {
 		}
 	}
 
-	async function handleAddProjectMember(userId: string) {
-		await api.projects.addMember(projectId, userId);
+	function handleEditMetadataClick() {
+		if (!isProjectOwner || !projectQuery.data) {
+			return;
+		}
+
+		setMetadataName(projectQuery.data.name);
+		setMetadataDescription(projectQuery.data.description ?? "");
+		setMetadataError(null);
+		setMetadataSuccess(null);
+		setIsMetadataEditing(true);
 	}
 
-	function handleMoveColumn(columnId: ColumnId, direction: "left" | "right") {
-		board.moveColumn({ columnId, direction });
+	function handleCancelMetadataEdit() {
+		setIsMetadataEditing(false);
+		setMetadataError(null);
+	}
+
+	async function handleSaveMetadata() {
+		const trimmedName = metadataName.trim();
+		if (trimmedName === "") {
+			setMetadataError("Project title is required.");
+			return;
+		}
+
+		setIsMetadataSaving(true);
+		setMetadataError(null);
+		try {
+			await api.projects.update(projectId, {
+				name: trimmedName,
+				description:
+					metadataDescription.trim() === "" ? null : metadataDescription,
+			});
+			setIsMetadataEditing(false);
+			setMetadataSuccess("Project details saved.");
+			if (metadataSuccessTimerRef.current) {
+				clearTimeout(metadataSuccessTimerRef.current);
+			}
+			metadataSuccessTimerRef.current = setTimeout(() => {
+				setMetadataSuccess(null);
+				metadataSuccessTimerRef.current = null;
+			}, 3_000);
+		} catch {
+			setMetadataError("Project details could not be saved.");
+		} finally {
+			setIsMetadataSaving(false);
+		}
+	}
+
+	async function handleAddProjectMember(userId: string) {
+		await api.projects.addMember(projectId, userId);
 	}
 
 	const isColumnReorderAvailable = columns.length > 1;
@@ -1693,13 +1758,33 @@ export function ProjectBoardPage() {
 										: "Project details could not be loaded."}
 								</div>
 							) : null}
-							<div className="mt-3 flex items-center justify-between gap-4">
-								<h2 className="font-display text-3xl font-bold tracking-tight text-[var(--on-surface)] sm:text-[2.375rem]">
-									{projectQuery.data
-										? `Main Board: ${projectQuery.data.name}`
-										: "Main Board"}
-								</h2>
+							<div className="mt-3 flex items-start justify-between gap-4">
+								<div className="min-w-0">
+									<h2 className="font-display text-3xl font-bold tracking-tight text-[var(--on-surface)] sm:text-[2.375rem]">
+										{projectQuery.data
+											? `Main Board: ${projectQuery.data.name}`
+											: "Main Board"}
+									</h2>
+									<p className="mt-2 max-w-3xl whitespace-pre-wrap text-sm leading-6 text-[var(--on-surface-variant)]">
+										{projectDescription}
+									</p>
+									{metadataSuccess ? (
+										<output className="mt-3 text-sm font-semibold text-[var(--primary)]">
+											{metadataSuccess}
+										</output>
+									) : null}
+								</div>
 								<div className="flex items-center gap-3">
+									{isProjectOwner && projectQuery.data ? (
+										<button
+											type="button"
+											onClick={handleEditMetadataClick}
+											className="inline-flex items-center gap-2 rounded-full border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-4 py-2 text-sm font-semibold hover:bg-[var(--surface-bright)]"
+										>
+											<Pencil className="h-4 w-4" />
+											Edit project metadata
+										</button>
+									) : null}
 									<button
 										type="button"
 										onClick={() => setIsChatOpen(true)}
@@ -1731,6 +1816,65 @@ export function ProjectBoardPage() {
 									</button>
 								</div>
 							</div>
+							{isMetadataEditing ? (
+								<form
+									aria-label="Edit project metadata"
+									className="mt-4 max-w-3xl rounded-[1.5rem] border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-4 shadow-sm"
+									onSubmit={(event) => {
+										event.preventDefault();
+										void handleSaveMetadata();
+									}}
+								>
+									<div className="grid gap-4">
+										<label className="grid gap-2 text-sm font-semibold text-[var(--on-surface)]">
+											Project title
+											<input
+												value={metadataName}
+												onChange={(event) =>
+													setMetadataName(event.currentTarget.value)
+												}
+												className="rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-low)] px-4 py-3 text-sm outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)]"
+											/>
+										</label>
+										<label className="grid gap-2 text-sm font-semibold text-[var(--on-surface)]">
+											Project description
+											<textarea
+												value={metadataDescription}
+												onChange={(event) =>
+													setMetadataDescription(event.currentTarget.value)
+												}
+												placeholder="Describe the project context"
+												className="min-h-28 resize-y rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-low)] px-4 py-3 text-sm leading-6 outline-none transition placeholder:text-[var(--on-surface-variant)] focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)]"
+											/>
+										</label>
+									</div>
+									{metadataError ? (
+										<p
+											className="mt-3 text-sm font-semibold text-[var(--error)]"
+											role="alert"
+										>
+											{metadataError}
+										</p>
+									) : null}
+									<div className="mt-4 flex flex-wrap items-center gap-3">
+										<button
+											type="submit"
+											disabled={isMetadataSaving}
+											className="rounded-full bg-[var(--primary)] px-5 py-2 text-sm font-bold text-[var(--on-primary)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+										>
+											{isMetadataSaving ? "Saving..." : "Save details"}
+										</button>
+										<button
+											type="button"
+											onClick={handleCancelMetadataEdit}
+											disabled={isMetadataSaving}
+											className="rounded-full border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-5 py-2 text-sm font-bold hover:bg-[var(--surface-bright)] disabled:cursor-not-allowed disabled:opacity-50"
+										>
+											Cancel
+										</button>
+									</div>
+								</form>
+							) : null}
 						</div>
 
 						{columnsQuery.isError ? (
@@ -1779,7 +1923,7 @@ export function ProjectBoardPage() {
 								</p>
 							) : null}
 							{!columnsQuery.isError &&
-								columns.map((column, columnIndex) => (
+								columns.map((column) => (
 									<BoardColumnView
 										key={column.id}
 										column={column}
@@ -1791,8 +1935,6 @@ export function ProjectBoardPage() {
 										isDropDisabled={isBoardMutationPending}
 										isProjectOwner={isProjectOwner}
 										isColumnReorderAvailable={isColumnReorderAvailable}
-										canMoveLeft={columnIndex > 0}
-										canMoveRight={columnIndex < columns.length - 1}
 										isColumnDragging={draggingColumnId === column.id}
 										columnInsertionEdge={
 											columnInsertionIndicator?.columnId === column.id
@@ -1800,7 +1942,6 @@ export function ProjectBoardPage() {
 												: null
 										}
 										isColumnMoveDisabled={isBoardMutationPending}
-										onMoveColumn={handleMoveColumn}
 									>
 										{tasksQuery.isPending ? (
 											<p className="rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-4 text-sm text-[var(--on-surface-variant)]">

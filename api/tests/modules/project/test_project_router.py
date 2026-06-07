@@ -256,6 +256,72 @@ async def test_project_crud_endpoints(
 
 
 @pytest.mark.asyncio
+async def test_project_update_preserves_omitted_description_and_clears_explicit_null(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    del users
+    create_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "name": "Enterprise Launch",
+            "code": "EOM",
+            "priority": "medium",
+            "description": "Launch work",
+        },
+    )
+    project_id = create_response.json()["id"]
+
+    rename_response = await client.patch(
+        f"/projects/{project_id}",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "  Enterprise Launch Updated  "},
+    )
+
+    assert rename_response.status_code == 200
+    assert rename_response.json()["name"] == "Enterprise Launch Updated"
+    assert rename_response.json()["description"] == "Launch work"
+
+    clear_response = await client.patch(
+        f"/projects/{project_id}",
+        headers={"Authorization": "Bearer token"},
+        json={"description": None},
+    )
+
+    assert clear_response.status_code == 200
+    assert clear_response.json()["description"] is None
+
+
+@pytest.mark.asyncio
+async def test_project_update_rejects_blank_and_null_names(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    del users
+    create_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Enterprise Launch", "code": "ERJ", "priority": "medium"},
+    )
+    project_id = create_response.json()["id"]
+
+    blank_response = await client.patch(
+        f"/projects/{project_id}",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "   "},
+    )
+    null_response = await client.patch(
+        f"/projects/{project_id}",
+        headers={"Authorization": "Bearer token"},
+        json={"name": None},
+    )
+
+    assert blank_response.status_code == 422
+    assert null_response.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_project_chat_history_allows_owners_and_members(
     client: AsyncClient,
     session_factory: async_sessionmaker[AsyncSession],
@@ -1691,6 +1757,7 @@ async def test_task_crud_endpoints_do_not_expose_due_fields(
     assert create_response.status_code == 201
     created_task = create_response.json()
     assert created_task["title"] == "Finalize launch checklist"
+    assert created_task["priority"] == "critical"
     assert "column_id" in created_task
     assert "status" not in created_task
     assert "due_label" not in created_task
@@ -1752,6 +1819,58 @@ async def test_task_crud_endpoints_do_not_expose_due_fields(
         task = await session.get(Task, UUID(created_task["id"]))
 
     assert task is None
+
+
+@pytest.mark.asyncio
+async def test_task_priority_is_optional_and_clearable(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "name": "Optional Priority",
+            "code": f"O{uuid4().hex[:2].upper()}",
+            "priority": "medium",
+        },
+    )
+    project_id = project_response.json()["id"]
+
+    create_response = await client.post(
+        f"/projects/{project_id}/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={"title": "Default no priority"},
+    )
+
+    assert create_response.status_code == 201
+    created_task = create_response.json()
+    assert created_task["priority"] is None
+
+    async with session_factory() as session:
+        stored_task = await session.get(Task, UUID(created_task["id"]))
+        assert stored_task is not None
+        assert stored_task.priority == ""
+
+    for priority in ("low", "medium", "high", "critical"):
+        update_response = await client.patch(
+            f"/projects/{project_id}/tasks/{created_task['id']}",
+            headers={"Authorization": "Bearer token"},
+            json={"priority": priority},
+        )
+        assert update_response.status_code == 200
+        assert update_response.json()["priority"] == priority
+
+    clear_response = await client.patch(
+        f"/projects/{project_id}/tasks/{created_task['id']}",
+        headers={"Authorization": "Bearer token"},
+        json={"priority": None},
+    )
+
+    assert clear_response.status_code == 200
+    assert clear_response.json()["priority"] is None
 
 
 @pytest.mark.asyncio

@@ -18,6 +18,8 @@ import {
 	type ReorderProjectColumnsInput,
 	reorderProjectColumns,
 	type UpdateProjectColumnInput,
+	type UpdateProjectInput,
+	updateProject,
 	updateProjectColumn,
 } from "./projects";
 import {
@@ -43,6 +45,18 @@ export function useKanaiApi() {
 		projects: {
 			list: () => projectsQueryOptions(),
 			get: (projectId: string) => projectQueryOptions(projectId),
+			update: async (projectId: string, values: UpdateProjectInput) => {
+				const project = await updateProject(projectId, values);
+				queryClient.setQueryData(
+					projectQueryOptions(projectId).queryKey,
+					project,
+				);
+				await queryClient.invalidateQueries({
+					exact: true,
+					queryKey: projectsQueryKey,
+				});
+				return project;
+			},
 			create: async (values: CreateProjectInput) => {
 				const project = await createProject(values);
 				await queryClient.invalidateQueries({ queryKey: projectsQueryKey });

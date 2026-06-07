@@ -4,6 +4,7 @@ import {
 	type ProjectCreate,
 	type ProjectRead,
 	ProjectsApi,
+	type ProjectUpdate,
 } from "#/api/openapi-client";
 
 import {
@@ -13,6 +14,7 @@ import {
 
 export type Project = ProjectRead;
 export type CreateProjectInput = ProjectCreate;
+export type UpdateProjectInput = ProjectUpdate;
 
 export type ProjectColumn = {
 	id: string;
@@ -87,6 +89,16 @@ export async function createProject(
 ): Promise<Project> {
 	return createProjectsApi().createProjectEndpointProjectsPost({
 		projectCreate,
+	});
+}
+
+export async function updateProject(
+	projectId: string,
+	projectUpdate: UpdateProjectInput,
+): Promise<Project> {
+	return createProjectsApi().updateProjectProjectsProjectIdPatch({
+		projectId,
+		projectUpdate,
 	});
 }
 

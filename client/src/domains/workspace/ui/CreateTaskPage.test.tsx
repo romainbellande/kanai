@@ -138,7 +138,7 @@ describe("CreateTaskPage", () => {
 					project_id: "project-1",
 					title: "Persist task",
 					column_id: "column-review",
-					priority: "medium",
+					priority: null,
 					rank: "0|hzzzzz:",
 					assignee_id: null,
 					description: "Task notes",
@@ -156,6 +156,22 @@ describe("CreateTaskPage", () => {
 		const workflowSelect = screen.getByLabelText(
 			/workflow/i,
 		) as HTMLSelectElement;
+		const prioritySelect = screen.getByLabelText(
+			/priority/i,
+		) as HTMLSelectElement;
+		expect(prioritySelect.value).toBe("");
+		expect(
+			Array.from(prioritySelect.options).map((option) => [
+				option.value,
+				option.textContent,
+			]),
+		).toEqual([
+			["", "No priority"],
+			["low", "Low"],
+			["medium", "Medium"],
+			["high", "High"],
+			["critical", "Critical"],
+		]);
 		expect(
 			Array.from(workflowSelect.options).map((option) => [
 				option.value,
@@ -196,7 +212,6 @@ describe("CreateTaskPage", () => {
 		expect(JSON.parse(String(init?.body))).toEqual({
 			title: "Persist task",
 			column_id: "column-review",
-			priority: "medium",
 			description: "Task notes",
 			acceptance_criteria: "Done means done",
 		});
@@ -218,7 +233,7 @@ describe("CreateTaskPage", () => {
 					project_id: "project-1",
 					title: "Column task",
 					column_id: "column-review",
-					priority: "medium",
+					priority: null,
 					rank: "0|hzzzzz:",
 					assignee_id: null,
 					description: null,
@@ -260,7 +275,6 @@ describe("CreateTaskPage", () => {
 		expect(JSON.parse(String(init?.body))).toEqual({
 			title: "Column task",
 			column_id: "column-review",
-			priority: "medium",
 		});
 	});
 

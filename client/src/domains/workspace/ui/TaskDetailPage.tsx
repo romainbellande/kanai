@@ -187,10 +187,11 @@ export function TaskDetailPage() {
 									}
 									value={form.values.priority}
 								>
+									<option value="">No priority</option>
 									<option value="low">Low</option>
 									<option value="medium">Medium</option>
 									<option value="high">High</option>
-									<option value="urgent">Urgent</option>
+									<option value="critical">Critical</option>
 								</select>
 							</div>
 

@@ -22,7 +22,7 @@ import { mapValues } from '../runtime';
  *     project_id: ID of the project that owns the task.
  *     title: Task title.
  *     column_id: Workflow column ID for the task.
- *     priority: Priority level for the task.
+ *     priority: Optional priority level for the task.
  *     rank: Sortable LexoRank-style position within the task column.
  *     assignee_id: Optional user ID assigned to the task.
  *     description: Optional task details.
@@ -63,7 +63,7 @@ export interface TaskRead {
      * @type {string}
      * @memberof TaskRead
      */
-    priority: string;
+    priority: string | null;
     /**
      * 
      * @type {string}

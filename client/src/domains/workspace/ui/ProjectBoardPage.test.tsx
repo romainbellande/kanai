@@ -418,6 +418,399 @@ describe("ProjectBoardPage", () => {
 		expect(screen.queryByText("Security Audit Phase 1")).toBeNull();
 	});
 
+	it("renders selected task priorities as distinct colored board tags", async () => {
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project({ name: "API Board" }),
+		);
+		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
+			task({ id: "low-task", title: "Low task", priority: "low" }),
+			task({ id: "medium-task", title: "Medium task", priority: "medium" }),
+			task({ id: "high-task", title: "High task", priority: "high" }),
+			task({
+				id: "critical-task",
+				title: "Critical task",
+				priority: "critical",
+			}),
+		]);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({ id: "column-todo", name: "Backlog", position: 0 }),
+		]);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+
+		expect(screen.getByText("Low").className).toContain(
+			"bg-[var(--surface-container-high)]",
+		);
+		expect(screen.getByText("Medium").className).toContain(
+			"bg-[var(--primary-fixed)]",
+		);
+		expect(screen.getByText("High").className).toContain(
+			"var(--tertiary-container)",
+		);
+		expect(screen.getByText("Critical").className).toContain(
+			"var(--error,#ba1a1a)",
+		);
+	});
+
+	it("omits the priority tag for tasks with no priority", async () => {
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project({ name: "API Board" }),
+		);
+		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
+			task({
+				id: "unprioritized-task",
+				title: "Unprioritized",
+				priority: null,
+			}),
+		]);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({ id: "column-todo", name: "Backlog", position: 0 }),
+		]);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+
+		expect(screen.getByText("Unprioritized")).toBeTruthy();
+		expect(screen.queryByText("Low")).toBeNull();
+		expect(screen.queryByText("Medium")).toBeNull();
+		expect(screen.queryByText("High")).toBeNull();
+		expect(screen.queryByText("Critical")).toBeNull();
+	});
+
+	it("shows priority before custom task tags when both exist", async () => {
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project({ name: "API Board" }),
+		);
+		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
+			task({
+				id: "tagged-task",
+				title: "Tagged task",
+				priority: "high",
+				tag: "Backend",
+			}),
+		]);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({ id: "column-todo", name: "Backlog", position: 0 }),
+		]);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+
+		const priorityTag = screen.getByText("High");
+		const customTag = screen.getByText("Backend");
+		expect(priorityTag.compareDocumentPosition(customTag)).toBe(
+			Node.DOCUMENT_POSITION_FOLLOWING,
+		);
+	});
+
+	it("displays legacy urgent task priority as critical", async () => {
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project({ name: "API Board" }),
+		);
+		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
+			task({ id: "urgent-task", title: "Legacy task", priority: "urgent" }),
+		]);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({ id: "column-todo", name: "Backlog", position: 0 }),
+		]);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+
+		expect(screen.getByText("Critical")).toBeTruthy();
+		expect(screen.queryByText("Urgent")).toBeNull();
+	});
+
+	it("shows the project description below the board title", async () => {
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project({
+				name: "API Board",
+				description: "Coordinate the API launch work for the platform team.",
+			}),
+		);
+		queryClient.setQueryData(
+			projectTasksQueryOptions("project-1").queryKey,
+			[],
+		);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({ id: "column-todo", name: "Backlog", position: 0 }),
+		]);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+
+		expect(screen.getByText("Main Board: API Board")).toBeTruthy();
+		expect(
+			screen.getByText("Coordinate the API launch work for the platform team."),
+		).toBeTruthy();
+	});
+
+	it("shows an intentional fallback when the project description is absent or blank", async () => {
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project({ name: "API Board", description: null }),
+		);
+		queryClient.setQueryData(
+			projectTasksQueryOptions("project-1").queryKey,
+			[],
+		);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({ id: "column-todo", name: "Backlog", position: 0 }),
+		]);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+		expect(screen.getByText("No project description yet.")).toBeTruthy();
+
+		cleanup();
+		const blankQueryClient = createTestQueryClient();
+		blankQueryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project({ name: "API Board", description: "   " }),
+		);
+		blankQueryClient.setQueryData(
+			projectTasksQueryOptions("project-1").queryKey,
+			[],
+		);
+		blankQueryClient.setQueryData(
+			projectColumnsQueryOptions("project-1").queryKey,
+			[column({ id: "column-todo", name: "Backlog", position: 0 })],
+		);
+
+		renderWithQueryClient(<ProjectBoardPage />, blankQueryClient);
+		expect(screen.getByText("No project description yet.")).toBeTruthy();
+	});
+
+	it("shows project metadata read-only for non-owner project members", async () => {
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(currentUserQueryOptions().queryKey, {
+			id: "member-1",
+		});
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project({
+				name: "API Board",
+				description: "Shared context for non-owner project members.",
+				ownerIds: ["owner-1"],
+				memberIds: ["member-1"],
+			}),
+		);
+		queryClient.setQueryData(
+			projectTasksQueryOptions("project-1").queryKey,
+			[],
+		);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({ id: "column-todo", name: "Backlog", position: 0 }),
+		]);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+
+		expect(screen.getByText("Main Board: API Board")).toBeTruthy();
+		expect(
+			screen.getByText("Shared context for non-owner project members."),
+		).toBeTruthy();
+		expect(
+			screen.queryByRole("button", { name: /edit project metadata/i }),
+		).toBeNull();
+	});
+
+	it("shows owner-only inline project metadata editing controls", async () => {
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		seedProjectBoardQueries(queryClient);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+
+		fireEvent.click(
+			screen.getByRole("button", { name: /edit project metadata/i }),
+		);
+
+		expect(
+			screen.getByRole("form", { name: /edit project metadata/i }),
+		).toBeTruthy();
+		expect(screen.getByLabelText("Project title")).toHaveProperty(
+			"value",
+			"API Board",
+		);
+		expect(screen.getByLabelText("Project description")).toHaveProperty(
+			"value",
+			"",
+		);
+	});
+
+	it("saves trimmed project metadata and updates cached board details", async () => {
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({ accessToken: "project-token" }),
+		);
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		seedProjectBoardQueries(queryClient);
+		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					id: "project-1",
+					name: "Renamed Board",
+					code: "PRJ",
+					priority: "medium",
+					description: "Updated context",
+					status: null,
+					owner_ids: ["owner-1"],
+					member_ids: [],
+					created_at: null,
+					updated_at: null,
+				}),
+				{ headers: { "content-type": "application/json" }, status: 200 },
+			),
+		);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+		fireEvent.click(
+			screen.getByRole("button", { name: /edit project metadata/i }),
+		);
+		fireEvent.change(screen.getByLabelText("Project title"), {
+			target: { value: "  Renamed Board  " },
+		});
+		fireEvent.change(screen.getByLabelText("Project description"), {
+			target: { value: "Updated context" },
+		});
+		fireEvent.click(screen.getByRole("button", { name: /save details/i }));
+
+		await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+		expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toEqual({
+			name: "Renamed Board",
+			description: "Updated context",
+		});
+		await waitFor(() =>
+			expect(screen.getByText("Main Board: Renamed Board")).toBeTruthy(),
+		);
+		expect(screen.getByText("Project details saved.")).toBeTruthy();
+		expect(
+			screen.queryByRole("form", { name: /edit project metadata/i }),
+		).toBeNull();
+		expect(
+			queryClient.getQueryData(projectQueryOptions("project-1").queryKey),
+		).toMatchObject({
+			name: "Renamed Board",
+			description: "Updated context",
+		});
+	});
+
+	it("cancels inline project metadata edits without saving", async () => {
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		seedProjectBoardQueries(queryClient);
+		const fetchSpy = vi.fn<typeof fetch>();
+		vi.stubGlobal("fetch", fetchSpy);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+		fireEvent.click(
+			screen.getByRole("button", { name: /edit project metadata/i }),
+		);
+		fireEvent.change(screen.getByLabelText("Project title"), {
+			target: { value: "Unsaved Board" },
+		});
+		fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+		expect(fetchSpy).not.toHaveBeenCalled();
+		expect(screen.getByText("Main Board: API Board")).toBeTruthy();
+		expect(
+			screen.queryByRole("form", { name: /edit project metadata/i }),
+		).toBeNull();
+	});
+
+	it("persists explicit null when an owner clears the project description", async () => {
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({ accessToken: "project-token" }),
+		);
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		seedProjectBoardQueries(queryClient);
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project({
+				name: "API Board",
+				description: "Existing context",
+				ownerIds: ["owner-1"],
+			}),
+		);
+		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					id: "project-1",
+					name: "API Board",
+					code: "PRJ",
+					priority: "medium",
+					description: null,
+					status: null,
+					owner_ids: ["owner-1"],
+					member_ids: [],
+					created_at: null,
+					updated_at: null,
+				}),
+				{ headers: { "content-type": "application/json" }, status: 200 },
+			),
+		);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+		fireEvent.click(
+			screen.getByRole("button", { name: /edit project metadata/i }),
+		);
+		fireEvent.change(screen.getByLabelText("Project description"), {
+			target: { value: "" },
+		});
+		fireEvent.click(screen.getByRole("button", { name: /save details/i }));
+
+		await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+		expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toEqual({
+			name: "API Board",
+			description: null,
+		});
+		await waitFor(() =>
+			expect(screen.getByText("No project description yet.")).toBeTruthy(),
+		);
+	});
+
 	it("removes board card updated-at pills", async () => {
 		const { ProjectBoardPage } = await import(
 			"#/domains/workspace/ui/ProjectBoardPage"
@@ -1504,7 +1897,7 @@ describe("ProjectBoardPage", () => {
 		).toBeNull();
 	});
 
-	it("shows explicit column reorder grips only for owner multi-column boards", async () => {
+	it("shows column reorder grips without arrow movement controls for owner multi-column boards", async () => {
 		const { ProjectBoardPage } = await import(
 			"#/domains/workspace/ui/ProjectBoardPage"
 		);
@@ -1532,6 +1925,12 @@ describe("ProjectBoardPage", () => {
 		expect(
 			screen.getByRole("button", { name: "Reorder Review column" }),
 		).toBeTruthy();
+		expect(
+			screen.queryByRole("button", { name: /move backlog column/i }),
+		).toBeNull();
+		expect(
+			screen.queryByRole("button", { name: /move review column/i }),
+		).toBeNull();
 		expect(screen.getAllByRole("button", { name: "Move task" })).toHaveLength(
 			1,
 		);

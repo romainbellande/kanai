@@ -1,25 +1,29 @@
 
-# ProjectColumnUpdate
+# ProjectChatAuthorRead
 
-Request payload for updating a project workflow column.
+Small author payload embedded in chat messages.
 
 ## Properties
 
 Name | Type
 ------------ | -------------
-`name` | string
-`description` | string
+`id` | string
+`displayName` | string
+`initials` | string
+`deleted` | boolean
 
 ## Example
 
 ```typescript
-import type { ProjectColumnUpdate } from ''
+import type { ProjectChatAuthorRead } from ''
 
 // TODO: Update the object below with actual values
 const example = {
-  "name": null,
-  "description": null,
-} satisfies ProjectColumnUpdate
+  "id": null,
+  "displayName": null,
+  "initials": null,
+  "deleted": null,
+} satisfies ProjectChatAuthorRead
 
 console.log(example)
 
@@ -28,7 +32,7 @@ const exampleJSON: string = JSON.stringify(example)
 console.log(exampleJSON)
 
 // Parse the JSON string back to an object
-const exampleParsed = JSON.parse(exampleJSON) as ProjectColumnUpdate
+const exampleParsed = JSON.parse(exampleJSON) as ProjectChatAuthorRead
 console.log(exampleParsed)
 ```
 

@@ -13,7 +13,7 @@ export type Task = {
 	projectId: string;
 	title: string;
 	columnId: string;
-	priority: string;
+	priority: string | null;
 	rank: string;
 	assigneeId: string | null;
 	description: string | null;
@@ -32,7 +32,7 @@ type TaskJson = {
 	project_id: string;
 	title: string;
 	column_id: string;
-	priority: string;
+	priority: string | null;
 	rank: string;
 	assignee_id: string | null;
 	description: string | null;
@@ -52,7 +52,7 @@ function mapTask(task: TaskJson): Task {
 		projectId: task.project_id,
 		title: task.title,
 		columnId: task.column_id,
-		priority: task.priority,
+		priority: normalizeTaskPriority(task.priority),
 		rank: task.rank,
 		assigneeId: task.assignee_id,
 		description: task.description,
@@ -61,6 +61,16 @@ function mapTask(task: TaskJson): Task {
 		createdAt: task.created_at === null ? null : new Date(task.created_at),
 		updatedAt: task.updated_at === null ? null : new Date(task.updated_at),
 	};
+}
+
+function normalizeTaskPriority(
+	priority: string | null | undefined,
+): string | null {
+	const normalizedPriority = priority?.trim().toLowerCase() ?? "";
+	if (!normalizedPriority) {
+		return null;
+	}
+	return normalizedPriority === "urgent" ? "critical" : normalizedPriority;
 }
 
 function taskInputToJson(values: CreateTaskInput | UpdateTaskInput) {

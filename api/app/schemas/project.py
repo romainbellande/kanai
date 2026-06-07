@@ -3,7 +3,11 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+NULLABLE_UPDATE_FIELD = "nullable_update_field"
 
 
 class ProjectCreate(BaseModel):
@@ -42,15 +46,57 @@ class ProjectUpdate(BaseModel):
         member_ids: Optional replacement list of member user IDs. Defaults to None.
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     name: str | None = None
     code: str | None = Field(
         default=None, min_length=3, max_length=3, pattern=r"^[A-Z0-9]{3}$"
     )
     priority: str | None = None
-    description: str | None = None
+    description: str | None = Field(
+        default=None,
+        json_schema_extra={NULLABLE_UPDATE_FIELD: True},
+    )
     status: str | None = None
     owner_ids: list[UUID] | None = None
     member_ids: list[UUID] | None = None
+
+    @field_validator("name")
+    @classmethod
+    def trim_required_name(cls, name: str | None) -> str | None:
+        """Trim submitted project names and reject blank values."""
+        if name is None:
+            return None
+
+        trimmed_name = name.strip()
+        if trimmed_name == "":
+            raise ValueError("name is required")
+        return trimmed_name
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_null_required_fields(cls, data: Any) -> Any:
+        """Allow omitted required fields for PATCH, but reject explicit nulls."""
+        if not isinstance(data, dict):
+            return data
+
+        for field_name, field in cls.model_fields.items():
+            field_extra = field.json_schema_extra
+            is_nullable_update = isinstance(field_extra, dict) and field_extra.get(
+                NULLABLE_UPDATE_FIELD, False
+            )
+            if (
+                not is_nullable_update
+                and field_name in data
+                and data[field_name] is None
+            ):
+                raise ValueError(f"{field_name} cannot be null")
+
+        return data
+
+    def update_values(self) -> dict[str, object]:
+        """Return fields submitted by the client, preserving explicit nulls."""
+        return self.model_dump(exclude_unset=True)
 
 
 class ProjectRead(BaseModel):

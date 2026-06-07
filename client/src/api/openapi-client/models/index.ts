@@ -3,6 +3,8 @@
 /* eslint-disable */
 export * from './HTTPValidationError';
 export * from './LocationInner';
+export * from './ProjectChatAuthorRead';
+export * from './ProjectChatMessageRead';
 export * from './ProjectColumnCreate';
 export * from './ProjectColumnRead';
 export * from './ProjectColumnReorder';

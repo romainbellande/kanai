@@ -1,25 +1,31 @@
 
-# ProjectColumnUpdate
+# ProjectChatMessageRead
 
-Request payload for updating a project workflow column.
+Project chat history message response payload.
 
 ## Properties
 
 Name | Type
 ------------ | -------------
-`name` | string
-`description` | string
+`id` | string
+`projectId` | string
+`body` | string
+`createdAt` | Date
+`author` | [ProjectChatAuthorRead](ProjectChatAuthorRead.md)
 
 ## Example
 
 ```typescript
-import type { ProjectColumnUpdate } from ''
+import type { ProjectChatMessageRead } from ''
 
 // TODO: Update the object below with actual values
 const example = {
-  "name": null,
-  "description": null,
-} satisfies ProjectColumnUpdate
+  "id": null,
+  "projectId": null,
+  "body": null,
+  "createdAt": null,
+  "author": null,
+} satisfies ProjectChatMessageRead
 
 console.log(example)
 
@@ -28,7 +34,7 @@ const exampleJSON: string = JSON.stringify(example)
 console.log(exampleJSON)
 
 // Parse the JSON string back to an object
-const exampleParsed = JSON.parse(exampleJSON) as ProjectColumnUpdate
+const exampleParsed = JSON.parse(exampleJSON) as ProjectChatMessageRead
 console.log(exampleParsed)
 ```
 

@@ -13,6 +13,7 @@ All URIs are relative to *http://localhost*
 | [**deleteTaskEndpointProjectsProjectIdTasksTaskIdDelete**](ProjectsApi.md#deletetaskendpointprojectsprojectidtaskstaskiddelete) | **DELETE** /projects/{project_id}/tasks/{task_id} | Delete Task Endpoint |
 | [**getProjectProjectsProjectIdGet**](ProjectsApi.md#getprojectprojectsprojectidget) | **GET** /projects/{project_id} | Get Project |
 | [**getTaskEndpointProjectsProjectIdTasksTaskIdGet**](ProjectsApi.md#gettaskendpointprojectsprojectidtaskstaskidget) | **GET** /projects/{project_id}/tasks/{task_id} | Get Task Endpoint |
+| [**listProjectChatMessagesProjectsProjectIdChatMessagesGet**](ProjectsApi.md#listprojectchatmessagesprojectsprojectidchatmessagesget) | **GET** /projects/{project_id}/chat/messages | List Project Chat Messages |
 | [**listProjectColumnsProjectsProjectIdColumnsGet**](ProjectsApi.md#listprojectcolumnsprojectsprojectidcolumnsget) | **GET** /projects/{project_id}/columns | List Project Columns |
 | [**listProjectsProjectsGet**](ProjectsApi.md#listprojectsprojectsget) | **GET** /projects | List Projects |
 | [**listTasksEndpointProjectsProjectIdTasksGet**](ProjectsApi.md#listtasksendpointprojectsprojectidtasksget) | **GET** /projects/{project_id}/tasks | List Tasks Endpoint |
@@ -634,6 +635,77 @@ example().catch(console.error);
 ### Return type
 
 [**TaskRead**](TaskRead.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: `application/json`
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+| **200** | Successful Response |  -  |
+| **422** | Validation Error |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+
+## listProjectChatMessagesProjectsProjectIdChatMessagesGet
+
+> Array&lt;ProjectChatMessageRead&gt; listProjectChatMessagesProjectsProjectIdChatMessagesGet(projectId, cursor)
+
+List Project Chat Messages
+
+List chat history for a project accessible to the current user.
+
+### Example
+
+```ts
+import {
+  Configuration,
+  ProjectsApi,
+} from '';
+import type { ListProjectChatMessagesProjectsProjectIdChatMessagesGetRequest } from '';
+
+async function example() {
+  console.log("🚀 Testing  SDK...");
+  const api = new ProjectsApi();
+
+  const body = {
+    // string
+    projectId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+    // string (optional)
+    cursor: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+  } satisfies ListProjectChatMessagesProjectsProjectIdChatMessagesGetRequest;
+
+  try {
+    const data = await api.listProjectChatMessagesProjectsProjectIdChatMessagesGet(body);
+    console.log(data);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+// Run the test
+example().catch(console.error);
+```
+
+### Parameters
+
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **projectId** | `string` |  | [Defaults to `undefined`] |
+| **cursor** | `string` |  | [Optional] [Defaults to `undefined`] |
+
+### Return type
+
+[**Array&lt;ProjectChatMessageRead&gt;**](ProjectChatMessageRead.md)
 
 ### Authorization
 

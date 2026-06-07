@@ -10,6 +10,7 @@ Name | Type
 `id` | string
 `projectId` | string
 `name` | string
+`description` | string
 `position` | number
 `createdAt` | Date
 `updatedAt` | Date
@@ -24,6 +25,7 @@ const example = {
   "id": null,
   "projectId": null,
   "name": null,
+  "description": null,
   "position": null,
   "createdAt": null,
   "updatedAt": null,

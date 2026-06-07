@@ -23,6 +23,7 @@ import {
 	projectQueryOptions,
 	projectsQueryOptions,
 	reorderProjectColumns,
+	updateProject,
 	updateProjectColumn,
 } from "#/api/client";
 
@@ -163,6 +164,46 @@ describe("projects client", () => {
 			code: "CRT",
 			priority: "medium",
 			description: "Notes",
+		});
+	});
+
+	it("updates project metadata and preserves explicit null descriptions", async () => {
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({ accessToken: "project-token" }),
+		);
+		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					id: "project-1",
+					name: "Renamed Project",
+					code: "API",
+					priority: "high",
+					description: null,
+					status: "active",
+					owner_ids: [],
+					member_ids: [],
+					created_at: null,
+					updated_at: null,
+				}),
+				{ headers: { "content-type": "application/json" }, status: 200 },
+			),
+		);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		await updateProject("project-1", {
+			name: "Renamed Project",
+			description: null,
+		});
+
+		const [url, init] = fetchSpy.mock.calls[0];
+
+		expect(url).toBe("https://api.example.test/projects/project-1");
+		expect(init?.method).toBe("PATCH");
+		expect(JSON.parse(String(init?.body))).toEqual({
+			name: "Renamed Project",
+			description: null,
 		});
 	});
 

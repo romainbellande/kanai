@@ -57,7 +57,7 @@ describe("tasks client", () => {
 						project_id: "project-1",
 						title: "API Task",
 						column_id: "column-todo",
-						priority: "high",
+						priority: "urgent",
 						rank: "U",
 						assignee_id: null,
 						description: null,
@@ -80,6 +80,7 @@ describe("tasks client", () => {
 				projectId: "project-1",
 				title: "API Task",
 				columnId: "column-todo",
+				priority: "critical",
 				rank: "U",
 			},
 		]);
@@ -91,6 +92,42 @@ describe("tasks client", () => {
 		expect(new Headers(init?.headers).get("Authorization")).toBe(
 			"Bearer task-token",
 		);
+	});
+
+	it("maps blank task priority responses to null", async () => {
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test/");
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({ accessToken: "task-token" }),
+		);
+		vi.stubGlobal(
+			"fetch",
+			vi.fn<typeof fetch>().mockResolvedValue(
+				new Response(
+					JSON.stringify([
+						{
+							id: "task-1",
+							project_id: "project-1",
+							title: "API Task",
+							column_id: "column-todo",
+							priority: "",
+							rank: "U",
+							assignee_id: null,
+							description: null,
+							acceptance_criteria: null,
+							tag: null,
+							created_at: null,
+							updated_at: null,
+						},
+					]),
+					{ headers: { "content-type": "application/json" }, status: 200 },
+				),
+			),
+		);
+
+		await expect(listProjectTasks("project-1")).resolves.toMatchObject([
+			{ priority: null },
+		]);
 	});
 
 	it("creates tasks with column IDs and no legacy status payload", async () => {

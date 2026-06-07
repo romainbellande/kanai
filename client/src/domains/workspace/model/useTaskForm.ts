@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 
 import { type ProjectColumn, type Task, useKanaiApi } from "#/api/client";
 
+const NO_TASK_PRIORITY = "";
+
 export type TaskFormValues = {
 	title: string;
 	status: string;
@@ -100,7 +102,7 @@ function createInitialValues(
 	return {
 		title: "",
 		status: initialColumnId ?? "",
-		priority: "medium",
+		priority: NO_TASK_PRIORITY,
 		description: "",
 		acceptanceCriteria: "",
 		tag: "",
@@ -111,11 +113,19 @@ function editInitialValues(task: Task | null | undefined): TaskFormValues {
 	return {
 		title: task?.title ?? "",
 		status: task?.columnId ?? "todo",
-		priority: task?.priority ?? "medium",
+		priority: normalizeTaskPriority(task?.priority),
 		description: task?.description ?? "",
 		acceptanceCriteria: task?.acceptanceCriteria ?? "",
 		tag: task?.tag ?? "",
 	};
+}
+
+function normalizeTaskPriority(priority: string | null | undefined): string {
+	const normalizedPriority = priority?.trim().toLowerCase() ?? NO_TASK_PRIORITY;
+	if (normalizedPriority === "urgent") {
+		return "critical";
+	}
+	return normalizedPriority;
 }
 
 function initialValues(input: UseTaskFormInput): TaskFormValues {
@@ -195,6 +205,7 @@ export function useTaskForm(input: UseTaskFormInput) {
 		const description = values.description.trim();
 		const acceptanceCriteria = values.acceptanceCriteria.trim();
 		const tag = values.tag.trim();
+		const priority = normalizeTaskPriority(values.priority);
 
 		if (!title) {
 			setErrorMessage("Task title is required.");
@@ -213,7 +224,7 @@ export function useTaskForm(input: UseTaskFormInput) {
 					values: {
 						title,
 						columnId: values.status,
-						priority: values.priority,
+						priority: priority || null,
 						description: description || null,
 						acceptanceCriteria: acceptanceCriteria || null,
 						tag: tag || null,
@@ -230,7 +241,7 @@ export function useTaskForm(input: UseTaskFormInput) {
 			const task = await createTaskMutation.mutateAsync({
 				title,
 				columnId: workflowState.selectedColumnId,
-				priority: values.priority,
+				priority: priority || undefined,
 				description: description || undefined,
 				acceptanceCriteria: acceptanceCriteria || undefined,
 				tag: tag || undefined,

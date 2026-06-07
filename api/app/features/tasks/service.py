@@ -9,7 +9,14 @@ from app.models.project import ProjectColumn
 from app.models.task import Task
 from app.repositories.project_repository import ProjectRepository
 from app.repositories.task_repository import TaskRepository
-from app.schemas.task import TaskCreate, TaskDestination, TaskRead, TaskUpdate
+from app.schemas.task import (
+    TaskCreate,
+    TaskDestination,
+    TaskRead,
+    TaskUpdate,
+    normalize_task_priority,
+    task_priority_to_storage,
+)
 from app.services.project_access import ProjectAccess
 
 
@@ -46,7 +53,7 @@ class TaskService:
             project_id=project_id,
             column_id=column_id,
             title=payload.title,
-            priority=payload.priority,
+            priority=task_priority_to_storage(payload.priority),
             rank=await next_task_rank(self._repository, project_id, column_id),
             assignee_id=payload.assignee_id,
             description=payload.description,
@@ -94,6 +101,9 @@ class TaskService:
         column_id = updates.get("column_id")
         if isinstance(column_id, UUID):
             await self._resolve_column(project_id, column_id)
+
+        if "priority" in updates:
+            updates["priority"] = task_priority_to_storage(payload.priority)
 
         for field_name, value in updates.items():
             setattr(task, field_name, value)
@@ -227,7 +237,7 @@ def task_to_read(task: Task) -> TaskRead:
         project_id=task.project_id,
         column_id=task.column_id,
         title=task.title,
-        priority=task.priority,
+        priority=normalize_task_priority(task.priority),
         rank=task.rank,
         assignee_id=task.assignee_id,
         description=task.description,
