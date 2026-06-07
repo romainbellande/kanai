@@ -22,7 +22,12 @@ vi.mock("@tanstack/react-router", () => ({
 
 function renderWithQueryClient(
 	ui: ReactNode,
-	currentUser?: { id: string; first_name?: string; last_name?: string },
+	currentUser?: {
+		display_name?: string;
+		id: string;
+		first_name?: string;
+		last_name?: string;
+	},
 ) {
 	const queryClient = new QueryClient({
 		defaultOptions: {
@@ -47,9 +52,10 @@ describe("WorkspaceHeader", () => {
 
 	it("renders current-user initials in the account avatar", () => {
 		renderWithQueryClient(<WorkspaceHeader />, {
+			display_name: "Johnny D",
 			id: "123",
-			first_name: "John",
-			last_name: "Doe",
+			first_name: "Ignored",
+			last_name: "User",
 		});
 
 		expect(screen.getByText("JD")).toBeTruthy();

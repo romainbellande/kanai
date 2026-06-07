@@ -44,6 +44,11 @@ export interface GetUserEndpointUsersUserIdGetRequest {
     userId: string;
 }
 
+export interface ListUsersEndpointUsersGetRequest {
+    q?: string | null;
+    limit?: number | null;
+}
+
 export interface UpdateUserEndpointUsersUserIdPatchRequest {
     userId: string;
     userUpdate: UserUpdate;
@@ -238,8 +243,16 @@ export class UsersApi extends runtime.BaseAPI {
     /**
      * Creates request options for listUsersEndpointUsersGet without sending the request
      */
-    async listUsersEndpointUsersGetRequestOpts(): Promise<runtime.RequestOpts> {
+    async listUsersEndpointUsersGetRequestOpts(requestParameters: ListUsersEndpointUsersGetRequest): Promise<runtime.RequestOpts> {
         const queryParameters: any = {};
+
+        if (requestParameters['q'] != null) {
+            queryParameters['q'] = requestParameters['q'];
+        }
+
+        if (requestParameters['limit'] != null) {
+            queryParameters['limit'] = requestParameters['limit'];
+        }
 
         const headerParameters: runtime.HTTPHeaders = {};
 
@@ -258,8 +271,8 @@ export class UsersApi extends runtime.BaseAPI {
      * List users.
      * List Users Endpoint
      */
-    async listUsersEndpointUsersGetRaw(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Array<UserRead>>> {
-        const requestOptions = await this.listUsersEndpointUsersGetRequestOpts();
+    async listUsersEndpointUsersGetRaw(requestParameters: ListUsersEndpointUsersGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Array<UserRead>>> {
+        const requestOptions = await this.listUsersEndpointUsersGetRequestOpts(requestParameters);
         const response = await this.request(requestOptions, initOverrides);
 
         return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(UserReadFromJSON));
@@ -269,8 +282,8 @@ export class UsersApi extends runtime.BaseAPI {
      * List users.
      * List Users Endpoint
      */
-    async listUsersEndpointUsersGet(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Array<UserRead>> {
-        const response = await this.listUsersEndpointUsersGetRaw(initOverrides);
+    async listUsersEndpointUsersGet(requestParameters: ListUsersEndpointUsersGetRequest = {}, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Array<UserRead>> {
+        const response = await this.listUsersEndpointUsersGetRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

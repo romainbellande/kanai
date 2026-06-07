@@ -6,7 +6,7 @@ import type {
 	TaskUpdate,
 } from "#/api/openapi-client";
 
-import { getAccessToken, getApiBaseUrl } from "./utils";
+import { fetchAuthenticatedApi } from "./utils";
 
 export type Task = {
 	id: string;
@@ -87,15 +87,13 @@ async function requestProjectTasks<T>(
 	path: string,
 	init: RequestInit = {},
 ): Promise<T> {
-	const token = await getAccessToken();
 	const headers = new Headers(init.headers);
 
-	headers.set("Authorization", `Bearer ${token}`);
 	if (init.body !== undefined) {
 		headers.set("Content-Type", "application/json");
 	}
 
-	const response = await fetch(`${getApiBaseUrl()}${path}`, {
+	const response = await fetchAuthenticatedApi(path, {
 		...init,
 		headers,
 	});

@@ -1,6 +1,14 @@
 // @vitest-environment jsdom
 
+import * as client from "openid-client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("openid-client", () => ({
+	None: vi.fn(() => ({})),
+	allowInsecureRequests: vi.fn(),
+	discovery: vi.fn(async () => ({ issuer: "https://auth.example.test" })),
+	refreshTokenGrant: vi.fn(),
+}));
 
 import {
 	CurrentUserAuthError,
@@ -16,8 +24,23 @@ describe("tasks client", () => {
 		vi.restoreAllMocks();
 		vi.unstubAllEnvs();
 		vi.unstubAllGlobals();
+		vi.stubEnv("VITE_AUTH_CLIENT_ID", "kanai-web");
+		vi.stubEnv("VITE_AUTH_ISSUER", "https://auth.example.test/realms/kanai");
 		window.sessionStorage.clear();
 	});
+
+	function buildTokenSet(
+		overrides: Partial<client.TokenEndpointResponse> = {},
+	): Awaited<ReturnType<typeof client.refreshTokenGrant>> {
+		return {
+			access_token: "refreshed-task-token",
+			claims: vi.fn(() => undefined),
+			expiresIn: vi.fn(() => 120),
+			expires_in: 120,
+			token_type: "bearer" as const,
+			...overrides,
+		} as unknown as Awaited<ReturnType<typeof client.refreshTokenGrant>>;
+	}
 
 	it("lists project tasks with the API base URL, stored bearer token, and column IDs", async () => {
 		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test/");
@@ -220,7 +243,92 @@ describe("tasks client", () => {
 		});
 	});
 
-	it("rejects before fetch when the token is missing", async () => {
+	it("refreshes and retries custom task requests once after a 401", async () => {
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({
+				accessToken: "stale-task-token",
+				expiresAt: Date.now() + 120_000,
+				refreshToken: "task-refresh-token",
+			}),
+		);
+		vi.mocked(client.refreshTokenGrant).mockResolvedValue(buildTokenSet());
+		const fetchSpy = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(new Response(null, { status: 401 }))
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						id: "task-1",
+						project_id: "project-1",
+						title: "Moved Task",
+						column_id: "column-done",
+						priority: "medium",
+						rank: "b",
+						assignee_id: null,
+						description: null,
+						acceptance_criteria: null,
+						tag: null,
+						created_at: null,
+						updated_at: null,
+					}),
+					{ headers: { "content-type": "application/json" }, status: 200 },
+				),
+			);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		await expect(
+			moveProjectTask({
+				projectId: "project-1",
+				taskId: "task-1",
+				destination: { columnId: "column-done" },
+			}),
+		).resolves.toMatchObject({ id: "task-1", columnId: "column-done" });
+
+		expect(client.refreshTokenGrant).toHaveBeenCalledTimes(1);
+		expect(fetchSpy).toHaveBeenCalledTimes(2);
+		expect(
+			new Headers(fetchSpy.mock.calls[0][1]?.headers).get("Authorization"),
+		).toBe("Bearer stale-task-token");
+		expect(
+			new Headers(fetchSpy.mock.calls[1][1]?.headers).get("Authorization"),
+		).toBe("Bearer refreshed-task-token");
+		expect(JSON.parse(String(fetchSpy.mock.calls[1][1]?.body))).toEqual({
+			column_id: "column-done",
+		});
+	});
+
+	it("leaves non-auth custom task move failures on the normal request failure path", async () => {
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({
+				accessToken: "task-token",
+				expiresAt: Date.now() + 120_000,
+				refreshToken: "task-refresh-token",
+			}),
+		);
+		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(JSON.stringify({ detail: "failed" }), {
+				status: 500,
+			}),
+		);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		await expect(
+			moveProjectTask({
+				projectId: "project-1",
+				taskId: "task-1",
+				destination: { columnId: "column-done" },
+			}),
+		).rejects.toThrow("Project task request failed with 500.");
+
+		expect(client.refreshTokenGrant).not.toHaveBeenCalled();
+		expect(fetchSpy).toHaveBeenCalledTimes(1);
+	});
+
+	it("rejects before task fetch when the token is missing", async () => {
 		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
 		const fetchSpy = vi.fn<typeof fetch>();
 		vi.stubGlobal("fetch", fetchSpy);
@@ -228,7 +336,11 @@ describe("tasks client", () => {
 		await expect(listProjectTasks("project-1")).rejects.toBeInstanceOf(
 			CurrentUserAuthError,
 		);
-		expect(fetchSpy).not.toHaveBeenCalled();
+		expect(
+			fetchSpy.mock.calls.some(
+				([url]) => url === "https://api.example.test/projects/project-1/tasks",
+			),
+		).toBe(false);
 	});
 
 	it("exposes a stable project tasks query key", () => {

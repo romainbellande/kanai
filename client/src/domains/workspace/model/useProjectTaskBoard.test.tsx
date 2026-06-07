@@ -2,8 +2,23 @@
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
+import * as client from "openid-client";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("openid-client", () => ({
+	None: vi.fn(() => ({})),
+	allowInsecureRequests: vi.fn(),
+	buildAuthorizationUrl: vi.fn(
+		() => new URL("https://auth.example.test/authorize"),
+	),
+	calculatePKCECodeChallenge: vi.fn(async () => "code-challenge"),
+	discovery: vi.fn(async () => ({ issuer: "https://auth.example.test" })),
+	randomNonce: vi.fn(() => "nonce"),
+	randomPKCECodeVerifier: vi.fn(() => "code-verifier"),
+	randomState: vi.fn(() => "state"),
+	refreshTokenGrant: vi.fn(),
+}));
 
 import {
 	projectColumnsQueryOptions,
@@ -47,17 +62,236 @@ function task(overrides: Partial<Task> = {}): Task {
 	};
 }
 
+function taskJson(overrides: Partial<Task> = {}) {
+	const sourceTask = task(overrides);
+
+	return {
+		id: sourceTask.id,
+		project_id: sourceTask.projectId,
+		title: sourceTask.title,
+		column_id: sourceTask.columnId,
+		priority: sourceTask.priority,
+		rank: sourceTask.rank,
+		assignee_id: sourceTask.assigneeId,
+		description: sourceTask.description,
+		acceptance_criteria: sourceTask.acceptanceCriteria,
+		tag: sourceTask.tag,
+		created_at: sourceTask.createdAt?.toISOString() ?? null,
+		updated_at: sourceTask.updatedAt?.toISOString() ?? null,
+	};
+}
+
+function taskResponse(overrides: Partial<Task> = {}) {
+	return new Response(JSON.stringify(taskJson(overrides)), {
+		headers: { "content-type": "application/json" },
+		status: 200,
+	});
+}
+
+function tasksResponse(tasks: Task[]) {
+	return new Response(JSON.stringify(tasks.map((item) => taskJson(item))), {
+		headers: { "content-type": "application/json" },
+		status: 200,
+	});
+}
+
+function buildTokenSet(
+	overrides: Partial<client.TokenEndpointResponse> = {},
+): Awaited<ReturnType<typeof client.refreshTokenGrant>> {
+	return {
+		access_token: "refreshed-board-token",
+		claims: vi.fn(() => undefined),
+		expiresIn: vi.fn(() => 120),
+		expires_in: 120,
+		token_type: "bearer" as const,
+		...overrides,
+	} as unknown as Awaited<ReturnType<typeof client.refreshTokenGrant>>;
+}
+
 describe("useProjectTaskBoard", () => {
 	beforeEach(() => {
 		vi.restoreAllMocks();
 		vi.unstubAllEnvs();
 		vi.unstubAllGlobals();
+		vi.stubEnv("VITE_AUTH_CLIENT_ID", "kanai-web");
+		vi.stubEnv("VITE_AUTH_ISSUER", "https://auth.example.test/realms/kanai");
 		window.sessionStorage.clear();
 		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
 		window.sessionStorage.setItem(
 			"kanai.openid-client.auth-session",
 			JSON.stringify({ accessToken: "board-token" }),
 		);
+	});
+
+	it("keeps optimistic movement visible during recovered auth retry", async () => {
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			{
+				id: "column-todo",
+				projectId: "project-1",
+				name: "To Do",
+				position: 0,
+				createdAt: null,
+				updatedAt: null,
+			},
+			{
+				id: "column-done",
+				projectId: "project-1",
+				name: "Done",
+				position: 1,
+				createdAt: null,
+				updatedAt: null,
+			},
+		]);
+		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
+			task({ id: "moved", columnId: "column-todo", rank: "U" }),
+			task({ id: "done-first", columnId: "column-done", rank: "U" }),
+		]);
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({
+				accessToken: "stale-board-token",
+				expiresAt: Date.now() + 120_000,
+				refreshToken: "board-refresh-token",
+			}),
+		);
+		let resolveRefresh: (
+			value: Awaited<ReturnType<typeof client.refreshTokenGrant>>,
+		) => void = () => undefined;
+		const refreshPromise = new Promise<
+			Awaited<ReturnType<typeof client.refreshTokenGrant>>
+		>((resolve) => {
+			resolveRefresh = resolve;
+		});
+		vi.mocked(client.refreshTokenGrant).mockReturnValue(refreshPromise);
+		const fetchSpy = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(new Response(null, { status: 401 }))
+			.mockResolvedValueOnce(
+				taskResponse({ id: "moved", columnId: "column-done", rank: "F" }),
+			)
+			.mockResolvedValue(
+				tasksResponse([
+					task({ id: "moved", columnId: "column-done", rank: "F" }),
+					task({ id: "done-first", columnId: "column-done", rank: "U" }),
+				]),
+			);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		const { result } = renderHook(() => useProjectTaskBoard("project-1"), {
+			wrapper: createWrapper(queryClient),
+		});
+
+		act(() => {
+			result.current.moveTask({
+				taskId: "moved",
+				toColumnId: "column-done",
+				afterTaskId: "done-first",
+			});
+		});
+
+		await waitFor(() =>
+			expect(client.refreshTokenGrant).toHaveBeenCalledTimes(1),
+		);
+		expect(result.current.moveState.isMovePending).toBe(true);
+		expect(result.current.moveState.moveError).toBeNull();
+		expect(
+			queryClient
+				.getQueryData<Task[]>(projectTasksQueryOptions("project-1").queryKey)
+				?.find((cachedTask) => cachedTask.id === "moved"),
+		).toMatchObject({ columnId: "column-done", rank: "F" });
+
+		act(() => {
+			resolveRefresh(buildTokenSet());
+		});
+
+		await waitFor(() =>
+			expect(result.current.moveState.isMovePending).toBe(false),
+		);
+		expect(result.current.moveState.moveError).toBeNull();
+		expect(fetchSpy).toHaveBeenCalledWith(
+			"https://api.example.test/projects/project-1/tasks/moved/move",
+			expect.objectContaining({ method: "PUT" }),
+		);
+		expect(
+			new Headers(fetchSpy.mock.calls[0][1]?.headers).get("Authorization"),
+		).toBe("Bearer stale-board-token");
+		expect(
+			new Headers(fetchSpy.mock.calls[1][1]?.headers).get("Authorization"),
+		).toBe("Bearer refreshed-board-token");
+	});
+
+	it("uses the refreshed token for post-move task refetches", async () => {
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			{
+				id: "column-todo",
+				projectId: "project-1",
+				name: "To Do",
+				position: 0,
+				createdAt: null,
+				updatedAt: null,
+			},
+			{
+				id: "column-done",
+				projectId: "project-1",
+				name: "Done",
+				position: 1,
+				createdAt: null,
+				updatedAt: null,
+			},
+		]);
+		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
+			task({ id: "moved", columnId: "column-todo", rank: "U" }),
+			task({ id: "done-first", columnId: "column-done", rank: "U" }),
+		]);
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({
+				accessToken: "stale-board-token",
+				expiresAt: Date.now() + 120_000,
+				refreshToken: "board-refresh-token",
+			}),
+		);
+		vi.mocked(client.refreshTokenGrant).mockResolvedValue(buildTokenSet());
+		const fetchSpy = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(new Response(null, { status: 401 }))
+			.mockResolvedValueOnce(
+				taskResponse({ id: "moved", columnId: "column-done", rank: "F" }),
+			)
+			.mockResolvedValue(
+				tasksResponse([
+					task({ id: "moved", columnId: "column-done", rank: "F" }),
+					task({ id: "done-first", columnId: "column-done", rank: "U" }),
+				]),
+			);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		const { result } = renderHook(() => useProjectTaskBoard("project-1"), {
+			wrapper: createWrapper(queryClient),
+		});
+
+		act(() => {
+			result.current.moveTask({
+				taskId: "moved",
+				toColumnId: "column-done",
+				afterTaskId: "done-first",
+			});
+		});
+
+		await waitFor(() =>
+			expect(
+				fetchSpy.mock.calls.some(
+					([url, init]) =>
+						url === "https://api.example.test/projects/project-1/tasks" &&
+						init?.method === "GET" &&
+						new Headers(init.headers).get("Authorization") ===
+							"Bearer refreshed-board-token",
+				),
+			).toBe(true),
+		);
+		expect(result.current.moveState.moveError).toBeNull();
 	});
 
 	it("exposes grouped columns and drag state", () => {
@@ -258,6 +492,77 @@ describe("useProjectTaskBoard", () => {
 		expect(result.current.moveState.moveError).toBe(
 			"Task move failed. Your board was restored.",
 		);
+	});
+
+	it("rolls back optimistic movement when auth refresh cannot recover", async () => {
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			{
+				id: "column-todo",
+				projectId: "project-1",
+				name: "To Do",
+				position: 0,
+				createdAt: null,
+				updatedAt: null,
+			},
+			{
+				id: "column-done",
+				projectId: "project-1",
+				name: "Done",
+				position: 1,
+				createdAt: null,
+				updatedAt: null,
+			},
+		]);
+		const originalTasks = [
+			task({ id: "moved", columnId: "column-todo", rank: "U" }),
+			task({ id: "done-first", columnId: "column-done", rank: "U" }),
+		];
+		queryClient.setQueryData(
+			projectTasksQueryOptions("project-1").queryKey,
+			originalTasks,
+		);
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({
+				accessToken: "stale-board-token",
+				expiresAt: Date.now() + 120_000,
+				refreshToken: "board-refresh-token",
+			}),
+		);
+		vi.mocked(client.refreshTokenGrant).mockRejectedValue(
+			new Error("refresh rejected"),
+		);
+		vi.stubGlobal(
+			"fetch",
+			vi
+				.fn<typeof fetch>()
+				.mockResolvedValue(new Response(null, { status: 401 })),
+		);
+
+		const { result } = renderHook(() => useProjectTaskBoard("project-1"), {
+			wrapper: createWrapper(queryClient),
+		});
+
+		act(() => {
+			result.current.moveTask({
+				taskId: "moved",
+				toColumnId: "column-done",
+				afterTaskId: "done-first",
+			});
+		});
+
+		await waitFor(() =>
+			expect(
+				queryClient.getQueryData(
+					projectTasksQueryOptions("project-1").queryKey,
+				),
+			).toEqual(originalTasks),
+		);
+		expect(result.current.moveState.moveError).toBe(
+			"Task move failed. Your board was restored.",
+		);
+		expect(client.refreshTokenGrant).toHaveBeenCalledTimes(1);
 	});
 
 	it("allows only one in-flight move", async () => {

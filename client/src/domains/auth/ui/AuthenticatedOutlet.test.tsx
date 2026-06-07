@@ -14,6 +14,7 @@ function buildAuthBoundary(
 		completeCallback: vi.fn(),
 		isBypassPath: vi.fn(() => false),
 		logout: vi.fn(),
+		refreshAccessToken: vi.fn(),
 		requirePage: vi.fn(() => Promise.resolve()),
 		status: "anonymous",
 		...overrides,

@@ -18,8 +18,26 @@ function buildAdapters(
 		hasActiveSession: vi.fn(() => false),
 		isBypassPath: vi.fn((pathname) => pathname === "/login"),
 		login: vi.fn(),
+		refreshSession: vi.fn(() =>
+			Promise.reject(new Error("Missing authenticated session refresh token.")),
+		),
 		...overrides,
 	};
+}
+
+function createDeferred<T>(): {
+	promise: Promise<T>;
+	reject: (reason?: unknown) => void;
+	resolve: (value: T) => void;
+} {
+	let reject!: (reason?: unknown) => void;
+	let resolve!: (value: T) => void;
+	const promise = new Promise<T>((promiseResolve, promiseReject) => {
+		resolve = promiseResolve;
+		reject = promiseReject;
+	});
+
+	return { promise, reject, resolve };
 }
 
 describe("auth boundary", () => {
@@ -72,24 +90,96 @@ describe("auth boundary", () => {
 		});
 	});
 
-	it("clears expired stored sessions before token lookup succeeds", async () => {
-		window.sessionStorage.setItem(
-			"kanai.openid-client.auth-session",
-			JSON.stringify({
+	it("refreshes expired sessions before returning an access token", async () => {
+		const adapters = buildAdapters({
+			getSession: vi.fn(() => ({
 				accessToken: "expired-token",
 				expiresAt: Date.now() - 1_000,
-			}),
-		);
+				refreshToken: "refresh-token",
+			})),
+			refreshSession: vi.fn(async () => ({
+				accessToken: "refreshed-token",
+				expiresAt: Date.now() + 60_000,
+				refreshToken: "refresh-token",
+			})),
+		});
+		const auth = createAuthBoundary(adapters);
 
-		const auth = createAuthBoundary();
+		await expect(auth.accessToken()).resolves.toBe("refreshed-token");
+		expect(adapters.refreshSession).toHaveBeenCalledTimes(1);
+	});
 
-		expect(auth.status).toBe("anonymous");
+	it("shares one in-flight refresh between concurrent access token lookups", async () => {
+		const refreshSession = createDeferred<{
+			accessToken: string;
+			expiresAt: number;
+			refreshToken: string;
+		}>();
+		const adapters = buildAdapters({
+			getSession: vi.fn(() => ({
+				accessToken: "expired-token",
+				expiresAt: Date.now() - 1_000,
+				refreshToken: "refresh-token",
+			})),
+			refreshSession: vi.fn(() => refreshSession.promise),
+		});
+		const auth = createAuthBoundary(adapters);
+
+		const firstToken = auth.accessToken();
+		const secondToken = auth.accessToken();
+		refreshSession.resolve({
+			accessToken: "shared-refreshed-token",
+			expiresAt: Date.now() + 60_000,
+			refreshToken: "rotated-refresh-token",
+		});
+
+		await expect(Promise.all([firstToken, secondToken])).resolves.toEqual([
+			"shared-refreshed-token",
+			"shared-refreshed-token",
+		]);
+		expect(adapters.refreshSession).toHaveBeenCalledTimes(1);
+	});
+
+	it("clears stale sessions and starts login when refresh fails", async () => {
+		window.history.replaceState(null, "", "/projects/123?tab=board#tasks");
+		const adapters = buildAdapters({
+			getSession: vi.fn(() => ({
+				accessToken: "expired-token",
+				expiresAt: Date.now() - 1_000,
+				refreshToken: "refresh-token",
+			})),
+			refreshSession: vi.fn(() => Promise.reject(new Error("refresh failed"))),
+		});
+		const auth = createAuthBoundary(adapters);
+
 		await expect(auth.accessToken()).rejects.toMatchObject({
 			message: "Missing authenticated session access token.",
 		});
-		expect(
-			window.sessionStorage.getItem("kanai.openid-client.auth-session"),
-		).toBeNull();
+		expect(adapters.clearSession).toHaveBeenCalledTimes(1);
+		expect(adapters.login).toHaveBeenCalledWith(
+			window.location.origin,
+			"/projects/123?tab=board#tasks",
+		);
+	});
+
+	it("clears stale sessions and starts login when refresh token is missing", async () => {
+		window.history.replaceState(null, "", "/projects/456?view=board#lane-1");
+		const adapters = buildAdapters({
+			getSession: vi.fn(() => ({
+				accessToken: "expired-token",
+				expiresAt: Date.now() - 1_000,
+			})),
+		});
+		const auth = createAuthBoundary(adapters);
+
+		await expect(auth.accessToken()).rejects.toMatchObject({
+			message: "Missing authenticated session access token.",
+		});
+		expect(adapters.clearSession).toHaveBeenCalledTimes(1);
+		expect(adapters.login).toHaveBeenCalledWith(
+			window.location.origin,
+			"/projects/456?view=board#lane-1",
+		);
 	});
 
 	it("delegates callback completion and surfaces failures", async () => {

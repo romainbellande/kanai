@@ -1,23 +1,12 @@
 import { Bell, Search, Settings2, User } from "lucide-react";
 
-import { useCurrentUserQuery } from "#/api/client";
+import { getCurrentUserInitials, useCurrentUserQuery } from "#/api/client";
 import { WorkspaceIconButton } from "#/domains/workspace/ui/atoms/WorkspaceIconButton";
-
-function getInitials(value: string | null | undefined): string {
-	const normalizedValue = value?.trim();
-
-	return normalizedValue ? normalizedValue.slice(0, 1).toUpperCase() : "";
-}
 
 export function WorkspaceHeader() {
 	const { data: currentUser } = useCurrentUserQuery();
 
-	const accountInitials = [
-		getInitials(currentUser?.first_name),
-		getInitials(currentUser?.last_name),
-	]
-		.join("")
-		.trim();
+	const accountInitials = getCurrentUserInitials(currentUser);
 
 	return (
 		<header className="sticky top-0 z-20 grid gap-4 border-[var(--outline-variant)] bg-[color:color-mix(in_srgb,var(--background)_88%,transparent)] px-4 py-4 backdrop-blur-xl sm:px-6 lg:grid-cols-[1fr_minmax(0,42rem)_1fr] lg:items-center lg:border-b lg:px-8">

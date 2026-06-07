@@ -2,13 +2,23 @@
 
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlmodel import col
 
 from app.core.exceptions import AuthenticationServiceException
 from app.models.user import User
 from app.schemas.auth import AuthenticatedContext
+
+
+def _display_name_from_claims(context: AuthenticatedContext) -> str | None:
+    preferred_username = context.claims.get("preferred_username")
+    if not isinstance(preferred_username, str):
+        return None
+
+    display_name = preferred_username.strip()
+    return display_name or None
 
 
 class UserRepository:
@@ -28,9 +38,23 @@ class UserRepository:
             select(User).filter_by(externalId=external_id)
         )
 
-    async def list(self) -> list[User]:
-        """Return all users ordered by external identity."""
-        users = await self._session.scalars(select(User).order_by(User.externalId))
+    async def list(self, *, search: str | None = None, limit: int | None = None) -> list[User]:
+        """Return users ordered by external identity, optionally filtered by identity text."""
+        statement = select(User)
+        search_text = search.strip() if search is not None else ""
+        if search_text:
+            pattern = f"%{search_text}%"
+            statement = statement.where(
+                or_(
+                    col(User.display_name).ilike(pattern),
+                    col(User.externalId).ilike(pattern),
+                )
+            )
+        statement = statement.order_by(User.externalId)
+        if limit is not None:
+            statement = statement.limit(limit)
+
+        users = await self._session.scalars(statement)
         return list(users.all())
 
     async def add(self, user: User) -> User:
@@ -79,13 +103,22 @@ class DatabaseUserProvisioner:
         """
         async with self._session_factory() as session:
             try:
+                display_name = _display_name_from_claims(context)
                 existing_user = await session.scalar(
                     select(User).filter_by(externalId=context.subject)
                 )
                 if existing_user is not None:
+                    if (
+                        display_name is not None
+                        and existing_user.display_name != display_name
+                    ):
+                        existing_user.display_name = display_name
+                        await session.commit()
                     return
 
-                session.add(User(externalId=context.subject))
+                session.add(
+                    User(externalId=context.subject, display_name=display_name)
+                )
                 await session.commit()
             except IntegrityError:
                 await session.rollback()

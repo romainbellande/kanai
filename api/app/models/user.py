@@ -19,6 +19,10 @@ class User(SQLModel, table=True):
     externalId: str = Field(
         sa_column=Column("externalId", String(), nullable=False, unique=True),
     )
+    display_name: str | None = Field(
+        default=None,
+        sa_column=Column(String(), nullable=True),
+    )
     updated_at: datetime | None = Field(
         default=None,
         sa_column=Column(

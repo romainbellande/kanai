@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
+import {
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+} from "@testing-library/react";
 import type { AnchorHTMLAttributes, ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -9,10 +15,12 @@ import {
 	currentUserQueryOptions,
 	type Project,
 	type ProjectColumn,
+	projectAccessUsersQueryKey,
 	projectColumnsQueryOptions,
 	projectQueryOptions,
 	projectTasksQueryOptions,
 	type Task,
+	type UserProfile,
 } from "#/api/client";
 
 vi.mock("@tanstack/react-router", () => ({
@@ -86,6 +94,17 @@ function project(overrides: Partial<Project> = {}): Project {
 		memberIds: [],
 		createdAt: null,
 		updatedAt: null,
+		...overrides,
+	};
+}
+
+function userProfile(overrides: Partial<UserProfile>): UserProfile {
+	return {
+		display_name: undefined,
+		external_id: "user@example.test",
+		first_name: undefined,
+		id: "user-1",
+		last_name: undefined,
 		...overrides,
 	};
 }
@@ -275,6 +294,369 @@ describe("ProjectBoardPage", () => {
 		expect(screen.getByText("Shipped")).toBeTruthy();
 		expect(screen.queryByText("Other Project")).toBeNull();
 		expect(screen.queryByText("Security Audit Phase 1")).toBeNull();
+	});
+
+	it("removes board card updated-at pills", async () => {
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project({ name: "API Board" }),
+		);
+		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
+			task({ id: "todo-task", title: "API Todo", columnId: "column-todo" }),
+		]);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({ id: "column-todo", name: "Backlog", position: 0 }),
+		]);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+
+		expect(screen.getByText("API Todo")).toBeTruthy();
+		expect(screen.queryByText("No activity date")).toBeNull();
+	});
+
+	it("shows an owner-aware Invite action instead of Share", async () => {
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(currentUserQueryOptions().queryKey, {
+			id: "owner-1",
+			first_name: "Jane",
+			last_name: "Doe",
+		});
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project({ name: "API Board", ownerIds: ["owner-1"] }),
+		);
+		queryClient.setQueryData(
+			projectTasksQueryOptions("project-1").queryKey,
+			[],
+		);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({ id: "column-todo", name: "Backlog", position: 0 }),
+		]);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+
+		const inviteButton = screen.getByRole("button", { name: "Invite" });
+		expect((inviteButton as HTMLButtonElement).disabled).toBe(false);
+		expect(screen.queryByRole("button", { name: "Share" })).toBeNull();
+		expect(screen.queryByText("Invites unavailable")).toBeNull();
+	});
+
+	it("disables Invite for non-owners", async () => {
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(currentUserQueryOptions().queryKey, {
+			id: "member-1",
+			first_name: "Jane",
+			last_name: "Doe",
+		});
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project({
+				name: "API Board",
+				memberIds: ["member-1"],
+				ownerIds: ["owner-1"],
+			}),
+		);
+		queryClient.setQueryData(
+			projectTasksQueryOptions("project-1").queryKey,
+			[],
+		);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({ id: "column-todo", name: "Backlog", position: 0 }),
+		]);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+
+		expect(
+			(screen.getByRole("button", { name: "Invite" }) as HTMLButtonElement)
+				.disabled,
+		).toBe(true);
+	});
+
+	it("opens an invite modal with existing owners and members", async () => {
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(currentUserQueryOptions().queryKey, {
+			id: "owner-1",
+			first_name: "Jane",
+			last_name: "Doe",
+		});
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project({
+				name: "API Board",
+				memberIds: ["member-1"],
+				ownerIds: ["owner-1"],
+			}),
+		);
+		queryClient.setQueryData(
+			projectAccessUsersQueryKey("project-1", ["owner-1", "member-1"]),
+			[
+				userProfile({
+					display_name: "Jane Owner",
+					external_id: "owner@example.test",
+					id: "owner-1",
+				}),
+				userProfile({
+					display_name: "Maya Member",
+					external_id: "member@example.test",
+					id: "member-1",
+				}),
+			],
+		);
+		queryClient.setQueryData(
+			projectTasksQueryOptions("project-1").queryKey,
+			[],
+		);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({ id: "column-todo", name: "Backlog", position: 0 }),
+		]);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+		fireEvent.click(screen.getByRole("button", { name: "Invite" }));
+
+		expect(screen.getByRole("dialog", { name: "Invite members" })).toBeTruthy();
+		await waitFor(() => expect(screen.getByText("Jane Owner")).toBeTruthy());
+		expect(screen.getByText("Maya Member")).toBeTruthy();
+		expect(screen.getByText("owner@example.test")).toBeTruthy();
+		expect(screen.getByText("member@example.test")).toBeTruthy();
+		expect(screen.getByText("Owner")).toBeTruthy();
+	});
+
+	it("adds selected members while retaining failed users for retry", async () => {
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({ accessToken: "invite-token" }),
+		);
+		const fetchSpy = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify([
+						{
+							display_name: "Ada Candidate",
+							external_id: "ada@example.test",
+							first_name: null,
+							id: "candidate-1",
+							last_name: null,
+						},
+					]),
+					{ headers: { "content-type": "application/json" }, status: 200 },
+				),
+			)
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify([
+						{
+							display_name: "Linus Candidate",
+							external_id: "linus@example.test",
+							first_name: null,
+							id: "candidate-2",
+							last_name: null,
+						},
+					]),
+					{ headers: { "content-type": "application/json" }, status: 200 },
+				),
+			)
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						id: "project-1",
+						name: "API Board",
+						code: "PRJ",
+						priority: "medium",
+						description: null,
+						status: null,
+						owner_ids: ["owner-1"],
+						member_ids: ["candidate-1"],
+						created_at: null,
+						updated_at: null,
+					}),
+					{ headers: { "content-type": "application/json" }, status: 200 },
+				),
+			)
+			.mockResolvedValueOnce(
+				new Response(JSON.stringify({ detail: "Unable to add member" }), {
+					headers: { "content-type": "application/json" },
+					status: 500,
+				}),
+			);
+		vi.stubGlobal("fetch", fetchSpy);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(currentUserQueryOptions().queryKey, {
+			id: "owner-1",
+			first_name: "Jane",
+			last_name: "Doe",
+		});
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project({ name: "API Board", ownerIds: ["owner-1"] }),
+		);
+		queryClient.setQueryData(
+			projectAccessUsersQueryKey("project-1", ["owner-1"]),
+			[
+				userProfile({
+					display_name: "Jane Owner",
+					external_id: "owner@example.test",
+					id: "owner-1",
+				}),
+			],
+		);
+		queryClient.setQueryData(
+			projectTasksQueryOptions("project-1").queryKey,
+			[],
+		);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({ id: "column-todo", name: "Backlog", position: 0 }),
+		]);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+		fireEvent.click(screen.getByRole("button", { name: "Invite" }));
+		fireEvent.change(screen.getByLabelText("Search Kanai users"), {
+			target: { value: "Ad" },
+		});
+
+		await waitFor(() => expect(screen.getByText("Ada Candidate")).toBeTruthy());
+		fireEvent.click(screen.getByRole("checkbox", { name: /Ada Candidate/i }));
+		expect(screen.getByText("1 selected")).toBeTruthy();
+
+		fireEvent.change(screen.getByLabelText("Search Kanai users"), {
+			target: { value: "Li" },
+		});
+
+		await waitFor(() =>
+			expect(screen.getByText("Linus Candidate")).toBeTruthy(),
+		);
+		expect(screen.getByText("1 selected")).toBeTruthy();
+		fireEvent.click(screen.getByRole("checkbox", { name: /Linus Candidate/i }));
+		expect(screen.getByText("2 selected")).toBeTruthy();
+		fireEvent.click(screen.getByRole("button", { name: "Add selected (2)" }));
+
+		await waitFor(() =>
+			expect(screen.getByText("Added 1 member.")).toBeTruthy(),
+		);
+		expect(screen.getByText("Could not add Linus Candidate.")).toBeTruthy();
+		expect(screen.getByText("1 selected")).toBeTruthy();
+		expect(
+			screen.getByRole("button", { name: "Add selected (1)" }),
+		).toBeTruthy();
+		expect(screen.getByText("Ada Candidate")).toBeTruthy();
+		expect(fetchSpy.mock.calls.map(([url]) => String(url)).slice(0, 4)).toEqual(
+			[
+				"https://api.example.test/users?limit=20&q=Ad",
+				"https://api.example.test/users?limit=20&q=Li",
+				"https://api.example.test/projects/project-1/members",
+				"https://api.example.test/projects/project-1/members",
+			],
+		);
+		expect(JSON.parse(String(fetchSpy.mock.calls[2][1]?.body))).toEqual({
+			user_id: "candidate-1",
+		});
+		expect(JSON.parse(String(fetchSpy.mock.calls[3][1]?.body))).toEqual({
+			user_id: "candidate-2",
+		});
+	});
+
+	it("shows an owners-first member avatar stack that opens the member modal", async () => {
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		const accessUsers = [
+			userProfile({
+				display_name: "Zoe Owner",
+				external_id: "zoe@example.test",
+				id: "owner-1",
+			}),
+			userProfile({
+				display_name: undefined,
+				external_id: "alpha.owner@example.test",
+				first_name: "Ignored",
+				id: "owner-2",
+			}),
+			userProfile({
+				display_name: "Maya Member",
+				external_id: "maya@example.test",
+				id: "member-1",
+			}),
+			userProfile({
+				display_name: undefined,
+				external_id: "bravo@example.test",
+				id: "member-2",
+			}),
+			userProfile({
+				display_name: "Noah Guest",
+				external_id: "noah@example.test",
+				id: "member-3",
+			}),
+			userProfile({
+				display_name: "Cora Hidden",
+				external_id: "cora@example.test",
+				id: "member-4",
+			}),
+		];
+		queryClient.setQueryData(currentUserQueryOptions().queryKey, {
+			id: "owner-1",
+			first_name: "Zoe",
+			last_name: "Owner",
+		});
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project({
+				name: "API Board",
+				memberIds: ["member-1", "member-2", "member-3", "member-4"],
+				ownerIds: ["owner-1", "owner-2"],
+			}),
+		);
+		queryClient.setQueryData(
+			projectAccessUsersQueryKey("project-1", [
+				"owner-1",
+				"owner-2",
+				"member-1",
+				"member-2",
+				"member-3",
+				"member-4",
+			]),
+			accessUsers,
+		);
+		queryClient.setQueryData(
+			projectTasksQueryOptions("project-1").queryKey,
+			[],
+		);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({ id: "column-todo", name: "Backlog", position: 0 }),
+		]);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+
+		const memberStack = screen.getByRole("button", {
+			name: "View project members",
+		});
+		expect(
+			Array.from(memberStack.querySelectorAll("span")).map(
+				(avatar) => avatar.textContent,
+			),
+		).toEqual(["ZO", "A", "MM", "B", "NG", "+1"]);
+
+		fireEvent.click(memberStack);
+
+		expect(screen.getByRole("dialog", { name: "Invite members" })).toBeTruthy();
+		await waitFor(() => expect(screen.getByText("Cora Hidden")).toBeTruthy());
 	});
 
 	it("renders a dedicated move handle separate from the task detail link", async () => {

@@ -25,6 +25,7 @@ class UserRead(BaseModel):
 
     id: UUID
     external_id: str
+    display_name: str | None = None
     first_name: str | None = None
     last_name: str | None = None
     created_at: datetime | None = None

@@ -19,6 +19,7 @@ def user_to_read(user: User) -> UserRead:
     return UserRead(
         id=user.id,
         external_id=user.externalId,
+        display_name=user.display_name,
         created_at=user.created_at,
         updated_at=user.updated_at,
     )
@@ -52,9 +53,17 @@ async def create_user(session: AsyncSession, *, external_id: str) -> UserRead:
     return user_to_read(user)
 
 
-async def list_users(session: AsyncSession) -> list[UserRead]:
-    """List users."""
-    return [user_to_read(user) for user in await UserRepository(session).list()]
+async def list_users(
+    session: AsyncSession,
+    *,
+    search: str | None = None,
+    limit: int | None = None,
+) -> list[UserRead]:
+    """List users, optionally filtered by display name or external identity."""
+    return [
+        user_to_read(user)
+        for user in await UserRepository(session).list(search=search, limit=limit)
+    ]
 
 
 async def get_user(session: AsyncSession, user_id: UUID) -> UserRead:

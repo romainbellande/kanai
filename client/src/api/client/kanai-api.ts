@@ -2,6 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { currentUserQueryOptions } from "./current-user";
 import {
+	addProjectMember,
 	type CreateProjectColumnInput,
 	type CreateProjectInput,
 	createProject,
@@ -28,6 +29,10 @@ import {
 	type UpdateTaskInput,
 	updateProjectTask,
 } from "./tasks";
+import {
+	projectAccessUsersQueryOptions,
+	userSearchQueryOptions,
+} from "./users";
 
 export function useKanaiApi() {
 	const queryClient = useQueryClient();
@@ -39,6 +44,18 @@ export function useKanaiApi() {
 			create: async (values: CreateProjectInput) => {
 				const project = await createProject(values);
 				await queryClient.invalidateQueries({ queryKey: projectsQueryKey });
+				return project;
+			},
+			addMember: async (projectId: string, userId: string) => {
+				const project = await addProjectMember(projectId, userId);
+				queryClient.setQueryData(
+					projectQueryOptions(projectId).queryKey,
+					project,
+				);
+				await queryClient.invalidateQueries({
+					exact: true,
+					queryKey: projectsQueryKey,
+				});
 				return project;
 			},
 		},
@@ -148,6 +165,12 @@ export function useKanaiApi() {
 		},
 		currentUser: {
 			get: () => currentUserQueryOptions(),
+		},
+		users: {
+			projectAccess: (projectId: string, userIds: string[], enabled = true) =>
+				projectAccessUsersQueryOptions(projectId, userIds, enabled),
+			search: (query: string, limit = 20, enabled = true) =>
+				userSearchQueryOptions(query, limit, enabled),
 		},
 	};
 }

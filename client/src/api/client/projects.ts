@@ -8,8 +8,7 @@ import {
 
 import {
 	createAuthenticatedConfiguration,
-	getAccessToken,
-	getApiBaseUrl,
+	fetchAuthenticatedApi,
 } from "./utils";
 
 export type Project = ProjectRead;
@@ -75,6 +74,16 @@ export async function createProject(
 	});
 }
 
+export async function addProjectMember(
+	projectId: string,
+	userId: string,
+): Promise<Project> {
+	return createProjectsApi().addProjectMemberProjectsProjectIdMembersPost({
+		projectId,
+		projectMemberCreate: { userId },
+	});
+}
+
 function mapProjectColumn(column: ProjectColumnJson): ProjectColumn {
 	return {
 		id: column.id,
@@ -90,15 +99,13 @@ async function requestProjectColumns<T>(
 	path: string,
 	init: RequestInit = {},
 ): Promise<T> {
-	const token = await getAccessToken();
 	const headers = new Headers(init.headers);
 
-	headers.set("Authorization", `Bearer ${token}`);
 	if (init.body !== undefined) {
 		headers.set("Content-Type", "application/json");
 	}
 
-	const response = await fetch(`${getApiBaseUrl()}${path}`, {
+	const response = await fetchAuthenticatedApi(path, {
 		...init,
 		headers,
 	});

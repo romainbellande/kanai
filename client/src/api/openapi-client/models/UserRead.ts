@@ -37,6 +37,12 @@ export interface UserRead {
      * @type {string}
      * @memberof UserRead
      */
+    displayName?: string | null;
+    /**
+     * 
+     * @type {string}
+     * @memberof UserRead
+     */
     firstName?: string | null;
     /**
      * 
@@ -79,6 +85,7 @@ export function UserReadFromJSONTyped(json: any, ignoreDiscriminator: boolean): 
         
         'id': json['id'],
         'externalId': json['external_id'],
+        'displayName': json['display_name'] == null ? undefined : json['display_name'],
         'firstName': json['first_name'] == null ? undefined : json['first_name'],
         'lastName': json['last_name'] == null ? undefined : json['last_name'],
         'createdAt': json['created_at'] == null ? undefined : (new Date(json['created_at'])),
@@ -99,6 +106,7 @@ export function UserReadToJSONTyped(value?: UserRead | null, ignoreDiscriminator
         
         'id': value['id'],
         'external_id': value['externalId'],
+        'display_name': value['displayName'],
         'first_name': value['firstName'],
         'last_name': value['lastName'],
         'created_at': value['createdAt'] == null ? value['createdAt'] : value['createdAt'].toISOString(),

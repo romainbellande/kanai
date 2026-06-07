@@ -278,7 +278,7 @@ No authorization required
 
 ## listUsersEndpointUsersGet
 
-> Array&lt;UserRead&gt; listUsersEndpointUsersGet()
+> Array&lt;UserRead&gt; listUsersEndpointUsersGet(q, limit)
 
 List Users Endpoint
 
@@ -297,8 +297,15 @@ async function example() {
   console.log("🚀 Testing  SDK...");
   const api = new UsersApi();
 
+  const body = {
+    // string (optional)
+    q: q_example,
+    // number (optional)
+    limit: 56,
+  } satisfies ListUsersEndpointUsersGetRequest;
+
   try {
-    const data = await api.listUsersEndpointUsersGet();
+    const data = await api.listUsersEndpointUsersGet(body);
     console.log(data);
   } catch (error) {
     console.error(error);
@@ -311,7 +318,11 @@ example().catch(console.error);
 
 ### Parameters
 
-This endpoint does not need any parameter.
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **q** | `string` |  | [Optional] [Defaults to `undefined`] |
+| **limit** | `number` |  | [Optional] [Defaults to `undefined`] |
 
 ### Return type
 
@@ -331,6 +342,7 @@ No authorization required
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
 | **200** | Successful Response |  -  |
+| **422** | Validation Error |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 

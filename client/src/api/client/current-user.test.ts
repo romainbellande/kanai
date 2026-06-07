@@ -6,6 +6,7 @@ import {
 	CurrentUserAuthError,
 	currentUserQueryOptions,
 	getCurrentUser,
+	getCurrentUserInitials,
 } from "#/api/client";
 
 describe("current-user client", () => {
@@ -25,7 +26,12 @@ describe("current-user client", () => {
 
 		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
 			new Response(
-				JSON.stringify({ id: "123", first_name: "John", last_name: "Doe" }),
+				JSON.stringify({
+					display_name: "Johnny D",
+					first_name: "John",
+					id: "123",
+					last_name: "Doe",
+				}),
 				{
 					headers: { "content-type": "application/json" },
 					status: 200,
@@ -36,6 +42,7 @@ describe("current-user client", () => {
 		vi.stubGlobal("fetch", fetchSpy);
 
 		await expect(getCurrentUser()).resolves.toEqual({
+			display_name: "Johnny D",
 			id: "123",
 			first_name: "John",
 			last_name: "Doe",
@@ -51,7 +58,7 @@ describe("current-user client", () => {
 		);
 	});
 
-	it("fails before network execution when no access token is available", async () => {
+	it("fails before current-user network execution when no access token is available", async () => {
 		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
 		const fetchSpy = vi.fn<typeof fetch>();
 
@@ -61,7 +68,11 @@ describe("current-user client", () => {
 			message: "Missing authenticated session access token.",
 			name: "CurrentUserAuthError",
 		});
-		expect(fetchSpy).not.toHaveBeenCalled();
+		expect(
+			fetchSpy.mock.calls.some(
+				([url]) => url === "https://api.example.test/users/me",
+			),
+		).toBe(false);
 	});
 
 	it("fails before network execution when browser storage is unavailable", async () => {
@@ -77,5 +88,23 @@ describe("current-user client", () => {
 
 	it("exposes a stable current-user query key", () => {
 		expect(currentUserQueryOptions().queryKey).toEqual(["users", "me"]);
+	});
+
+	it("derives current-user initials from display name before legacy names", () => {
+		expect(
+			getCurrentUserInitials({
+				display_name: "Johnny D",
+				first_name: "Ignored",
+				id: "123",
+				last_name: "User",
+			}),
+		).toBe("JD");
+		expect(
+			getCurrentUserInitials({
+				first_name: "John",
+				id: "123",
+				last_name: "Doe",
+			}),
+		).toBe("JD");
 	});
 });

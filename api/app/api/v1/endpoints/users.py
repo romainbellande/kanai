@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Query, status
 
 from app.api.deps import CurrentUser, DatabaseSession
 from app.schemas.user import UserCreate, UserRead, UserUpdate
@@ -38,9 +38,11 @@ async def create_user_endpoint(
 async def list_users_endpoint(
     session: DatabaseSession,
     _: CurrentUser,
+    q: str | None = Query(default=None, max_length=255),
+    limit: int | None = Query(default=None, ge=1, le=50),
 ) -> list[UserRead]:
     """List users."""
-    return await list_users(session)
+    return await list_users(session, search=q, limit=limit)
 
 
 @user_router.get("/{user_id}", response_model=UserRead)

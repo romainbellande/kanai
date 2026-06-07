@@ -12,7 +12,6 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import {
 	Bell,
-	Calendar,
 	ChevronRight,
 	CircleHelp,
 	Filter,
@@ -23,20 +22,26 @@ import {
 	Plus,
 	Search,
 	Settings2,
-	Share2,
 	Target,
 	TrendingUp,
 	TriangleAlert,
 	User,
 	UserPlus,
+	X,
 } from "lucide-react";
 import { type ReactNode, type Ref, useEffect, useRef, useState } from "react";
 
 import {
 	CurrentUserAuthError,
+	getCurrentUserInitials,
+	getUserDisplayLabel,
+	getUserInitials,
+	type Project,
 	type Task,
+	type UserProfile,
 	useCurrentUserQuery,
 	useKanaiApi,
+	userSearchQueryOptions,
 } from "#/api/client";
 import { useAuthBoundary } from "#/domains/auth/model/auth-boundary";
 import {
@@ -90,21 +95,6 @@ function getTagClass(priority: string): string {
 	return /urgent|high/i.test(priority)
 		? "bg-[var(--error-container)] text-[var(--on-error-container)]"
 		: "bg-[var(--secondary-container)] text-[var(--on-secondary-container)]";
-}
-
-function getTaskMeta(task: Task): string {
-	return (
-		task.updatedAt?.toLocaleDateString(undefined, {
-			month: "short",
-			day: "numeric",
-		}) ?? "No activity date"
-	);
-}
-
-function getInitials(value: string | null | undefined): string {
-	const normalizedValue = value?.trim();
-
-	return normalizedValue ? normalizedValue.slice(0, 1).toUpperCase() : "";
 }
 
 export function getDestinationIndex({
@@ -295,10 +285,6 @@ function BoardTaskCard({
 						{card.description}
 					</p>
 				) : null}
-				<div className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-[var(--surface-variant)] px-2 py-1 text-xs font-semibold text-[var(--on-surface-variant)]">
-					<Calendar className="h-3.5 w-3.5" />
-					{getTaskMeta(card)}
-				</div>
 			</div>
 		</article>
 	);
@@ -455,6 +441,440 @@ function InvalidTasksView({ tasks }: { tasks: InvalidBoardTask[] }) {
 	);
 }
 
+function getProjectAccessUserIds(project: Project | undefined): string[] {
+	if (!project) {
+		return [];
+	}
+
+	return [...new Set([...project.ownerIds, ...project.memberIds])];
+}
+
+function getProjectMemberAvatarLabel(user: UserProfile): string {
+	return user.display_name?.trim() || user.external_id || user.id;
+}
+
+function getProjectMemberAvatarInitials(user: UserProfile): string {
+	return getProjectMemberAvatarLabel(user)
+		.split(/\s+/)
+		.filter(Boolean)
+		.slice(0, 2)
+		.map((part) => part.slice(0, 1).toUpperCase())
+		.join("");
+}
+
+function ProjectMemberAvatarStack({
+	project,
+	users,
+	onClick,
+}: {
+	project: Project | undefined;
+	users: UserProfile[];
+	onClick: () => void;
+}) {
+	const accessUserIds = getProjectAccessUserIds(project);
+	if (accessUserIds.length === 0) {
+		return null;
+	}
+
+	const usersById = new Map(users.map((user) => [user.id, user]));
+	const visibleUserIds = accessUserIds.slice(0, 5);
+	const overflowCount = accessUserIds.length - visibleUserIds.length;
+
+	return (
+		<button
+			type="button"
+			aria-label="View project members"
+			onClick={onClick}
+			className="flex -space-x-2 rounded-full px-1 py-1 transition hover:bg-[var(--surface-container-high)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]"
+		>
+			{visibleUserIds.map((userId) => {
+				const user = usersById.get(userId);
+				const label = user ? getProjectMemberAvatarLabel(user) : userId;
+
+				return (
+					<span
+						key={userId}
+						title={label}
+						className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-[var(--background)] bg-[var(--primary-container)] text-xs font-bold text-[var(--on-primary-container)] shadow-sm"
+					>
+						{user ? (
+							getProjectMemberAvatarInitials(user)
+						) : (
+							<User className="h-4 w-4" />
+						)}
+					</span>
+				);
+			})}
+			{overflowCount > 0 ? (
+				<span className="flex h-8 min-w-8 items-center justify-center rounded-full border-2 border-[var(--background)] bg-[var(--surface-container-highest)] px-2 text-xs font-bold text-[var(--on-surface-variant)] shadow-sm">
+					+{overflowCount}
+				</span>
+			) : null}
+		</button>
+	);
+}
+
+function ProjectMembersModal({
+	isOpen,
+	onClose,
+	onAddMember,
+	project,
+	users,
+	isLoading,
+	isError,
+}: {
+	isOpen: boolean;
+	onClose: () => void;
+	onAddMember: (userId: string) => Promise<void>;
+	project: Project | undefined;
+	users: UserProfile[];
+	isLoading: boolean;
+	isError: boolean;
+}) {
+	const [searchQuery, setSearchQuery] = useState("");
+	const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
+	const [selectedUsers, setSelectedUsers] = useState<Map<string, UserProfile>>(
+		() => new Map(),
+	);
+	const [addedUsers, setAddedUsers] = useState<Map<string, UserProfile>>(
+		() => new Map(),
+	);
+	const [isAddingMembers, setIsAddingMembers] = useState(false);
+	const [successMessage, setSuccessMessage] = useState<string | null>(null);
+	const [errorMessage, setErrorMessage] = useState<string | null>(null);
+	const trimmedSearchQuery = searchQuery.trim();
+
+	useEffect(() => {
+		if (!isOpen) {
+			setSearchQuery("");
+			setDebouncedSearchQuery("");
+			setAddedUsers(new Map());
+			setSuccessMessage(null);
+			setErrorMessage(null);
+			return;
+		}
+
+		const timerId = window.setTimeout(() => {
+			setDebouncedSearchQuery(trimmedSearchQuery);
+		}, 300);
+
+		return () => window.clearTimeout(timerId);
+	}, [isOpen, trimmedSearchQuery]);
+
+	const searchUsersQuery = useQuery(
+		userSearchQueryOptions(
+			debouncedSearchQuery,
+			20,
+			isOpen && debouncedSearchQuery.length >= 2,
+		),
+	);
+
+	if (!isOpen) {
+		return null;
+	}
+
+	const ownerIds = project?.ownerIds ?? [];
+	const memberIds = project?.memberIds ?? [];
+	const usersById = new Map([
+		...users.map((user) => [user.id, user] as const),
+		...addedUsers,
+	]);
+	const accessUserIds = new Set([...ownerIds, ...memberIds]);
+	const addedRows = [...addedUsers.values()].filter(
+		(user) => !accessUserIds.has(user.id),
+	);
+	const accessRows = [
+		...[...new Set([...ownerIds, ...memberIds])].map((userId) => ({
+			isOwner: ownerIds.includes(userId),
+			user: usersById.get(userId),
+			userId,
+		})),
+		...addedRows.map((user) => ({ isOwner: false, user, userId: user.id })),
+	];
+	const searchRows = (searchUsersQuery.data ?? []).filter(
+		(user) => !accessUserIds.has(user.id),
+	);
+	const selectedCount = selectedUsers.size;
+
+	function handleSelectionChange(user: UserProfile, isSelected: boolean) {
+		setSuccessMessage(null);
+		setErrorMessage(null);
+		setSelectedUsers((previous) => {
+			const next = new Map(previous);
+			if (isSelected) {
+				next.set(user.id, user);
+			} else {
+				next.delete(user.id);
+			}
+			return next;
+		});
+	}
+
+	async function handleAddSelected() {
+		if (selectedUsers.size === 0 || isAddingMembers) {
+			return;
+		}
+
+		setIsAddingMembers(true);
+		setSuccessMessage(null);
+		setErrorMessage(null);
+		const selected = [...selectedUsers.values()];
+		const successfulIds: string[] = [];
+		const failedUsers: UserProfile[] = [];
+
+		for (const user of selected) {
+			try {
+				await onAddMember(user.id);
+				successfulIds.push(user.id);
+			} catch {
+				failedUsers.push(user);
+			}
+		}
+
+		setSelectedUsers((previous) => {
+			const next = new Map(previous);
+			for (const userId of successfulIds) {
+				next.delete(userId);
+			}
+			return next;
+		});
+		setAddedUsers((previous) => {
+			const next = new Map(previous);
+			for (const user of selected) {
+				if (successfulIds.includes(user.id)) {
+					next.set(user.id, user);
+				}
+			}
+			return next;
+		});
+
+		if (successfulIds.length > 0) {
+			setSuccessMessage(
+				`Added ${successfulIds.length} ${successfulIds.length === 1 ? "member" : "members"}.`,
+			);
+		}
+		if (failedUsers.length > 0) {
+			setErrorMessage(
+				`Could not add ${failedUsers.map(getUserDisplayLabel).join(", ")}.`,
+			);
+		}
+		setIsAddingMembers(false);
+	}
+
+	return (
+		<div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-8">
+			<button
+				type="button"
+				aria-label="Close member modal backdrop"
+				onClick={onClose}
+				className="absolute inset-0 bg-black/30 backdrop-blur-sm"
+			/>
+			<section
+				aria-modal="true"
+				aria-labelledby="project-members-title"
+				role="dialog"
+				className="relative w-full max-w-xl rounded-[1.75rem] border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-6 text-[var(--on-surface)] shadow-2xl"
+			>
+				<div className="flex items-start justify-between gap-4">
+					<div>
+						<p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--on-surface-variant)]">
+							Project access
+						</p>
+						<h2
+							id="project-members-title"
+							className="mt-2 font-display text-2xl font-bold tracking-tight"
+						>
+							Invite members
+						</h2>
+						<p className="mt-2 text-sm text-[var(--on-surface-variant)]">
+							Review everyone who currently has access to{" "}
+							{project?.name ?? "this project"}.
+						</p>
+					</div>
+					<button
+						type="button"
+						aria-label="Close member modal"
+						onClick={onClose}
+						className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border border-[var(--outline-variant)] text-[var(--on-surface-variant)] hover:bg-[var(--surface-container-high)]"
+					>
+						<X className="h-4 w-4" />
+					</button>
+				</div>
+
+				<div className="mt-6 rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-low)] p-4">
+					<div className="mb-6 rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-4">
+						<label
+							className="text-sm font-bold"
+							htmlFor="project-member-search"
+						>
+							Search Kanai users
+						</label>
+						<div className="mt-3 flex items-center gap-2 rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-low)] px-3 py-2 focus-within:ring-2 focus-within:ring-[var(--primary)]">
+							<Search className="h-4 w-4 flex-shrink-0 text-[var(--on-surface-variant)]" />
+							<input
+								id="project-member-search"
+								type="search"
+								value={searchQuery}
+								onChange={(event) => setSearchQuery(event.currentTarget.value)}
+								placeholder="Search by display name or external identity"
+								className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm outline-none placeholder:text-[var(--on-surface-variant)]"
+							/>
+						</div>
+						{trimmedSearchQuery.length < 2 ? (
+							<p className="mt-3 text-sm text-[var(--on-surface-variant)]">
+								Enter at least 2 characters to search.
+							</p>
+						) : null}
+						{searchUsersQuery.isPending && debouncedSearchQuery.length >= 2 ? (
+							<p className="mt-3 text-sm text-[var(--on-surface-variant)]">
+								Searching users...
+							</p>
+						) : null}
+						{searchUsersQuery.isError ? (
+							<p className="mt-3 rounded-xl border border-[var(--error-container)] bg-[var(--error-container)] p-3 text-sm font-semibold text-[var(--on-error-container)]">
+								User search could not be loaded.
+							</p>
+						) : null}
+						{debouncedSearchQuery.length >= 2 &&
+						!searchUsersQuery.isPending &&
+						!searchUsersQuery.isError &&
+						searchRows.length === 0 ? (
+							<p className="mt-3 text-sm text-[var(--on-surface-variant)]">
+								No matching users available to invite.
+							</p>
+						) : null}
+						{searchRows.length > 0 ? (
+							<ul className="mt-4 max-h-56 space-y-2 overflow-y-auto pr-1">
+								{searchRows.map((user) => {
+									const label = getUserDisplayLabel(user);
+									const checkboxId = `invite-user-${user.id}`;
+
+									return (
+										<li key={user.id}>
+											<label
+												htmlFor={checkboxId}
+												className="flex cursor-pointer items-center gap-3 rounded-2xl bg-[var(--surface-container-low)] p-3 hover:bg-[var(--surface-container-high)]"
+											>
+												<input
+													id={checkboxId}
+													type="checkbox"
+													checked={selectedUsers.has(user.id)}
+													onChange={(event) =>
+														handleSelectionChange(
+															user,
+															event.currentTarget.checked,
+														)
+													}
+													className="h-4 w-4 flex-shrink-0 accent-[var(--primary)]"
+												/>
+												<span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-[var(--secondary-container)] text-xs font-bold text-[var(--on-secondary-container)]">
+													{getUserInitials(user)}
+												</span>
+												<span className="min-w-0">
+													<span className="block truncate text-sm font-semibold">
+														{label}
+													</span>
+													<span className="block truncate text-xs text-[var(--on-surface-variant)]">
+														{user.external_id}
+													</span>
+												</span>
+											</label>
+										</li>
+									);
+								})}
+							</ul>
+						) : null}
+						<div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--outline-variant)] pt-4">
+							<p className="text-sm font-semibold text-[var(--on-surface-variant)]">
+								{selectedCount} selected
+							</p>
+							<button
+								type="button"
+								disabled={selectedCount === 0 || isAddingMembers}
+								onClick={() => void handleAddSelected()}
+								className="inline-flex items-center justify-center rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-bold text-[var(--on-primary)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+							>
+								{isAddingMembers
+									? "Adding..."
+									: `Add selected (${selectedCount})`}
+							</button>
+						</div>
+						{successMessage ? (
+							<p className="mt-3 rounded-xl bg-[var(--primary-container)] p-3 text-sm font-semibold text-[var(--on-primary-container)]">
+								{successMessage}
+							</p>
+						) : null}
+						{errorMessage ? (
+							<p className="mt-3 rounded-xl border border-[var(--error-container)] bg-[var(--error-container)] p-3 text-sm font-semibold text-[var(--on-error-container)]">
+								{errorMessage}
+							</p>
+						) : null}
+					</div>
+					<div className="flex items-center justify-between gap-3">
+						<h3 className="text-sm font-bold">People with access</h3>
+						<span className="text-xs font-semibold text-[var(--on-surface-variant)]">
+							{accessRows.length} total
+						</span>
+					</div>
+
+					{isLoading ? (
+						<p className="mt-4 text-sm text-[var(--on-surface-variant)]">
+							Loading members...
+						</p>
+					) : null}
+					{isError ? (
+						<p className="mt-4 rounded-xl border border-[var(--error-container)] bg-[var(--error-container)] p-3 text-sm font-semibold text-[var(--on-error-container)]">
+							Project members could not be loaded.
+						</p>
+					) : null}
+					{!isLoading && !isError && accessRows.length === 0 ? (
+						<p className="mt-4 text-sm text-[var(--on-surface-variant)]">
+							No project members found.
+						</p>
+					) : null}
+					{!isError && accessRows.length > 0 ? (
+						<ul className="mt-4 space-y-3">
+							{accessRows.map(({ isOwner, user, userId }) => {
+								const label = user ? getUserDisplayLabel(user) : userId;
+
+								return (
+									<li
+										key={userId}
+										className="flex items-center justify-between gap-3 rounded-2xl bg-[var(--surface-container-lowest)] p-3"
+									>
+										<div className="flex min-w-0 items-center gap-3">
+											<span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-[var(--primary-container)] text-sm font-bold text-[var(--on-primary-container)]">
+												{user ? (
+													getUserInitials(user)
+												) : (
+													<User className="h-4 w-4" />
+												)}
+											</span>
+											<div className="min-w-0">
+												<p className="truncate text-sm font-semibold">
+													{label}
+												</p>
+												<p className="truncate text-xs text-[var(--on-surface-variant)]">
+													{user?.external_id ?? userId}
+												</p>
+											</div>
+										</div>
+										{isOwner ? (
+											<span className="rounded-full bg-[var(--primary-container)] px-2.5 py-1 text-xs font-bold text-[var(--on-primary-container)]">
+												Owner
+											</span>
+										) : null}
+									</li>
+								);
+							})}
+						</ul>
+					) : null}
+				</div>
+			</section>
+		</div>
+	);
+}
+
 export function ProjectBoardPage() {
 	const auth = useAuthBoundary();
 	const { projectId } = useParams({ from: "/projects/$projectId" });
@@ -469,17 +889,20 @@ export function ProjectBoardPage() {
 		useState<CardDropIndicator | null>(null);
 	const [columnAppendDropIndicator, setColumnAppendDropIndicator] =
 		useState<ColumnAppendDropIndicator | null>(null);
+	const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
 	const projectName = projectQuery.data?.name ?? "Project";
+	const accessUserIds = getProjectAccessUserIds(projectQuery.data);
+	const accessUsersQuery = useQuery(
+		api.users.projectAccess(projectId, accessUserIds, accessUserIds.length > 0),
+	);
 	const { columns, invalidTasks } = board;
+	const isProjectOwner = Boolean(
+		currentUser && projectQuery.data?.ownerIds.includes(currentUser.id),
+	);
 	const isProjectAuthError = projectQuery.error instanceof CurrentUserAuthError;
 	const isTasksAuthError = tasksQuery.error instanceof CurrentUserAuthError;
 	const isColumnsAuthError = columnsQuery.error instanceof CurrentUserAuthError;
-	const accountInitials = [
-		getInitials(currentUser?.first_name),
-		getInitials(currentUser?.last_name),
-	]
-		.join("")
-		.trim();
+	const accountInitials = getCurrentUserInitials(currentUser);
 
 	useEffect(() => {
 		return monitorForElements({
@@ -574,8 +997,27 @@ export function ProjectBoardPage() {
 		auth.logout();
 	}
 
+	function handleInviteClick() {
+		if (isProjectOwner) {
+			setIsMembersModalOpen(true);
+		}
+	}
+
+	async function handleAddProjectMember(userId: string) {
+		await api.projects.addMember(projectId, userId);
+	}
+
 	return (
 		<main className="min-h-screen overflow-hidden bg-[var(--background)] text-[var(--on-surface)]">
+			<ProjectMembersModal
+				isOpen={isMembersModalOpen}
+				onClose={() => setIsMembersModalOpen(false)}
+				onAddMember={handleAddProjectMember}
+				project={projectQuery.data}
+				users={accessUsersQuery.data ?? []}
+				isLoading={accessUsersQuery.isPending && accessUserIds.length > 0}
+				isError={accessUsersQuery.isError}
+			/>
 			<div className="flex min-h-screen flex-col lg:flex-row">
 				<aside className="border-[var(--outline-variant)] bg-[var(--surface-container-low)] px-4 py-4 lg:sticky lg:top-0 lg:h-screen lg:w-72 lg:flex-shrink-0 lg:border-r lg:px-6 lg:py-6">
 					<div className="flex h-full flex-col rounded-[1.75rem] bg-[color:color-mix(in_srgb,var(--surface-container-lowest)_78%,transparent)] p-5 shadow-[0_18px_42px_rgba(25,28,30,0.06)] backdrop-blur-xl lg:rounded-none lg:bg-transparent lg:p-0 lg:shadow-none">
@@ -627,14 +1069,6 @@ export function ProjectBoardPage() {
 									Logout
 								</button>
 							</nav>
-							<button
-								type="button"
-								disabled
-								className="flex w-full items-center justify-center gap-2 rounded-full bg-[var(--primary)] px-4 py-3 text-sm font-semibold text-[var(--on-primary)] shadow-[0_12px_28px_rgba(0,61,155,0.18)] hover:bg-[var(--primary-container)]"
-							>
-								<UserPlus className="h-4 w-4" />
-								Invites unavailable
-							</button>
 						</div>
 					</div>
 				</aside>
@@ -708,11 +1142,11 @@ export function ProjectBoardPage() {
 											Calendar
 										</button>
 									</div>
-									<div className="flex -space-x-2">
-										<span className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-[var(--background)] bg-[var(--surface-variant)] text-xs font-bold">
-											{accountInitials || <User className="h-4 w-4" />}
-										</span>
-									</div>
+									<ProjectMemberAvatarStack
+										project={projectQuery.data}
+										users={accessUsersQuery.data ?? []}
+										onClick={() => setIsMembersModalOpen(true)}
+									/>
 									<button
 										type="button"
 										className="inline-flex items-center gap-2 rounded-full border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-4 py-2 text-sm font-semibold hover:bg-[var(--surface-bright)]"
@@ -722,10 +1156,12 @@ export function ProjectBoardPage() {
 									</button>
 									<button
 										type="button"
-										className="inline-flex items-center gap-2 rounded-full border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-4 py-2 text-sm font-semibold hover:bg-[var(--surface-bright)]"
+										disabled={!isProjectOwner}
+										onClick={handleInviteClick}
+										className="inline-flex items-center gap-2 rounded-full border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-4 py-2 text-sm font-semibold hover:bg-[var(--surface-bright)] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[var(--surface-container-lowest)]"
 									>
-										<Share2 className="h-4 w-4" />
-										Share
+										<UserPlus className="h-4 w-4" />
+										Invite
 									</button>
 								</div>
 							</div>

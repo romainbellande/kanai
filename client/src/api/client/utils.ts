@@ -11,6 +11,10 @@ export class CurrentUserAuthError extends Error {
 	}
 }
 
+type AuthenticatedRequestInit = RequestInit & {
+	kanaiAuthRetried?: true;
+};
+
 export function getApiBaseUrl(): string {
 	const apiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
 
@@ -27,6 +31,43 @@ export async function getAccessToken(): Promise<string> {
 	} catch {
 		throw new CurrentUserAuthError();
 	}
+}
+
+async function refreshAccessToken(): Promise<string> {
+	try {
+		return await createAuthBoundary().refreshAccessToken();
+	} catch {
+		throw new CurrentUserAuthError();
+	}
+}
+
+export async function fetchAuthenticatedApi(
+	path: string,
+	init: RequestInit = {},
+): Promise<Response> {
+	const token = await getAccessToken();
+	const headers = new Headers(init.headers);
+
+	headers.set("Authorization", `Bearer ${token}`);
+
+	const response = await fetch(`${getApiBaseUrl()}${path}`, {
+		...init,
+		headers,
+	});
+
+	if (response.status !== 401) {
+		return response;
+	}
+
+	const refreshedToken = await refreshAccessToken();
+	const retryHeaders = new Headers(init.headers);
+
+	retryHeaders.set("Authorization", `Bearer ${refreshedToken}`);
+
+	return fetch(`${getApiBaseUrl()}${path}`, {
+		...init,
+		headers: retryHeaders,
+	});
 }
 
 export function createAuthenticatedConfiguration(): Configuration {
@@ -48,6 +89,23 @@ export function createAuthenticatedConfiguration(): Configuration {
 							headers,
 						},
 					};
+				},
+				post: async ({ fetch, init, response, url }) => {
+					const requestInit = init as AuthenticatedRequestInit;
+					const headers = new Headers(init.headers);
+
+					if (response.status !== 401 || requestInit.kanaiAuthRetried) {
+						return response;
+					}
+
+					const token = await refreshAccessToken();
+					headers.set("Authorization", `Bearer ${token}`);
+
+					return fetch(url, {
+						...init,
+						headers,
+						kanaiAuthRetried: true,
+					} as AuthenticatedRequestInit);
 				},
 			},
 		],

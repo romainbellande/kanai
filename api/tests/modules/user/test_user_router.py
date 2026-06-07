@@ -98,12 +98,13 @@ async def test_user_crud_endpoints(
     create_response = await client.post(
         "/users",
         headers={"Authorization": "Bearer token"},
-        json={"external_id": "new-user"},
+        json={"external_id": "new-user", "display_name": "Ignored Name"},
     )
 
     assert create_response.status_code == 201
     created_user = create_response.json()
     assert created_user["external_id"] == "new-user"
+    assert created_user["display_name"] is None
     assert created_user["first_name"] is None
     assert created_user["last_name"] is None
 
@@ -129,11 +130,12 @@ async def test_user_crud_endpoints(
     update_response = await client.patch(
         f"/users/{created_user['id']}",
         headers={"Authorization": "Bearer token"},
-        json={"external_id": "renamed-user"},
+        json={"external_id": "renamed-user", "display_name": "Still Ignored"},
     )
 
     assert update_response.status_code == 200
     assert update_response.json()["external_id"] == "renamed-user"
+    assert update_response.json()["display_name"] is None
 
     delete_response = await client.delete(
         f"/users/{created_user['id']}",
@@ -170,6 +172,51 @@ async def test_user_create_rejects_duplicate_external_id(
     assert first_response.status_code == 201
     assert second_response.status_code == 409
     assert second_response.json() == {"detail": "User external_id already exists"}
+
+
+@pytest.mark.asyncio
+async def test_user_list_searches_display_name_and_external_id_with_limit(
+    client: AsyncClient,
+    current_user: User,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    del current_user
+    async with session_factory() as session:
+        session.add_all(
+            [
+                User(externalId="amy-idp", display_name="Amy Atlas"),
+                User(externalId="atlas-external", display_name="Jordan"),
+                User(externalId="case-user", display_name="CASE Match"),
+                User(externalId="other-user", display_name="Other Person"),
+            ]
+        )
+        await session.commit()
+
+    display_name_response = await client.get(
+        "/users?q=atlas&limit=1",
+        headers={"Authorization": "Bearer token"},
+    )
+    external_id_response = await client.get(
+        "/users?q=external",
+        headers={"Authorization": "Bearer token"},
+    )
+    case_response = await client.get(
+        "/users?q=case",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert display_name_response.status_code == 200
+    assert [user["external_id"] for user in display_name_response.json()] == [
+        "amy-idp"
+    ]
+    assert external_id_response.status_code == 200
+    assert [user["display_name"] for user in external_id_response.json()] == [
+        "Jordan"
+    ]
+    assert case_response.status_code == 200
+    assert [user["external_id"] for user in case_response.json()] == [
+        "case-user"
+    ]
 
 
 @pytest.mark.asyncio

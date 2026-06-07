@@ -9,6 +9,7 @@ Name | Type
 ------------ | -------------
 `id` | string
 `externalId` | string
+`displayName` | string
 `firstName` | string
 `lastName` | string
 `createdAt` | Date
@@ -23,6 +24,7 @@ import type { UserRead } from ''
 const example = {
   "id": null,
   "externalId": null,
+  "displayName": null,
   "firstName": null,
   "lastName": null,
   "createdAt": null,

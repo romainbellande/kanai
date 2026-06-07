@@ -4,17 +4,12 @@ import { useState } from "react";
 
 import {
 	CurrentUserAuthError,
+	getCurrentUserInitials,
 	type Project,
 	useCurrentUserQuery,
 	useProjectsQuery,
 } from "#/api/client";
 import { WorkspaceLayout } from "#/domains/workspace/ui/templates/WorkspaceLayout";
-
-function getInitials(value: string | null | undefined): string {
-	const normalizedValue = value?.trim();
-
-	return normalizedValue ? normalizedValue.slice(0, 1).toUpperCase() : "";
-}
 
 function getProjectStatus(project: Project): { status: string; tone: string } {
 	const normalizedStatus = project.status?.trim();
@@ -50,12 +45,7 @@ export function ProjectsPage() {
 	const [searchQuery, setSearchQuery] = useState("");
 	const { data: currentUser } = useCurrentUserQuery();
 	const projectsQuery = useProjectsQuery();
-	const accountInitials = [
-		getInitials(currentUser?.first_name),
-		getInitials(currentUser?.last_name),
-	]
-		.join("")
-		.trim();
+	const accountInitials = getCurrentUserInitials(currentUser);
 	const normalizedSearchQuery = searchQuery.trim().toLowerCase();
 	const projects = (projectsQuery.data ?? []).filter((project) => {
 		if (!normalizedSearchQuery) {

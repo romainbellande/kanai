@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { CircleHelp, LogOut, Search, UserPlus } from "lucide-react";
+import { CircleHelp, LogOut, Search } from "lucide-react";
 
 import { WorkspaceIconButton } from "#/domains/workspace/ui/atoms/WorkspaceIconButton";
 import { SidebarNavItem } from "#/domains/workspace/ui/molecules/SidebarNavItem";
@@ -52,7 +52,7 @@ export function WorkspaceSidebar({
 				</nav>
 
 				<div className="mt-8 border-t border-[var(--outline-variant)] pt-6 lg:mt-auto">
-					<nav className="mb-4 flex flex-col gap-1">
+					<nav className="flex flex-col gap-1">
 						<Link
 							to="/about"
 							className="flex items-center gap-3 rounded-full px-4 py-3 text-sm font-medium text-[var(--on-surface-variant)] no-underline hover:bg-[var(--surface-bright)]"
@@ -79,13 +79,6 @@ export function WorkspaceSidebar({
 							</Link>
 						)}
 					</nav>
-					<button
-						type="button"
-						className="flex w-full items-center justify-center gap-2 rounded-full bg-[var(--primary)] px-4 py-3 text-sm font-semibold text-[var(--on-primary)] shadow-[0_12px_28px_rgba(0,61,155,0.18)] hover:bg-[var(--primary-container)]"
-					>
-						<UserPlus className="h-4 w-4" />
-						Invite Member
-					</button>
 				</div>
 			</div>
 		</aside>

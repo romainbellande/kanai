@@ -1,8 +1,17 @@
 // @vitest-environment jsdom
 
+import * as client from "openid-client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("openid-client", () => ({
+	None: vi.fn(() => ({})),
+	allowInsecureRequests: vi.fn(),
+	discovery: vi.fn(async () => ({ issuer: "https://auth.example.test" })),
+	refreshTokenGrant: vi.fn(),
+}));
+
 import {
+	addProjectMember,
 	CurrentUserAuthError,
 	createProject,
 	createProjectColumn,
@@ -22,8 +31,23 @@ describe("projects client", () => {
 		vi.restoreAllMocks();
 		vi.unstubAllEnvs();
 		vi.unstubAllGlobals();
+		vi.stubEnv("VITE_AUTH_CLIENT_ID", "kanai-web");
+		vi.stubEnv("VITE_AUTH_ISSUER", "https://auth.example.test/realms/kanai");
 		window.sessionStorage.clear();
 	});
+
+	function buildTokenSet(
+		overrides: Partial<client.TokenEndpointResponse> = {},
+	): Awaited<ReturnType<typeof client.refreshTokenGrant>> {
+		return {
+			access_token: "refreshed-column-token",
+			claims: vi.fn(() => undefined),
+			expiresIn: vi.fn(() => 120),
+			expires_in: 120,
+			token_type: "bearer" as const,
+			...overrides,
+		} as unknown as Awaited<ReturnType<typeof client.refreshTokenGrant>>;
+	}
 
 	it("lists projects with the API base URL and stored bearer token", async () => {
 		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test/");
@@ -142,13 +166,17 @@ describe("projects client", () => {
 		});
 	});
 
-	it("rejects before fetch when the token is missing", async () => {
+	it("rejects before projects fetch when the token is missing", async () => {
 		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
 		const fetchSpy = vi.fn<typeof fetch>();
 		vi.stubGlobal("fetch", fetchSpy);
 
 		await expect(listProjects()).rejects.toBeInstanceOf(CurrentUserAuthError);
-		expect(fetchSpy).not.toHaveBeenCalled();
+		expect(
+			fetchSpy.mock.calls.some(
+				([url]) => url === "https://api.example.test/projects",
+			),
+		).toBe(false);
 	});
 
 	it("exposes stable query keys", () => {
@@ -269,6 +297,92 @@ describe("projects client", () => {
 		});
 		expect(JSON.parse(String(fetchSpy.mock.calls[2][1]?.body))).toEqual({
 			column_ids: ["column-2", "column-1"],
+		});
+	});
+
+	it("refreshes and retries custom project column requests once after a 401", async () => {
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({
+				accessToken: "stale-column-token",
+				expiresAt: Date.now() + 120_000,
+				refreshToken: "column-refresh-token",
+			}),
+		);
+		vi.mocked(client.refreshTokenGrant).mockResolvedValue(buildTokenSet());
+		const columnJson = {
+			id: "column-1",
+			project_id: "project-1",
+			name: "Review",
+			position: 3,
+			created_at: null,
+			updated_at: null,
+		};
+		const fetchSpy = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(new Response(null, { status: 401 }))
+			.mockResolvedValueOnce(
+				new Response(JSON.stringify(columnJson), {
+					headers: { "content-type": "application/json" },
+					status: 200,
+				}),
+			);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		await expect(
+			updateProjectColumn("project-1", "column-1", { name: "Review" }),
+		).resolves.toMatchObject({ id: "column-1", name: "Review" });
+
+		expect(client.refreshTokenGrant).toHaveBeenCalledTimes(1);
+		expect(fetchSpy).toHaveBeenCalledTimes(2);
+		expect(
+			new Headers(fetchSpy.mock.calls[0][1]?.headers).get("Authorization"),
+		).toBe("Bearer stale-column-token");
+		expect(
+			new Headers(fetchSpy.mock.calls[1][1]?.headers).get("Authorization"),
+		).toBe("Bearer refreshed-column-token");
+		expect(JSON.parse(String(fetchSpy.mock.calls[1][1]?.body))).toEqual({
+			name: "Review",
+		});
+	});
+
+	it("adds project members through the nested members endpoint", async () => {
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({ accessToken: "member-token" }),
+		);
+		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					id: "project-1",
+					name: "API Project",
+					code: "API",
+					priority: "high",
+					description: null,
+					status: "active",
+					owner_ids: ["owner-1"],
+					member_ids: ["member-1"],
+					created_at: null,
+					updated_at: null,
+				}),
+				{ headers: { "content-type": "application/json" }, status: 200 },
+			),
+		);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		await addProjectMember("project-1", "member-1");
+
+		expect(fetchSpy.mock.calls[0][0]).toBe(
+			"https://api.example.test/projects/project-1/members",
+		);
+		expect(fetchSpy.mock.calls[0][1]?.method).toBe("POST");
+		expect(
+			new Headers(fetchSpy.mock.calls[0][1]?.headers).get("Authorization"),
+		).toBe("Bearer member-token");
+		expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toEqual({
+			user_id: "member-1",
 		});
 	});
 });

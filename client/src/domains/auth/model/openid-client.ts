@@ -30,6 +30,7 @@ const authSessionStorageKey = "kanai.openid-client.auth-session";
 const authSessionExpiryLeewayMs = 30_000;
 
 let openIdConfigurationPromise: Promise<client.Configuration> | null = null;
+let refreshAuthSessionPromise: Promise<StoredAuthSession> | null = null;
 
 function isLoopbackHost(hostname: string): boolean {
 	return (
@@ -224,18 +225,14 @@ function clearPendingAuthorizationRequest(): void {
 }
 
 export function getStoredAuthSession(): StoredAuthSession | null {
-	const authSession = readStoredAuthSession();
+	return readStoredAuthSession();
+}
 
-	if (
-		authSession &&
+export function isAuthSessionExpired(authSession: StoredAuthSession): boolean {
+	return (
 		typeof authSession.expiresAt === "number" &&
 		authSession.expiresAt <= Date.now() + authSessionExpiryLeewayMs
-	) {
-		clearAuthSession();
-		return null;
-	}
-
-	return authSession;
+	);
 }
 
 export function clearAuthSession(): void {
@@ -249,11 +246,56 @@ export function clearAuthSession(): void {
 export function hasActiveAuthSession(): boolean {
 	const authSession = getStoredAuthSession();
 
-	if (!authSession?.accessToken) {
+	if (!authSession?.accessToken || isAuthSessionExpired(authSession)) {
 		return false;
 	}
 
 	return true;
+}
+
+async function refreshStoredAuthSessionOnce(): Promise<StoredAuthSession> {
+	const authSession = readStoredAuthSession();
+	const refreshToken = authSession?.refreshToken?.trim();
+
+	if (!authSession || !refreshToken) {
+		throw new Error("Missing authenticated session refresh token.");
+	}
+
+	try {
+		const configuration = await getOpenIdConfiguration();
+		const tokenSet = await client.refreshTokenGrant(
+			configuration,
+			refreshToken,
+			{
+				scope: authScopes.join(" "),
+			},
+		);
+		const refreshedSession: StoredAuthSession = {
+			accessToken: tokenSet.access_token,
+			expiresAt:
+				typeof tokenSet.expires_in === "number"
+					? Date.now() + tokenSet.expires_in * 1000
+					: undefined,
+			idToken: tokenSet.id_token ?? authSession.idToken,
+			refreshToken: tokenSet.refresh_token ?? refreshToken,
+		};
+
+		writeStoredAuthSession(refreshedSession);
+		return refreshedSession;
+	} catch (error) {
+		clearAuthSession();
+		throw error;
+	}
+}
+
+export async function refreshStoredAuthSession(): Promise<StoredAuthSession> {
+	if (!refreshAuthSessionPromise) {
+		refreshAuthSessionPromise = refreshStoredAuthSessionOnce().finally(() => {
+			refreshAuthSessionPromise = null;
+		});
+	}
+
+	return refreshAuthSessionPromise;
 }
 
 export function getAuthErrorUrl(origin: string, reason: string): string {
