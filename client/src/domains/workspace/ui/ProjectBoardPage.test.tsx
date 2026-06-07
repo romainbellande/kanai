@@ -168,6 +168,68 @@ describe("ProjectBoardPage", () => {
 		expect(getRankForDestination(columns[0].cards, 1)).toBe(middleRank);
 	});
 
+	it("computes same-column insertion indexes above and below target cards", async () => {
+		const { getDestinationIndex } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const cards = [
+			task({ id: "first", rank: "F" }),
+			task({ id: "middle", rank: "U" }),
+			task({ id: "last", rank: "j" }),
+		];
+
+		expect(
+			getDestinationIndex({
+				cards,
+				sourceTaskId: "last",
+				targetTaskId: "first",
+				closestEdge: "top",
+			}),
+		).toBe(0);
+		expect(
+			getDestinationIndex({
+				cards,
+				sourceTaskId: "last",
+				targetTaskId: "first",
+				closestEdge: "bottom",
+			}),
+		).toBe(1);
+		expect(
+			getDestinationIndex({
+				cards,
+				sourceTaskId: "first",
+				targetTaskId: "last",
+				closestEdge: "top",
+			}),
+		).toBe(1);
+		expect(
+			getDestinationIndex({
+				cards,
+				sourceTaskId: "first",
+				targetTaskId: "last",
+				closestEdge: "bottom",
+			}),
+		).toBe(2);
+	});
+
+	it("detects only column backgrounds as append drop targets", async () => {
+		const { getColumnAppendDropIndicator } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+
+		expect(
+			getColumnAppendDropIndicator({ type: "column", columnId: "column-done" }),
+		).toEqual({ columnId: "column-done" });
+		expect(
+			getColumnAppendDropIndicator({
+				type: "card",
+				columnId: "column-done",
+				taskId: "task-1",
+			}),
+		).toBeNull();
+		expect(getColumnAppendDropIndicator({ type: "column" })).toBeNull();
+	});
+
 	it("renders API project details and API task cards", async () => {
 		const { ProjectBoardPage } = await import(
 			"#/domains/workspace/ui/ProjectBoardPage"
@@ -302,6 +364,7 @@ describe("ProjectBoardPage", () => {
 
 		expect(screen.getByText("No tasks in backlog.")).toBeTruthy();
 		expect(screen.getByText("No tasks in review.")).toBeTruthy();
+		expect(screen.getAllByText("Drop here to append")).toHaveLength(2);
 		expect(screen.queryByText(/Conduct initial market research/i)).toBeNull();
 	});
 });

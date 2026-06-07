@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { type ProjectColumn, type Task, useKanaiApi } from "#/api/client";
 
@@ -22,6 +22,8 @@ export type MoveTaskInput = {
 	beforeTaskId?: string;
 	afterTaskId?: string;
 };
+
+const moveFailureMessage = "Task move failed. Your board was restored.";
 
 const rankAlphabet =
 	"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
@@ -160,6 +162,9 @@ export function useProjectTaskBoard(projectId: string) {
 		mutationFn: (input: Parameters<typeof api.tasks.move>[1]) =>
 			api.tasks.move(projectId, input),
 	});
+	const inFlightMoveRef = useRef(false);
+	const [isMovePending, setIsMovePending] = useState(false);
+	const [moveError, setMoveError] = useState<string | null>(null);
 	const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
 	const [activeDropColumnId, setActiveDropColumnId] = useState<ColumnId | null>(
 		null,
@@ -176,6 +181,10 @@ export function useProjectTaskBoard(projectId: string) {
 	);
 
 	function moveTask(input: MoveTaskInput) {
+		if (inFlightMoveRef.current || moveTaskMutation.isPending) {
+			return;
+		}
+
 		const sourceTask = (tasksQuery.data ?? []).find(
 			(task) => task.id === input.taskId,
 		);
@@ -201,6 +210,9 @@ export function useProjectTaskBoard(projectId: string) {
 			return;
 		}
 
+		inFlightMoveRef.current = true;
+		setIsMovePending(true);
+		setMoveError(null);
 		const previousTasks = api.tasks.patchCached(projectId, input.taskId, {
 			columnId: input.toColumnId,
 			rank,
@@ -218,8 +230,11 @@ export function useProjectTaskBoard(projectId: string) {
 			{
 				onError: () => {
 					api.tasks.replaceCached(projectId, previousTasks);
+					setMoveError(moveFailureMessage);
 				},
 				onSettled: () => {
+					inFlightMoveRef.current = false;
+					setIsMovePending(false);
 					void api.tasks.invalidateProjectTasks(projectId);
 				},
 			},
@@ -236,6 +251,10 @@ export function useProjectTaskBoard(projectId: string) {
 			activeDropColumnId,
 			setDraggingTaskId,
 			setActiveDropColumnId,
+		},
+		moveState: {
+			isMovePending,
+			moveError,
 		},
 		moveTask,
 	};

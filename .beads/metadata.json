@@ -1,7 +1,0 @@
-{
-  "database": "dolt",
-  "backend": "dolt",
-  "dolt_mode": "embedded",
-  "dolt_database": "kanai",
-  "project_id": "8f6fb22e-67cd-49bd-9d2b-13b6428c5405"
-}

@@ -29,7 +29,7 @@ import {
 	User,
 	UserPlus,
 } from "lucide-react";
-import { type ReactNode, useEffect, useRef } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import {
 	CurrentUserAuthError,
@@ -76,6 +76,15 @@ type ColumnDropTargetData = {
 	columnId: ColumnId;
 };
 
+type CardDropIndicator = {
+	taskId: string;
+	closestEdge: "top" | "bottom";
+};
+
+type ColumnAppendDropIndicator = {
+	columnId: ColumnId;
+};
+
 function getTagClass(priority: string): string {
 	return /urgent|high/i.test(priority)
 		? "bg-[var(--error-container)] text-[var(--on-error-container)]"
@@ -97,7 +106,7 @@ function getInitials(value: string | null | undefined): string {
 	return normalizedValue ? normalizedValue.slice(0, 1).toUpperCase() : "";
 }
 
-function getDestinationIndex({
+export function getDestinationIndex({
 	cards,
 	sourceTaskId,
 	targetTaskId,
@@ -132,15 +141,53 @@ function getDropColumnId(
 	return typeof columnId === "string" ? columnId : null;
 }
 
+function getCardDropIndicator(
+	data: Record<string | symbol, unknown> | undefined,
+	sourceTaskId: string | null,
+): CardDropIndicator | null {
+	if (data?.type !== "card") {
+		return null;
+	}
+
+	const taskId = data.taskId;
+	if (typeof taskId !== "string" || taskId === sourceTaskId) {
+		return null;
+	}
+
+	return {
+		taskId,
+		closestEdge: extractClosestEdge(data) === "bottom" ? "bottom" : "top",
+	};
+}
+
+export function getColumnAppendDropIndicator(
+	data: Record<string | symbol, unknown> | undefined,
+): ColumnAppendDropIndicator | null {
+	if (data?.type !== "column") {
+		return null;
+	}
+
+	const columnId = data.columnId;
+	return typeof columnId === "string" ? { columnId } : null;
+}
+
+function isTaskInBoardColumns(task: Task, columns: BoardColumn[]): boolean {
+	return columns.some((column) => column.id === task.columnId);
+}
+
 function BoardTaskCard({
 	card,
 	columnId,
 	isDragging,
+	isDragDisabled,
+	dropIndicatorEdge,
 	onDragStateChange,
 }: {
 	card: Task;
 	columnId: ColumnId;
 	isDragging: boolean;
+	isDragDisabled: boolean;
+	dropIndicatorEdge: "top" | "bottom" | null;
 	onDragStateChange: (taskId: string | null) => void;
 }) {
 	const ref = useRef<HTMLElement | null>(null);
@@ -148,6 +195,9 @@ function BoardTaskCard({
 	useEffect(() => {
 		const element = ref.current;
 		if (!element) {
+			return;
+		}
+		if (isDragDisabled) {
 			return;
 		}
 
@@ -176,18 +226,29 @@ function BoardTaskCard({
 					),
 			}),
 		);
-	}, [card.id, columnId, onDragStateChange]);
+	}, [card.id, columnId, isDragDisabled, onDragStateChange]);
 
 	return (
 		<article
 			ref={ref}
 			className={[
-				"rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-4 shadow-sm transition hover:border-[var(--outline)] hover:bg-[var(--surface-bright)]",
+				"relative rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-4 shadow-sm transition hover:border-[var(--outline)] hover:bg-[var(--surface-bright)]",
 				isDragging
-					? "opacity-45 ring-2 ring-[var(--primary)]"
-					: "cursor-grab active:cursor-grabbing",
+					? "scale-[0.99] opacity-45 ring-2 ring-[var(--primary)]"
+					: isDragDisabled
+						? "opacity-70"
+						: "cursor-grab active:cursor-grabbing",
 			].join(" ")}
 		>
+			{dropIndicatorEdge ? (
+				<span
+					aria-hidden="true"
+					className={[
+						"absolute left-4 right-4 h-1 rounded-full bg-[var(--primary)] shadow-[0_0_0_4px_color-mix(in_srgb,var(--primary)_18%,transparent)]",
+						dropIndicatorEdge === "top" ? "-top-2" : "-bottom-2",
+					].join(" ")}
+				/>
+			) : null}
 			<Link
 				to="/projects/$projectId/tasks/$taskId"
 				params={{ projectId: card.projectId, taskId: card.id }}
@@ -221,11 +282,15 @@ function BoardColumnView({
 	column,
 	projectId,
 	isActiveDropTarget,
+	isAppendDropTarget,
+	isDropDisabled,
 	children,
 }: {
 	column: BoardColumn;
 	projectId: string;
 	isActiveDropTarget: boolean;
+	isAppendDropTarget: boolean;
+	isDropDisabled: boolean;
 	children: ReactNode;
 }) {
 	const ref = useRef<HTMLElement | null>(null);
@@ -233,6 +298,9 @@ function BoardColumnView({
 	useEffect(() => {
 		const element = ref.current;
 		if (!element) {
+			return;
+		}
+		if (isDropDisabled) {
 			return;
 		}
 
@@ -245,14 +313,16 @@ function BoardColumnView({
 					columnId: column.id,
 				}) satisfies ColumnDropTargetData,
 		});
-	}, [column.id]);
+	}, [column.id, isDropDisabled]);
 
 	return (
 		<section
 			ref={ref}
 			className={[
-				"flex w-[340px] flex-shrink-0 flex-col rounded-[1.5rem] bg-[var(--surface-container)] p-4 transition",
-				isActiveDropTarget ? "ring-2 ring-[var(--primary)]" : "",
+				"flex w-[340px] flex-shrink-0 flex-col rounded-[1.5rem] border border-transparent bg-[var(--surface-container)] p-4 transition",
+				isActiveDropTarget
+					? "border-[var(--primary)] bg-[color:color-mix(in_srgb,var(--primary-container)_34%,var(--surface-container))] ring-2 ring-[var(--primary)]"
+					: "",
 			].join(" ")}
 		>
 			<div className="mb-4 flex items-center justify-between px-2">
@@ -272,11 +342,23 @@ function BoardColumnView({
 
 			<div className="flex flex-col gap-4">{children}</div>
 
+			<div
+				aria-hidden="true"
+				className={[
+					"mt-4 rounded-2xl border border-dashed px-4 py-3 text-center text-xs font-bold uppercase tracking-[0.18em] transition",
+					isAppendDropTarget
+						? "border-[var(--primary)] bg-[var(--primary-container)] text-[var(--on-primary-container)] shadow-[0_0_0_4px_color-mix(in_srgb,var(--primary)_16%,transparent)]"
+						: "border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] text-[var(--on-surface-variant)]",
+				].join(" ")}
+			>
+				Drop here to append
+			</div>
+
 			<Link
 				to="/projects/$projectId/tasks/new"
 				params={{ projectId }}
 				search={{ column_id: column.id }}
-				className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-4 py-3 text-sm font-semibold text-[var(--on-surface-variant)] hover:bg-[var(--surface-bright)]"
+				className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-4 py-3 text-sm font-semibold text-[var(--on-surface-variant)] hover:bg-[var(--surface-bright)]"
 			>
 				<Plus className="h-4 w-4" />
 				Add a task
@@ -330,6 +412,11 @@ export function ProjectBoardPage() {
 	const board = useProjectTaskBoard(projectId);
 	const { columnsQuery, tasksQuery } = board;
 	const { draggingTaskId, activeDropColumnId } = board.dragState;
+	const { isMovePending, moveError } = board.moveState;
+	const [cardDropIndicator, setCardDropIndicator] =
+		useState<CardDropIndicator | null>(null);
+	const [columnAppendDropIndicator, setColumnAppendDropIndicator] =
+		useState<ColumnAppendDropIndicator | null>(null);
 	const projectName = projectQuery.data?.name ?? "Project";
 	const { columns, invalidTasks } = board;
 	const isProjectAuthError = projectQuery.error instanceof CurrentUserAuthError;
@@ -344,15 +431,27 @@ export function ProjectBoardPage() {
 
 	useEffect(() => {
 		return monitorForElements({
-			canMonitor: ({ source }) => source.data.type === "card",
-			onDropTargetChange: ({ location }) => {
+			canMonitor: ({ source }) => !isMovePending && source.data.type === "card",
+			onDropTargetChange: ({ location, source }) => {
+				const activeTargetData = location.current.dropTargets[0]?.data;
+				const sourceTaskId =
+					typeof source.data.taskId === "string" ? source.data.taskId : null;
+
 				board.dragState.setActiveDropColumnId(
-					getDropColumnId(location.current.dropTargets[0]?.data),
+					getDropColumnId(activeTargetData),
+				);
+				setCardDropIndicator(
+					getCardDropIndicator(activeTargetData, sourceTaskId),
+				);
+				setColumnAppendDropIndicator(
+					getColumnAppendDropIndicator(activeTargetData),
 				);
 			},
 			onDrop: ({ source, location }) => {
 				board.dragState.setActiveDropColumnId(null);
 				board.dragState.setDraggingTaskId(null);
+				setCardDropIndicator(null);
+				setColumnAppendDropIndicator(null);
 
 				if (source.data.type !== "card") {
 					return;
@@ -375,7 +474,11 @@ export function ProjectBoardPage() {
 				const destinationColumn = columns.find(
 					(column) => column.id === destinationColumnId,
 				);
-				if (!sourceTask || !destinationColumn) {
+				if (
+					!sourceTask ||
+					!destinationColumn ||
+					!isTaskInBoardColumns(sourceTask, columns)
+				) {
 					return;
 				}
 
@@ -413,7 +516,7 @@ export function ProjectBoardPage() {
 				});
 			},
 		});
-	}, [board, columns, tasksQuery.data]);
+	}, [board, columns, isMovePending, tasksQuery.data]);
 
 	function handleLogout() {
 		auth.logout();
@@ -604,6 +707,11 @@ export function ProjectBoardPage() {
 								</button>
 							</div>
 						) : null}
+						{moveError ? (
+							<div className="mb-4 min-w-[1100px] rounded-xl border border-[var(--error-container)] bg-[var(--error-container)] p-4 text-sm font-semibold text-[var(--on-error-container)]">
+								{moveError}
+							</div>
+						) : null}
 						{!columnsQuery.isPending &&
 						!columnsQuery.isError &&
 						!tasksQuery.isPending &&
@@ -623,6 +731,10 @@ export function ProjectBoardPage() {
 										column={column}
 										projectId={projectId}
 										isActiveDropTarget={activeDropColumnId === column.id}
+										isAppendDropTarget={
+											columnAppendDropIndicator?.columnId === column.id
+										}
+										isDropDisabled={isMovePending}
 									>
 										{tasksQuery.isPending ? (
 											<p className="rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-4 text-sm text-[var(--on-surface-variant)]">
@@ -632,7 +744,14 @@ export function ProjectBoardPage() {
 										{!tasksQuery.isPending &&
 										!tasksQuery.isError &&
 										column.cards.length === 0 ? (
-											<p className="rounded-2xl border border-dashed border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-4 text-sm text-[var(--on-surface-variant)]">
+											<p
+												className={[
+													"rounded-2xl border border-dashed p-4 text-sm transition",
+													columnAppendDropIndicator?.columnId === column.id
+														? "border-[var(--primary)] bg-[var(--primary-container)] text-[var(--on-primary-container)]"
+														: "border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] text-[var(--on-surface-variant)]",
+												].join(" ")}
+											>
 												No tasks in {column.title.toLowerCase()}.
 											</p>
 										) : null}
@@ -642,6 +761,12 @@ export function ProjectBoardPage() {
 												card={card}
 												columnId={column.id}
 												isDragging={draggingTaskId === card.id}
+												isDragDisabled={isMovePending}
+												dropIndicatorEdge={
+													cardDropIndicator?.taskId === card.id
+														? cardDropIndicator.closestEdge
+														: null
+												}
 												onDragStateChange={board.dragState.setDraggingTaskId}
 											/>
 										))}

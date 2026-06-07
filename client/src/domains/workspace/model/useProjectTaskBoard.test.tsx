@@ -255,5 +255,92 @@ describe("useProjectTaskBoard", () => {
 				),
 			).toEqual(originalTasks),
 		);
+		expect(result.current.moveState.moveError).toBe(
+			"Task move failed. Your board was restored.",
+		);
+	});
+
+	it("allows only one in-flight move", async () => {
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			{
+				id: "column-todo",
+				projectId: "project-1",
+				name: "To Do",
+				position: 0,
+				createdAt: null,
+				updatedAt: null,
+			},
+			{
+				id: "column-done",
+				projectId: "project-1",
+				name: "Done",
+				position: 1,
+				createdAt: null,
+				updatedAt: null,
+			},
+		]);
+		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
+			task({ id: "first", columnId: "column-todo", rank: "U" }),
+			task({ id: "second", columnId: "column-todo", rank: "j" }),
+			task({ id: "done-first", columnId: "column-done", rank: "U" }),
+		]);
+		let resolveMove: (response: Response) => void = () => undefined;
+		const movePromise = new Promise<Response>((resolve) => {
+			resolveMove = resolve;
+		});
+		const fetchSpy = vi.fn<typeof fetch>().mockReturnValue(movePromise);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		const { result } = renderHook(() => useProjectTaskBoard("project-1"), {
+			wrapper: createWrapper(queryClient),
+		});
+
+		act(() => {
+			result.current.moveTask({
+				taskId: "first",
+				toColumnId: "column-done",
+				afterTaskId: "done-first",
+			});
+			result.current.moveTask({
+				taskId: "second",
+				toColumnId: "column-done",
+				afterTaskId: "done-first",
+			});
+		});
+
+		expect(result.current.moveState.isMovePending).toBe(true);
+		await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+		expect(
+			queryClient
+				.getQueryData<Task[]>(projectTasksQueryOptions("project-1").queryKey)
+				?.find((cachedTask) => cachedTask.id === "second"),
+		).toMatchObject({ columnId: "column-todo", rank: "j" });
+
+		act(() => {
+			resolveMove(
+				new Response(
+					JSON.stringify({
+						id: "first",
+						project_id: "project-1",
+						title: "Task",
+						column_id: "column-done",
+						priority: "medium",
+						rank: "F",
+						assignee_id: null,
+						description: null,
+						acceptance_criteria: null,
+						tag: null,
+						created_at: null,
+						updated_at: null,
+					}),
+					{ headers: { "content-type": "application/json" }, status: 200 },
+				),
+			);
+		});
+
+		await waitFor(() =>
+			expect(result.current.moveState.isMovePending).toBe(false),
+		);
 	});
 });

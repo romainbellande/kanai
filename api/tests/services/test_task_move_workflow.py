@@ -275,6 +275,55 @@ async def test_move_task_appends_when_neighbors_are_omitted(
 
 
 @pytest.mark.asyncio
+async def test_move_task_preserves_rank_when_appending_existing_last_task(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with session_factory() as session:
+        owner = User(externalId="owner")
+        project = Project(name="Board", code="BRD", priority="medium")
+        session.add_all([owner, project])
+        await session.commit()
+        await session.refresh(owner)
+        await session.refresh(project)
+        assert owner.id is not None
+        assert project.id is not None
+        session.add(ProjectOwner(project_id=project.id, user_id=owner.id))
+        todo_column = ProjectColumn(project_id=project.id, name="todo", position=0)
+        session.add(todo_column)
+        await session.commit()
+        await session.refresh(todo_column)
+        assert todo_column.id is not None
+        first = Task(
+            project_id=project.id,
+            column_id=todo_column.id,
+            title="First",
+            priority="medium",
+            rank="U",
+        )
+        last = Task(
+            project_id=project.id,
+            column_id=todo_column.id,
+            title="Last",
+            priority="medium",
+            rank="j",
+        )
+        session.add_all([first, last])
+        await session.commit()
+        await session.refresh(last)
+        assert last.id is not None
+
+        updated = await TaskService(session).move(
+            project_id=project.id,
+            task_id=last.id,
+            user_id=owner.id,
+            destination=TaskDestination(column_id=todo_column.id),
+        )
+
+        assert updated.column_id == todo_column.id
+        assert updated.rank == "j"
+
+
+@pytest.mark.asyncio
 async def test_move_task_rejects_non_adjacent_neighbors(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:

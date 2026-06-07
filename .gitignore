@@ -11,3 +11,5 @@ issues/
 .dolt/
 *.db
 .beads-credential-key
+.beads
+.ralph-tui

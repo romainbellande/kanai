@@ -310,6 +310,13 @@ def _is_same_position(
     if task_index is None:
         return False
 
+    if (
+        destination.before_task_id is None
+        and destination.after_task_id is None
+        and task_index == len(ordered_destination_tasks) - 1
+    ):
+        return True
+
     before_task_id = (
         ordered_destination_tasks[task_index - 1].id if task_index else None
     )
