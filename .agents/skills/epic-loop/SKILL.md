@@ -1,11 +1,11 @@
 ---
 name: epic-loop
-description: Use ONLY when the user explicitly asks for `epic loop`, `run epic loop`, or looping ready bd tasks for selected epics; orchestrates sequential workers until selected epics have no ready tasks.
+description: Use ONLY when the user explicitly asks for `epic loop`, `run epic loop`, or looping ready br tasks for selected epics; orchestrates sequential workers until selected epics have no ready tasks.
 ---
 
 # Epic Loop
 
-Use this skill only for explicit epic-loop requests, such as `epic loop`, `run epic loop`, or `loop ready tasks for selected epics`. Do not trigger it for ordinary bd work, one-off issue solving, or general epic planning.
+Use this skill only for explicit epic-loop requests, such as `epic loop`, `run epic loop`, or `loop ready tasks for selected epics`. Do not trigger it for ordinary br work, one-off issue solving, or general epic planning.
 
 Epic Loop is a primary-agent orchestration workflow. The primary agent displays selectable epics, previews scoped ready work, claims one ready task at a time, dispatches one worker subagent, closes completed tasks, creates linked follow-ups, and repeats until no scoped ready tasks remain or the configured max task count is reached.
 
@@ -13,19 +13,19 @@ This workflow is intentionally sequential. Do not create worker branches, worktr
 
 ## Fixed Contract
 
-- Scope is selected bd epics plus their recursive parent/children descendants.
-- Readiness comes only from `bd ready --json`.
-- Task order is exactly the order returned by `bd ready --json` after filtering to selected epic descendants.
+- Scope is selected br epics plus their recursive parent/children descendants.
+- Readiness comes only from `br ready --json`.
+- Task order is exactly the order returned by `br ready --json` after filtering to selected epic descendants.
 - Workers run in the main checkout, one at a time.
 - Workers do not commit.
-- The primary agent owns all bd mutations.
+- The primary agent owns all br mutations.
 - The worker agent is `epic-loop-worker`.
 - Worker model is pinned in the worker agent file.
 - Stop and preserve the working tree on failure or incomplete work.
 
 ## Epic Selection
 
-1. Query candidate epics with `bd query "type=epic AND status!=closed AND status!=deferred" --json --limit 0`.
+1. Query candidate epics with `br list --type epic --status open --status in_progress --json`.
 2. Sort epics by priority, then title, then id.
 3. If no epics are returned, stop cleanly and report that there are no open non-deferred epics.
 4. If more than 20 epics are returned, do not run the loop. Report the count and the first 20 sorted epics so the user can narrow the request.
@@ -39,17 +39,17 @@ Open epics means any epic whose status is not `closed` or `deferred`.
 For each selected epic:
 
 1. Add the epic id to the selected epic set.
-2. Build a recursive descendant closure using bd parent/children membership. Prefer `bd children <id> --json` for each frontier id.
+2. Build a recursive descendant closure using br parent/children membership. Prefer `br show <id> --json` for each frontier id.
 3. Exclude descendant issues whose type is `epic` unless that epic was explicitly selected.
 4. De-duplicate descendant ids across all selected epics.
 
 The scoped ready set for each loop iteration is:
 
 ```text
-ids returned by bd ready --json intersected with recursive selected-epic descendants
+ids returned by br ready --json intersected with recursive selected-epic descendants
 ```
 
-Do not traverse blocker/dependency edges from `bd dep` for epic membership. bd dependency edges affect readiness through `bd ready`; they do not define epic scope.
+Do not traverse blocker/dependency edges from `br dep` for epic membership. br dependency edges affect readiness through `br ready`; they do not define epic scope.
 
 ## Run Options And Preview
 
@@ -57,9 +57,9 @@ After epic selection:
 
 1. Ask for the max task count for this run. Use `25` when the user accepts the default or gives an invalid/non-positive value.
 2. Ask for the quality gate. If there is already a quality gate present in the current project, suggest it to him or propose him to insert his own quality gate.
-3. Refresh scope and `bd ready --json`.
-4. Show a preview containing selected epics, current scoped ready tasks in bd ready order, max task count, and the no-commit behavior.
-5. Ask for confirmation before mutating files or bd.
+3. Refresh scope and `br ready --json`.
+4. Show a preview containing selected epics, current scoped ready tasks in br ready order, max task count, and the no-commit behavior.
+5. Ask for confirmation before mutating files or br.
 
 If the user does not confirm, stop without mutation.
 
@@ -67,7 +67,7 @@ If the user does not confirm, stop without mutation.
 
 Before claiming any issue or launching any worker:
 
-- Confirm required tools are available: `bd` and `git`.
+- Confirm required tools are available: `br` and `git`.
 - Confirm the checkout is clean with `git status --porcelain --untracked-files=all`.
 - Stop before mutation if the checkout is dirty.
 
@@ -78,18 +78,18 @@ Cleanliness is required only at run start. Completed tasks intentionally leave u
 Repeat until the max task count is reached or no scoped ready tasks remain:
 
 1. Refresh selected epic descendant closure.
-2. Refresh `bd ready --json`.
+2. Refresh `br ready --json`.
 3. Filter ready issues to scoped descendant ids.
 4. Stop cleanly if no scoped ready tasks remain.
-5. Select the first scoped ready task in bd ready order.
+5. Select the first scoped ready task in br ready order.
 6. Capture `git status --porcelain --untracked-files=all` before dispatch.
-7. Claim the task with `bd update <id> --claim --json`.
+7. Claim the task with `br update <id> --claim --json`.
 8. Launch the `epic-loop-worker` subagent with the assigned issue id, issue JSON, selected epic ids, current descendant scope summary, before-status snapshot, and intended log path.
 9. Treat the worker as complete only if its final output satisfies the strict completion contract.
 10. Capture `git status --porcelain --untracked-files=all` after dispatch.
 11. Write a per-task markdown log under `.epic-loop/logs/`.
-12. If complete, close the assigned issue with `bd close <id> --reason "Completed by epic-loop" --json`.
-13. If complete and the worker reported structured follow-ups, create linked bd issues from those follow-ups after closing the parent task.
+12. If complete, close the assigned issue with `br close <id> --reason "Completed by epic-loop" --json`.
+13. If complete and the worker reported structured follow-ups, create linked br issues from those follow-ups after closing the parent task.
 14. Continue to the next iteration.
 
 Newly created follow-up issues are eligible in the same run if they become ready and are within the selected epic descendant closure.
@@ -99,9 +99,9 @@ Newly created follow-up issues are eligible in the same run if they become ready
 Use the `epic-loop-worker` subagent for each assigned task. Pass this contract in the task prompt:
 
 - Work in the main checkout only.
-- Work only on the assigned bd issue id and issue JSON.
+- Work only on the assigned br issue id and issue JSON.
 - Do not select other ready work.
-- Do not mutate bd.
+- Do not mutate br.
 - Do not create, delete, switch, merge, or rebase git branches.
 - Do not create or delete worktrees.
 - Do not commit.
@@ -135,7 +135,7 @@ Treat all of these as incomplete:
 On incomplete work, failed worker execution, failed or blocked verification, missing strict completion details, or any uncertainty:
 
 1. Stop the full loop immediately.
-2. Append a concise note to the assigned issue with `bd update <id> --append-notes "Epic Loop worker incomplete: <one-line reason>. Log: <path>" --json`.
+2. Append a concise note to the assigned issue with `br update <id> --append-notes "Epic Loop worker incomplete: <one-line reason>. Log: <path>" --json`.
 3. Write the per-task log.
 4. Leave the working tree exactly as-is for inspection.
 5. Do not close the assigned issue.
@@ -155,15 +155,15 @@ Follow-ups:
   Description: <specific context>
 ```
 
-After the parent task is verified complete and closed, the primary creates each follow-up with `bd create ... --json` and links it to the completed parent with a discovered-from dependency when supported by the local bd command shape.
+After the parent task is verified complete and closed, the primary creates each follow-up with `br create ... --json` and links it to the completed parent with a discovered-from dependency when supported by the local br command shape.
 
 If follow-up creation fails, report the failure in the log and final response, then stop and preserve the working tree. Do not silently drop follow-ups.
 
 ## Epic Closure
 
-At the end of a successful run, attempt to auto-close eligible selected epics. Because `bd epic close-eligible` does not accept explicit epic ids, first run `bd epic close-eligible --dry-run --json`.
+At the end of a successful run, attempt to auto-close eligible selected epics. Because `br epic close-eligible` does not accept explicit epic ids, first run `br epic close-eligible --dry-run --json`.
 
-- If the dry-run would close only selected epics, run `bd epic close-eligible --json`.
+- If the dry-run would close only selected epics, run `br epic close-eligible --json`.
 - If the dry-run would close any unselected epic, do not run it. Report selected epics that appear eligible and the unselected epics that prevented safe auto-close.
 - If no selected epics are eligible, report that none were auto-closed.
 
@@ -183,7 +183,7 @@ Per-task logs should include:
 - Worker summary.
 - Verification command and result reported by the worker.
 - Follow-ups reported and created.
-- bd mutations performed by the primary.
+- br mutations performed by the primary.
 - Final task status.
 
 The final run summary should include:
