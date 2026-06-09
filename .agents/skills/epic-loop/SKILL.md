@@ -56,9 +56,10 @@ Do not traverse blocker/dependency edges from `bd dep` for epic membership. bd d
 After epic selection:
 
 1. Ask for the max task count for this run. Use `25` when the user accepts the default or gives an invalid/non-positive value.
-2. Refresh scope and `bd ready --json`.
-3. Show a preview containing selected epics, current scoped ready tasks in bd ready order, max task count, and the no-commit behavior.
-4. Ask for confirmation before mutating files or bd.
+2. Ask for the quality gate. If there is already a quality gate present in the current project, suggest it to him or propose him to insert his own quality gate.
+3. Refresh scope and `bd ready --json`.
+4. Show a preview containing selected epics, current scoped ready tasks in bd ready order, max task count, and the no-commit behavior.
+5. Ask for confirmation before mutating files or bd.
 
 If the user does not confirm, stop without mutation.
 
@@ -106,7 +107,7 @@ Use the `epic-loop-worker` subagent for each assigned task. Pass this contract i
 - Do not commit.
 - Do not push.
 - Make the smallest correct implementation for the assigned issue.
-- Run task-relevant verification before reporting completion.
+- Run quality gate verification before reporting completion.
 - Report follow-up work in a structured `Follow-ups:` section.
 - End with `<promise>ISSUE COMPLETE</promise>` only when the assigned issue is complete, relevant verification has passed, and no known work remains.
 - End with `<promise>ISSUE INCOMPLETE</promise>` when work remains, verification fails, verification is blocked, or completion is uncertain.
