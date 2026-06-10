@@ -1,7 +1,7 @@
 
 # TaskCreate
 
-Request payload for creating a project task.  Parameters:     title: Task title.     column_id: Optional workflow column ID. Defaults to the first project column.     priority: Optional priority level for the task.     assignee_id: Optional user ID assigned to the task.     description: Optional task details.     acceptance_criteria: Optional criteria required to complete the task.     tag: Optional task tag.
+Request payload for creating a project task.  Parameters:     title: Task title.     column_id: Optional workflow column ID. Defaults to the first project column.     include_in_active_sprint: Whether the new task belongs to the active sprint.     priority: Optional priority level for the task.     assignee_id: Optional user ID assigned to the task.     description: Optional task details.     acceptance_criteria: Optional criteria required to complete the task.     tag: Optional task tag.
 
 ## Properties
 
@@ -9,6 +9,7 @@ Name | Type
 ------------ | -------------
 `title` | string
 `columnId` | string
+`includeInActiveSprint` | boolean
 `priority` | string
 `assigneeId` | string
 `description` | string
@@ -24,6 +25,7 @@ import type { TaskCreate } from ''
 const example = {
   "title": null,
   "columnId": null,
+  "includeInActiveSprint": null,
   "priority": null,
   "assigneeId": null,
   "description": null,

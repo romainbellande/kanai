@@ -5,21 +5,35 @@ All URIs are relative to *http://localhost*
 | Method | HTTP request | Description |
 |------------- | ------------- | -------------|
 | [**addProjectMemberProjectsProjectIdMembersPost**](ProjectsApi.md#addprojectmemberprojectsprojectidmemberspost) | **POST** /projects/{project_id}/members | Add Project Member |
+| [**addTaskToActiveProjectSprintProjectsProjectIdSprintsActiveTasksPost**](ProjectsApi.md#addtasktoactiveprojectsprintprojectsprojectidsprintsactivetaskspost) | **POST** /projects/{project_id}/sprints/active/tasks | Add Task To Active Project Sprint |
+| [**closeActiveProjectSprintProjectsProjectIdSprintsActiveClosePost**](ProjectsApi.md#closeactiveprojectsprintprojectsprojectidsprintsactiveclosepost) | **POST** /projects/{project_id}/sprints/active/close | Close Active Project Sprint |
+| [**createProjectBacklogTaskProjectsProjectIdBacklogTasksPost**](ProjectsApi.md#createprojectbacklogtaskprojectsprojectidbacklogtaskspost) | **POST** /projects/{project_id}/backlog/tasks | Create Project Backlog Task |
 | [**createProjectColumnProjectsProjectIdColumnsPost**](ProjectsApi.md#createprojectcolumnprojectsprojectidcolumnspost) | **POST** /projects/{project_id}/columns | Create Project Column |
 | [**createProjectEndpointProjectsPost**](ProjectsApi.md#createprojectendpointprojectspost) | **POST** /projects | Create Project Endpoint |
+| [**createProjectSprintProjectsProjectIdSprintsPost**](ProjectsApi.md#createprojectsprintprojectsprojectidsprintspost) | **POST** /projects/{project_id}/sprints | Create Project Sprint |
 | [**createTaskEndpointProjectsProjectIdTasksPost**](ProjectsApi.md#createtaskendpointprojectsprojectidtaskspost) | **POST** /projects/{project_id}/tasks | Create Task Endpoint |
 | [**deleteProjectColumnProjectsProjectIdColumnsColumnIdDelete**](ProjectsApi.md#deleteprojectcolumnprojectsprojectidcolumnscolumniddelete) | **DELETE** /projects/{project_id}/columns/{column_id} | Delete Project Column |
 | [**deleteProjectProjectsProjectIdDelete**](ProjectsApi.md#deleteprojectprojectsprojectiddelete) | **DELETE** /projects/{project_id} | Delete Project |
 | [**deleteTaskEndpointProjectsProjectIdTasksTaskIdDelete**](ProjectsApi.md#deletetaskendpointprojectsprojectidtaskstaskiddelete) | **DELETE** /projects/{project_id}/tasks/{task_id} | Delete Task Endpoint |
+| [**getActiveProjectSprintCloseConfirmationProjectsProjectIdSprintsActiveCloseConfirmationGet**](ProjectsApi.md#getactiveprojectsprintcloseconfirmationprojectsprojectidsprintsactivecloseconfirmationget) | **GET** /projects/{project_id}/sprints/active/close-confirmation | Get Active Project Sprint Close Confirmation |
+| [**getActiveProjectSprintProjectsProjectIdSprintsActiveGet**](ProjectsApi.md#getactiveprojectsprintprojectsprojectidsprintsactiveget) | **GET** /projects/{project_id}/sprints/active | Get Active Project Sprint |
+| [**getProjectDoneColumnProjectsProjectIdDoneColumnGet**](ProjectsApi.md#getprojectdonecolumnprojectsprojectiddonecolumnget) | **GET** /projects/{project_id}/done-column | Get Project Done Column |
 | [**getProjectProjectsProjectIdGet**](ProjectsApi.md#getprojectprojectsprojectidget) | **GET** /projects/{project_id} | Get Project |
 | [**getTaskEndpointProjectsProjectIdTasksTaskIdGet**](ProjectsApi.md#gettaskendpointprojectsprojectidtaskstaskidget) | **GET** /projects/{project_id}/tasks/{task_id} | Get Task Endpoint |
+| [**listActiveSprintTasksEndpointProjectsProjectIdTasksActiveSprintGet**](ProjectsApi.md#listactivesprinttasksendpointprojectsprojectidtasksactivesprintget) | **GET** /projects/{project_id}/tasks/active-sprint | List Active Sprint Tasks Endpoint |
+| [**listProjectBacklogProjectsProjectIdBacklogGet**](ProjectsApi.md#listprojectbacklogprojectsprojectidbacklogget) | **GET** /projects/{project_id}/backlog | List Project Backlog |
 | [**listProjectChatMessagesProjectsProjectIdChatMessagesGet**](ProjectsApi.md#listprojectchatmessagesprojectsprojectidchatmessagesget) | **GET** /projects/{project_id}/chat/messages | List Project Chat Messages |
 | [**listProjectColumnsProjectsProjectIdColumnsGet**](ProjectsApi.md#listprojectcolumnsprojectsprojectidcolumnsget) | **GET** /projects/{project_id}/columns | List Project Columns |
+| [**listProjectSprintHistoryProjectsProjectIdSprintsHistoryGet**](ProjectsApi.md#listprojectsprinthistoryprojectsprojectidsprintshistoryget) | **GET** /projects/{project_id}/sprints/history | List Project Sprint History |
 | [**listProjectsProjectsGet**](ProjectsApi.md#listprojectsprojectsget) | **GET** /projects | List Projects |
 | [**listTasksEndpointProjectsProjectIdTasksGet**](ProjectsApi.md#listtasksendpointprojectsprojectidtasksget) | **GET** /projects/{project_id}/tasks | List Tasks Endpoint |
 | [**moveTaskEndpointProjectsProjectIdTasksTaskIdMovePut**](ProjectsApi.md#movetaskendpointprojectsprojectidtaskstaskidmoveput) | **PUT** /projects/{project_id}/tasks/{task_id}/move | Move Task Endpoint |
+| [**removeTaskFromActiveProjectSprintProjectsProjectIdSprintsActiveTasksTaskIdDelete**](ProjectsApi.md#removetaskfromactiveprojectsprintprojectsprojectidsprintsactivetaskstaskiddelete) | **DELETE** /projects/{project_id}/sprints/active/tasks/{task_id} | Remove Task From Active Project Sprint |
+| [**reorderProjectBacklogProjectsProjectIdBacklogReorderPut**](ProjectsApi.md#reorderprojectbacklogprojectsprojectidbacklogreorderput) | **PUT** /projects/{project_id}/backlog/reorder | Reorder Project Backlog |
 | [**reorderProjectColumnsProjectsProjectIdColumnsReorderPut**](ProjectsApi.md#reorderprojectcolumnsprojectsprojectidcolumnsreorderput) | **PUT** /projects/{project_id}/columns/reorder | Reorder Project Columns |
+| [**updateActiveProjectSprintProjectsProjectIdSprintsActivePatch**](ProjectsApi.md#updateactiveprojectsprintprojectsprojectidsprintsactivepatch) | **PATCH** /projects/{project_id}/sprints/active | Update Active Project Sprint |
 | [**updateProjectColumnProjectsProjectIdColumnsColumnIdPatch**](ProjectsApi.md#updateprojectcolumnprojectsprojectidcolumnscolumnidpatch) | **PATCH** /projects/{project_id}/columns/{column_id} | Update Project Column |
+| [**updateProjectDoneColumnProjectsProjectIdDoneColumnPatch**](ProjectsApi.md#updateprojectdonecolumnprojectsprojectiddonecolumnpatch) | **PATCH** /projects/{project_id}/done-column | Update Project Done Column |
 | [**updateProjectProjectsProjectIdPatch**](ProjectsApi.md#updateprojectprojectsprojectidpatch) | **PATCH** /projects/{project_id} | Update Project |
 | [**updateTaskEndpointProjectsProjectIdTasksTaskIdPatch**](ProjectsApi.md#updatetaskendpointprojectsprojectidtaskstaskidpatch) | **PATCH** /projects/{project_id}/tasks/{task_id} | Update Task Endpoint |
 
@@ -91,6 +105,216 @@ No authorization required
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
 | **200** | Successful Response |  -  |
+| **422** | Validation Error |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+
+## addTaskToActiveProjectSprintProjectsProjectIdSprintsActiveTasksPost
+
+> TaskRead addTaskToActiveProjectSprintProjectsProjectIdSprintsActiveTasksPost(projectId, projectSprintTaskAdd)
+
+Add Task To Active Project Sprint
+
+Add an existing Backlog task to the active sprint.
+
+### Example
+
+```ts
+import {
+  Configuration,
+  ProjectsApi,
+} from '';
+import type { AddTaskToActiveProjectSprintProjectsProjectIdSprintsActiveTasksPostRequest } from '';
+
+async function example() {
+  console.log("🚀 Testing  SDK...");
+  const api = new ProjectsApi();
+
+  const body = {
+    // string
+    projectId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+    // ProjectSprintTaskAdd
+    projectSprintTaskAdd: ...,
+  } satisfies AddTaskToActiveProjectSprintProjectsProjectIdSprintsActiveTasksPostRequest;
+
+  try {
+    const data = await api.addTaskToActiveProjectSprintProjectsProjectIdSprintsActiveTasksPost(body);
+    console.log(data);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+// Run the test
+example().catch(console.error);
+```
+
+### Parameters
+
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **projectId** | `string` |  | [Defaults to `undefined`] |
+| **projectSprintTaskAdd** | [ProjectSprintTaskAdd](ProjectSprintTaskAdd.md) |  | |
+
+### Return type
+
+[**TaskRead**](TaskRead.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+- **Content-Type**: `application/json`
+- **Accept**: `application/json`
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+| **200** | Successful Response |  -  |
+| **422** | Validation Error |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+
+## closeActiveProjectSprintProjectsProjectIdSprintsActiveClosePost
+
+> ProjectSprintCloseRead closeActiveProjectSprintProjectsProjectIdSprintsActiveClosePost(projectId)
+
+Close Active Project Sprint
+
+Close the active sprint and create immutable task history.
+
+### Example
+
+```ts
+import {
+  Configuration,
+  ProjectsApi,
+} from '';
+import type { CloseActiveProjectSprintProjectsProjectIdSprintsActiveClosePostRequest } from '';
+
+async function example() {
+  console.log("🚀 Testing  SDK...");
+  const api = new ProjectsApi();
+
+  const body = {
+    // string
+    projectId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+  } satisfies CloseActiveProjectSprintProjectsProjectIdSprintsActiveClosePostRequest;
+
+  try {
+    const data = await api.closeActiveProjectSprintProjectsProjectIdSprintsActiveClosePost(body);
+    console.log(data);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+// Run the test
+example().catch(console.error);
+```
+
+### Parameters
+
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **projectId** | `string` |  | [Defaults to `undefined`] |
+
+### Return type
+
+[**ProjectSprintCloseRead**](ProjectSprintCloseRead.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: `application/json`
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+| **200** | Successful Response |  -  |
+| **422** | Validation Error |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+
+## createProjectBacklogTaskProjectsProjectIdBacklogTasksPost
+
+> TaskRead createProjectBacklogTaskProjectsProjectIdBacklogTasksPost(projectId, taskCreate)
+
+Create Project Backlog Task
+
+Create a task at the top of the project Backlog.
+
+### Example
+
+```ts
+import {
+  Configuration,
+  ProjectsApi,
+} from '';
+import type { CreateProjectBacklogTaskProjectsProjectIdBacklogTasksPostRequest } from '';
+
+async function example() {
+  console.log("🚀 Testing  SDK...");
+  const api = new ProjectsApi();
+
+  const body = {
+    // string
+    projectId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+    // TaskCreate
+    taskCreate: ...,
+  } satisfies CreateProjectBacklogTaskProjectsProjectIdBacklogTasksPostRequest;
+
+  try {
+    const data = await api.createProjectBacklogTaskProjectsProjectIdBacklogTasksPost(body);
+    console.log(data);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+// Run the test
+example().catch(console.error);
+```
+
+### Parameters
+
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **projectId** | `string` |  | [Defaults to `undefined`] |
+| **taskCreate** | [TaskCreate](TaskCreate.md) |  | |
+
+### Return type
+
+[**TaskRead**](TaskRead.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+- **Content-Type**: `application/json`
+- **Accept**: `application/json`
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+| **201** | Successful Response |  -  |
 | **422** | Validation Error |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
@@ -215,6 +439,77 @@ example().catch(console.error);
 ### Return type
 
 [**ProjectRead**](ProjectRead.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+- **Content-Type**: `application/json`
+- **Accept**: `application/json`
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+| **201** | Successful Response |  -  |
+| **422** | Validation Error |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+
+## createProjectSprintProjectsProjectIdSprintsPost
+
+> ProjectSprintRead createProjectSprintProjectsProjectIdSprintsPost(projectId, projectSprintCreate)
+
+Create Project Sprint
+
+Create an empty active sprint for a project owned by the current user.
+
+### Example
+
+```ts
+import {
+  Configuration,
+  ProjectsApi,
+} from '';
+import type { CreateProjectSprintProjectsProjectIdSprintsPostRequest } from '';
+
+async function example() {
+  console.log("🚀 Testing  SDK...");
+  const api = new ProjectsApi();
+
+  const body = {
+    // string
+    projectId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+    // ProjectSprintCreate
+    projectSprintCreate: ...,
+  } satisfies CreateProjectSprintProjectsProjectIdSprintsPostRequest;
+
+  try {
+    const data = await api.createProjectSprintProjectsProjectIdSprintsPost(body);
+    console.log(data);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+// Run the test
+example().catch(console.error);
+```
+
+### Parameters
+
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **projectId** | `string` |  | [Defaults to `undefined`] |
+| **projectSprintCreate** | [ProjectSprintCreate](ProjectSprintCreate.md) |  | |
+
+### Return type
+
+[**ProjectSprintRead**](ProjectSprintRead.md)
 
 ### Authorization
 
@@ -516,6 +811,210 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 
+## getActiveProjectSprintCloseConfirmationProjectsProjectIdSprintsActiveCloseConfirmationGet
+
+> ProjectSprintClosePreviewRead getActiveProjectSprintCloseConfirmationProjectsProjectIdSprintsActiveCloseConfirmationGet(projectId)
+
+Get Active Project Sprint Close Confirmation
+
+Preview the irreversible active sprint close outcome.
+
+### Example
+
+```ts
+import {
+  Configuration,
+  ProjectsApi,
+} from '';
+import type { GetActiveProjectSprintCloseConfirmationProjectsProjectIdSprintsActiveCloseConfirmationGetRequest } from '';
+
+async function example() {
+  console.log("🚀 Testing  SDK...");
+  const api = new ProjectsApi();
+
+  const body = {
+    // string
+    projectId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+  } satisfies GetActiveProjectSprintCloseConfirmationProjectsProjectIdSprintsActiveCloseConfirmationGetRequest;
+
+  try {
+    const data = await api.getActiveProjectSprintCloseConfirmationProjectsProjectIdSprintsActiveCloseConfirmationGet(body);
+    console.log(data);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+// Run the test
+example().catch(console.error);
+```
+
+### Parameters
+
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **projectId** | `string` |  | [Defaults to `undefined`] |
+
+### Return type
+
+[**ProjectSprintClosePreviewRead**](ProjectSprintClosePreviewRead.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: `application/json`
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+| **200** | Successful Response |  -  |
+| **422** | Validation Error |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+
+## getActiveProjectSprintProjectsProjectIdSprintsActiveGet
+
+> ProjectSprintRead getActiveProjectSprintProjectsProjectIdSprintsActiveGet(projectId)
+
+Get Active Project Sprint
+
+Get the active sprint for a project accessible to the current user.
+
+### Example
+
+```ts
+import {
+  Configuration,
+  ProjectsApi,
+} from '';
+import type { GetActiveProjectSprintProjectsProjectIdSprintsActiveGetRequest } from '';
+
+async function example() {
+  console.log("🚀 Testing  SDK...");
+  const api = new ProjectsApi();
+
+  const body = {
+    // string
+    projectId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+  } satisfies GetActiveProjectSprintProjectsProjectIdSprintsActiveGetRequest;
+
+  try {
+    const data = await api.getActiveProjectSprintProjectsProjectIdSprintsActiveGet(body);
+    console.log(data);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+// Run the test
+example().catch(console.error);
+```
+
+### Parameters
+
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **projectId** | `string` |  | [Defaults to `undefined`] |
+
+### Return type
+
+[**ProjectSprintRead**](ProjectSprintRead.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: `application/json`
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+| **200** | Successful Response |  -  |
+| **422** | Validation Error |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+
+## getProjectDoneColumnProjectsProjectIdDoneColumnGet
+
+> ProjectDoneColumnRead getProjectDoneColumnProjectsProjectIdDoneColumnGet(projectId)
+
+Get Project Done Column
+
+Get the Done Column designation for a project visible to the user.
+
+### Example
+
+```ts
+import {
+  Configuration,
+  ProjectsApi,
+} from '';
+import type { GetProjectDoneColumnProjectsProjectIdDoneColumnGetRequest } from '';
+
+async function example() {
+  console.log("🚀 Testing  SDK...");
+  const api = new ProjectsApi();
+
+  const body = {
+    // string
+    projectId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+  } satisfies GetProjectDoneColumnProjectsProjectIdDoneColumnGetRequest;
+
+  try {
+    const data = await api.getProjectDoneColumnProjectsProjectIdDoneColumnGet(body);
+    console.log(data);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+// Run the test
+example().catch(console.error);
+```
+
+### Parameters
+
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **projectId** | `string` |  | [Defaults to `undefined`] |
+
+### Return type
+
+[**ProjectDoneColumnRead**](ProjectDoneColumnRead.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: `application/json`
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+| **200** | Successful Response |  -  |
+| **422** | Validation Error |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+
 ## getProjectProjectsProjectIdGet
 
 > ProjectRead getProjectProjectsProjectIdGet(projectId)
@@ -655,6 +1154,142 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 
+## listActiveSprintTasksEndpointProjectsProjectIdTasksActiveSprintGet
+
+> Array&lt;TaskRead&gt; listActiveSprintTasksEndpointProjectsProjectIdTasksActiveSprintGet(projectId)
+
+List Active Sprint Tasks Endpoint
+
+List tasks selected into the project\&#39;s active sprint.
+
+### Example
+
+```ts
+import {
+  Configuration,
+  ProjectsApi,
+} from '';
+import type { ListActiveSprintTasksEndpointProjectsProjectIdTasksActiveSprintGetRequest } from '';
+
+async function example() {
+  console.log("🚀 Testing  SDK...");
+  const api = new ProjectsApi();
+
+  const body = {
+    // string
+    projectId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+  } satisfies ListActiveSprintTasksEndpointProjectsProjectIdTasksActiveSprintGetRequest;
+
+  try {
+    const data = await api.listActiveSprintTasksEndpointProjectsProjectIdTasksActiveSprintGet(body);
+    console.log(data);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+// Run the test
+example().catch(console.error);
+```
+
+### Parameters
+
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **projectId** | `string` |  | [Defaults to `undefined`] |
+
+### Return type
+
+[**Array&lt;TaskRead&gt;**](TaskRead.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: `application/json`
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+| **200** | Successful Response |  -  |
+| **422** | Validation Error |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+
+## listProjectBacklogProjectsProjectIdBacklogGet
+
+> Array&lt;TaskRead&gt; listProjectBacklogProjectsProjectIdBacklogGet(projectId)
+
+List Project Backlog
+
+List unfinished non-sprint tasks in project Backlog order.
+
+### Example
+
+```ts
+import {
+  Configuration,
+  ProjectsApi,
+} from '';
+import type { ListProjectBacklogProjectsProjectIdBacklogGetRequest } from '';
+
+async function example() {
+  console.log("🚀 Testing  SDK...");
+  const api = new ProjectsApi();
+
+  const body = {
+    // string
+    projectId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+  } satisfies ListProjectBacklogProjectsProjectIdBacklogGetRequest;
+
+  try {
+    const data = await api.listProjectBacklogProjectsProjectIdBacklogGet(body);
+    console.log(data);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+// Run the test
+example().catch(console.error);
+```
+
+### Parameters
+
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **projectId** | `string` |  | [Defaults to `undefined`] |
+
+### Return type
+
+[**Array&lt;TaskRead&gt;**](TaskRead.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: `application/json`
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+| **200** | Successful Response |  -  |
+| **422** | Validation Error |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+
 ## listProjectChatMessagesProjectsProjectIdChatMessagesGet
 
 > Array&lt;ProjectChatMessageRead&gt; listProjectChatMessagesProjectsProjectIdChatMessagesGet(projectId, cursor)
@@ -774,6 +1409,74 @@ example().catch(console.error);
 ### Return type
 
 [**Array&lt;ProjectColumnRead&gt;**](ProjectColumnRead.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: `application/json`
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+| **200** | Successful Response |  -  |
+| **422** | Validation Error |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+
+## listProjectSprintHistoryProjectsProjectIdSprintsHistoryGet
+
+> Array&lt;ProjectSprintHistoryRead&gt; listProjectSprintHistoryProjectsProjectIdSprintsHistoryGet(projectId)
+
+List Project Sprint History
+
+List closed sprint history for a project participant.
+
+### Example
+
+```ts
+import {
+  Configuration,
+  ProjectsApi,
+} from '';
+import type { ListProjectSprintHistoryProjectsProjectIdSprintsHistoryGetRequest } from '';
+
+async function example() {
+  console.log("🚀 Testing  SDK...");
+  const api = new ProjectsApi();
+
+  const body = {
+    // string
+    projectId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+  } satisfies ListProjectSprintHistoryProjectsProjectIdSprintsHistoryGetRequest;
+
+  try {
+    const data = await api.listProjectSprintHistoryProjectsProjectIdSprintsHistoryGet(body);
+    console.log(data);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+// Run the test
+example().catch(console.error);
+```
+
+### Parameters
+
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **projectId** | `string` |  | [Defaults to `undefined`] |
+
+### Return type
+
+[**Array&lt;ProjectSprintHistoryRead&gt;**](ProjectSprintHistoryRead.md)
 
 ### Authorization
 
@@ -995,6 +1698,148 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 
+## removeTaskFromActiveProjectSprintProjectsProjectIdSprintsActiveTasksTaskIdDelete
+
+> TaskRead removeTaskFromActiveProjectSprintProjectsProjectIdSprintsActiveTasksTaskIdDelete(projectId, taskId)
+
+Remove Task From Active Project Sprint
+
+Remove an active sprint task back to the project Backlog.
+
+### Example
+
+```ts
+import {
+  Configuration,
+  ProjectsApi,
+} from '';
+import type { RemoveTaskFromActiveProjectSprintProjectsProjectIdSprintsActiveTasksTaskIdDeleteRequest } from '';
+
+async function example() {
+  console.log("🚀 Testing  SDK...");
+  const api = new ProjectsApi();
+
+  const body = {
+    // string
+    projectId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+    // string
+    taskId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+  } satisfies RemoveTaskFromActiveProjectSprintProjectsProjectIdSprintsActiveTasksTaskIdDeleteRequest;
+
+  try {
+    const data = await api.removeTaskFromActiveProjectSprintProjectsProjectIdSprintsActiveTasksTaskIdDelete(body);
+    console.log(data);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+// Run the test
+example().catch(console.error);
+```
+
+### Parameters
+
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **projectId** | `string` |  | [Defaults to `undefined`] |
+| **taskId** | `string` |  | [Defaults to `undefined`] |
+
+### Return type
+
+[**TaskRead**](TaskRead.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: `application/json`
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+| **200** | Successful Response |  -  |
+| **422** | Validation Error |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+
+## reorderProjectBacklogProjectsProjectIdBacklogReorderPut
+
+> Array&lt;TaskRead&gt; reorderProjectBacklogProjectsProjectIdBacklogReorderPut(projectId, projectBacklogReorder)
+
+Reorder Project Backlog
+
+Persist a complete manual Backlog task order.
+
+### Example
+
+```ts
+import {
+  Configuration,
+  ProjectsApi,
+} from '';
+import type { ReorderProjectBacklogProjectsProjectIdBacklogReorderPutRequest } from '';
+
+async function example() {
+  console.log("🚀 Testing  SDK...");
+  const api = new ProjectsApi();
+
+  const body = {
+    // string
+    projectId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+    // ProjectBacklogReorder
+    projectBacklogReorder: ...,
+  } satisfies ReorderProjectBacklogProjectsProjectIdBacklogReorderPutRequest;
+
+  try {
+    const data = await api.reorderProjectBacklogProjectsProjectIdBacklogReorderPut(body);
+    console.log(data);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+// Run the test
+example().catch(console.error);
+```
+
+### Parameters
+
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **projectId** | `string` |  | [Defaults to `undefined`] |
+| **projectBacklogReorder** | [ProjectBacklogReorder](ProjectBacklogReorder.md) |  | |
+
+### Return type
+
+[**Array&lt;TaskRead&gt;**](TaskRead.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+- **Content-Type**: `application/json`
+- **Accept**: `application/json`
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+| **200** | Successful Response |  -  |
+| **422** | Validation Error |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+
 ## reorderProjectColumnsProjectsProjectIdColumnsReorderPut
 
 > Array&lt;ProjectColumnRead&gt; reorderProjectColumnsProjectsProjectIdColumnsReorderPut(projectId, projectColumnReorder)
@@ -1046,6 +1891,77 @@ example().catch(console.error);
 ### Return type
 
 [**Array&lt;ProjectColumnRead&gt;**](ProjectColumnRead.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+- **Content-Type**: `application/json`
+- **Accept**: `application/json`
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+| **200** | Successful Response |  -  |
+| **422** | Validation Error |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+
+## updateActiveProjectSprintProjectsProjectIdSprintsActivePatch
+
+> ProjectSprintRead updateActiveProjectSprintProjectsProjectIdSprintsActivePatch(projectId, projectSprintUpdate)
+
+Update Active Project Sprint
+
+Update active sprint metadata for a project owned by the current user.
+
+### Example
+
+```ts
+import {
+  Configuration,
+  ProjectsApi,
+} from '';
+import type { UpdateActiveProjectSprintProjectsProjectIdSprintsActivePatchRequest } from '';
+
+async function example() {
+  console.log("🚀 Testing  SDK...");
+  const api = new ProjectsApi();
+
+  const body = {
+    // string
+    projectId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+    // ProjectSprintUpdate
+    projectSprintUpdate: ...,
+  } satisfies UpdateActiveProjectSprintProjectsProjectIdSprintsActivePatchRequest;
+
+  try {
+    const data = await api.updateActiveProjectSprintProjectsProjectIdSprintsActivePatch(body);
+    console.log(data);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+// Run the test
+example().catch(console.error);
+```
+
+### Parameters
+
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **projectId** | `string` |  | [Defaults to `undefined`] |
+| **projectSprintUpdate** | [ProjectSprintUpdate](ProjectSprintUpdate.md) |  | |
+
+### Return type
+
+[**ProjectSprintRead**](ProjectSprintRead.md)
 
 ### Authorization
 
@@ -1120,6 +2036,77 @@ example().catch(console.error);
 ### Return type
 
 [**ProjectColumnRead**](ProjectColumnRead.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+- **Content-Type**: `application/json`
+- **Accept**: `application/json`
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+| **200** | Successful Response |  -  |
+| **422** | Validation Error |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+
+## updateProjectDoneColumnProjectsProjectIdDoneColumnPatch
+
+> ProjectDoneColumnRead updateProjectDoneColumnProjectsProjectIdDoneColumnPatch(projectId, projectDoneColumnUpdate)
+
+Update Project Done Column
+
+Change the Done Column designation for a project owned by the user.
+
+### Example
+
+```ts
+import {
+  Configuration,
+  ProjectsApi,
+} from '';
+import type { UpdateProjectDoneColumnProjectsProjectIdDoneColumnPatchRequest } from '';
+
+async function example() {
+  console.log("🚀 Testing  SDK...");
+  const api = new ProjectsApi();
+
+  const body = {
+    // string
+    projectId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+    // ProjectDoneColumnUpdate
+    projectDoneColumnUpdate: ...,
+  } satisfies UpdateProjectDoneColumnProjectsProjectIdDoneColumnPatchRequest;
+
+  try {
+    const data = await api.updateProjectDoneColumnProjectsProjectIdDoneColumnPatch(body);
+    console.log(data);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+// Run the test
+example().catch(console.error);
+```
+
+### Parameters
+
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **projectId** | `string` |  | [Defaults to `undefined`] |
+| **projectDoneColumnUpdate** | [ProjectDoneColumnUpdate](ProjectDoneColumnUpdate.md) |  | |
+
+### Return type
+
+[**ProjectDoneColumnRead**](ProjectDoneColumnRead.md)
 
 ### Authorization
 

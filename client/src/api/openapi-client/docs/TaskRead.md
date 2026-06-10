@@ -1,7 +1,7 @@
 
 # TaskRead
 
-Response payload for reading a project task.  Parameters:     id: Task ID.     project_id: ID of the project that owns the task.     title: Task title.     column_id: Workflow column ID for the task.     priority: Optional priority level for the task.     rank: Sortable LexoRank-style position within the task column.     assignee_id: Optional user ID assigned to the task.     description: Optional task details.     acceptance_criteria: Optional criteria required to complete the task.     tag: Optional task tag.     created_at: Optional timestamp when the task was created.     updated_at: Optional timestamp when the task was last updated.
+Response payload for reading a project task.  Parameters:     id: Task ID.     project_id: ID of the project that owns the task.     sprint_id: Optional active or historical sprint membership ID.     title: Task title.     column_id: Workflow column ID for the task.     priority: Optional priority level for the task.     rank: Sortable LexoRank-style position within the task column.     backlog_rank: Optional manual rank within the project backlog.     assignee_id: Optional user ID assigned to the task.     description: Optional task details.     acceptance_criteria: Optional criteria required to complete the task.     tag: Optional task tag.     created_at: Optional timestamp when the task was created.     updated_at: Optional timestamp when the task was last updated.
 
 ## Properties
 
@@ -9,10 +9,12 @@ Name | Type
 ------------ | -------------
 `id` | string
 `projectId` | string
+`sprintId` | string
 `columnId` | string
 `title` | string
 `priority` | string
 `rank` | string
+`backlogRank` | string
 `assigneeId` | string
 `description` | string
 `acceptanceCriteria` | string
@@ -29,10 +31,12 @@ import type { TaskRead } from ''
 const example = {
   "id": null,
   "projectId": null,
+  "sprintId": null,
   "columnId": null,
   "title": null,
   "priority": null,
   "rank": null,
+  "backlogRank": null,
   "assigneeId": null,
   "description": null,
   "acceptanceCriteria": null,

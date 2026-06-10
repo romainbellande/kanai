@@ -3,6 +3,7 @@
 /* eslint-disable */
 export * from './HTTPValidationError';
 export * from './LocationInner';
+export * from './ProjectBacklogReorder';
 export * from './ProjectChatAuthorRead';
 export * from './ProjectChatMessageRead';
 export * from './ProjectColumnCreate';
@@ -10,8 +11,18 @@ export * from './ProjectColumnRead';
 export * from './ProjectColumnReorder';
 export * from './ProjectColumnUpdate';
 export * from './ProjectCreate';
+export * from './ProjectDoneColumnRead';
+export * from './ProjectDoneColumnUpdate';
 export * from './ProjectMemberCreate';
 export * from './ProjectRead';
+export * from './ProjectSprintClosePreviewRead';
+export * from './ProjectSprintCloseRead';
+export * from './ProjectSprintCreate';
+export * from './ProjectSprintHistoryRead';
+export * from './ProjectSprintRead';
+export * from './ProjectSprintTaskAdd';
+export * from './ProjectSprintTaskSnapshotRead';
+export * from './ProjectSprintUpdate';
 export * from './ProjectUpdate';
 export * from './TaskCreate';
 export * from './TaskDestination';

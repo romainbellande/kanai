@@ -7,6 +7,7 @@ All URIs are relative to *http://localhost*
 | [**createTaskEndpointProjectsProjectIdTasksPost**](TasksApi.md#createtaskendpointprojectsprojectidtaskspost) | **POST** /projects/{project_id}/tasks | Create Task Endpoint |
 | [**deleteTaskEndpointProjectsProjectIdTasksTaskIdDelete**](TasksApi.md#deletetaskendpointprojectsprojectidtaskstaskiddelete) | **DELETE** /projects/{project_id}/tasks/{task_id} | Delete Task Endpoint |
 | [**getTaskEndpointProjectsProjectIdTasksTaskIdGet**](TasksApi.md#gettaskendpointprojectsprojectidtaskstaskidget) | **GET** /projects/{project_id}/tasks/{task_id} | Get Task Endpoint |
+| [**listActiveSprintTasksEndpointProjectsProjectIdTasksActiveSprintGet**](TasksApi.md#listactivesprinttasksendpointprojectsprojectidtasksactivesprintget) | **GET** /projects/{project_id}/tasks/active-sprint | List Active Sprint Tasks Endpoint |
 | [**listTasksEndpointProjectsProjectIdTasksGet**](TasksApi.md#listtasksendpointprojectsprojectidtasksget) | **GET** /projects/{project_id}/tasks | List Tasks Endpoint |
 | [**moveTaskEndpointProjectsProjectIdTasksTaskIdMovePut**](TasksApi.md#movetaskendpointprojectsprojectidtaskstaskidmoveput) | **PUT** /projects/{project_id}/tasks/{task_id}/move | Move Task Endpoint |
 | [**updateTaskEndpointProjectsProjectIdTasksTaskIdPatch**](TasksApi.md#updatetaskendpointprojectsprojectidtaskstaskidpatch) | **PATCH** /projects/{project_id}/tasks/{task_id} | Update Task Endpoint |
@@ -206,6 +207,74 @@ example().catch(console.error);
 ### Return type
 
 [**TaskRead**](TaskRead.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: `application/json`
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+| **200** | Successful Response |  -  |
+| **422** | Validation Error |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+
+## listActiveSprintTasksEndpointProjectsProjectIdTasksActiveSprintGet
+
+> Array&lt;TaskRead&gt; listActiveSprintTasksEndpointProjectsProjectIdTasksActiveSprintGet(projectId)
+
+List Active Sprint Tasks Endpoint
+
+List tasks selected into the project\&#39;s active sprint.
+
+### Example
+
+```ts
+import {
+  Configuration,
+  TasksApi,
+} from '';
+import type { ListActiveSprintTasksEndpointProjectsProjectIdTasksActiveSprintGetRequest } from '';
+
+async function example() {
+  console.log("🚀 Testing  SDK...");
+  const api = new TasksApi();
+
+  const body = {
+    // string
+    projectId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+  } satisfies ListActiveSprintTasksEndpointProjectsProjectIdTasksActiveSprintGetRequest;
+
+  try {
+    const data = await api.listActiveSprintTasksEndpointProjectsProjectIdTasksActiveSprintGet(body);
+    console.log(data);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+// Run the test
+example().catch(console.error);
+```
+
+### Parameters
+
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **projectId** | `string` |  | [Defaults to `undefined`] |
+
+### Return type
+
+[**Array&lt;TaskRead&gt;**](TaskRead.md)
 
 ### Authorization
 

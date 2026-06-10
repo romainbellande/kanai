@@ -15,166 +15,141 @@
 
 import { mapValues } from '../runtime';
 /**
- * Response payload for reading a project task.
- * 
- * Parameters:
- *     id: Task ID.
- *     project_id: ID of the project that owns the task.
- *     sprint_id: Optional active or historical sprint membership ID.
- *     title: Task title.
- *     column_id: Workflow column ID for the task.
- *     priority: Optional priority level for the task.
- *     rank: Sortable LexoRank-style position within the task column.
- *     backlog_rank: Optional manual rank within the project backlog.
- *     assignee_id: Optional user ID assigned to the task.
- *     description: Optional task details.
- *     acceptance_criteria: Optional criteria required to complete the task.
- *     tag: Optional task tag.
- *     created_at: Optional timestamp when the task was created.
- *     updated_at: Optional timestamp when the task was last updated.
+ * Historical task snapshot captured when a sprint closes.
  * @export
- * @interface TaskRead
+ * @interface ProjectSprintTaskSnapshotRead
  */
-export interface TaskRead {
+export interface ProjectSprintTaskSnapshotRead {
     /**
-     *
+     * 
      * @type {string}
-     * @memberof TaskRead
+     * @memberof ProjectSprintTaskSnapshotRead
      */
     id: string;
     /**
-     *
+     * 
      * @type {string}
-     * @memberof TaskRead
+     * @memberof ProjectSprintTaskSnapshotRead
      */
-    projectId: string;
+    sprintId: string;
     /**
-     *
+     * 
      * @type {string}
-     * @memberof TaskRead
+     * @memberof ProjectSprintTaskSnapshotRead
      */
-    sprintId: string | null;
+    taskId: string | null;
     /**
-     *
+     * 
      * @type {string}
-     * @memberof TaskRead
+     * @memberof ProjectSprintTaskSnapshotRead
      */
     columnId: string;
     /**
-     *
+     * 
      * @type {string}
-     * @memberof TaskRead
+     * @memberof ProjectSprintTaskSnapshotRead
      */
     title: string;
     /**
-     *
+     * 
      * @type {string}
-     * @memberof TaskRead
+     * @memberof ProjectSprintTaskSnapshotRead
+     */
+    outcome: string;
+    /**
+     * 
+     * @type {string}
+     * @memberof ProjectSprintTaskSnapshotRead
      */
     priority: string | null;
     /**
-     *
+     * 
      * @type {string}
-     * @memberof TaskRead
+     * @memberof ProjectSprintTaskSnapshotRead
      */
     rank: string;
     /**
-     *
+     * 
      * @type {string}
-     * @memberof TaskRead
-     */
-    backlogRank: string | null;
-    /**
-     *
-     * @type {string}
-     * @memberof TaskRead
-     */
-    assigneeId: string | null;
-    /**
-     *
-     * @type {string}
-     * @memberof TaskRead
+     * @memberof ProjectSprintTaskSnapshotRead
      */
     description: string | null;
     /**
-     *
+     * 
      * @type {string}
-     * @memberof TaskRead
+     * @memberof ProjectSprintTaskSnapshotRead
      */
     acceptanceCriteria: string | null;
     /**
-     *
+     * 
      * @type {string}
-     * @memberof TaskRead
+     * @memberof ProjectSprintTaskSnapshotRead
      */
     tag: string | null;
     /**
-     *
+     * 
+     * @type {boolean}
+     * @memberof ProjectSprintTaskSnapshotRead
+     */
+    liveTaskExists?: boolean;
+    /**
+     * 
      * @type {Date}
-     * @memberof TaskRead
+     * @memberof ProjectSprintTaskSnapshotRead
      */
     createdAt: Date | null;
-    /**
-     *
-     * @type {Date}
-     * @memberof TaskRead
-     */
-    updatedAt: Date | null;
 }
 
 /**
- * Check if a given object implements the TaskRead interface.
+ * Check if a given object implements the ProjectSprintTaskSnapshotRead interface.
  */
-export function instanceOfTaskRead(value: object): value is TaskRead {
+export function instanceOfProjectSprintTaskSnapshotRead(value: object): value is ProjectSprintTaskSnapshotRead {
     if (!('id' in value) || value['id'] === undefined) return false;
-    if (!('projectId' in value) || value['projectId'] === undefined) return false;
     if (!('sprintId' in value) || value['sprintId'] === undefined) return false;
+    if (!('taskId' in value) || value['taskId'] === undefined) return false;
     if (!('columnId' in value) || value['columnId'] === undefined) return false;
     if (!('title' in value) || value['title'] === undefined) return false;
+    if (!('outcome' in value) || value['outcome'] === undefined) return false;
     if (!('priority' in value) || value['priority'] === undefined) return false;
     if (!('rank' in value) || value['rank'] === undefined) return false;
-    if (!('backlogRank' in value) || value['backlogRank'] === undefined) return false;
-    if (!('assigneeId' in value) || value['assigneeId'] === undefined) return false;
     if (!('description' in value) || value['description'] === undefined) return false;
     if (!('acceptanceCriteria' in value) || value['acceptanceCriteria'] === undefined) return false;
     if (!('tag' in value) || value['tag'] === undefined) return false;
     if (!('createdAt' in value) || value['createdAt'] === undefined) return false;
-    if (!('updatedAt' in value) || value['updatedAt'] === undefined) return false;
     return true;
 }
 
-export function TaskReadFromJSON(json: any): TaskRead {
-    return TaskReadFromJSONTyped(json, false);
+export function ProjectSprintTaskSnapshotReadFromJSON(json: any): ProjectSprintTaskSnapshotRead {
+    return ProjectSprintTaskSnapshotReadFromJSONTyped(json, false);
 }
 
-export function TaskReadFromJSONTyped(json: any, ignoreDiscriminator: boolean): TaskRead {
+export function ProjectSprintTaskSnapshotReadFromJSONTyped(json: any, ignoreDiscriminator: boolean): ProjectSprintTaskSnapshotRead {
     if (json == null) {
         return json;
     }
     return {
         
         'id': json['id'],
-        'projectId': json['project_id'],
         'sprintId': json['sprint_id'],
+        'taskId': json['task_id'],
         'columnId': json['column_id'],
         'title': json['title'],
+        'outcome': json['outcome'],
         'priority': json['priority'],
         'rank': json['rank'],
-        'backlogRank': json['backlog_rank'],
-        'assigneeId': json['assignee_id'],
         'description': json['description'],
         'acceptanceCriteria': json['acceptance_criteria'],
         'tag': json['tag'],
+        'liveTaskExists': json['live_task_exists'] == null ? undefined : json['live_task_exists'],
         'createdAt': (json['created_at'] == null ? null : new Date(json['created_at'])),
-        'updatedAt': (json['updated_at'] == null ? null : new Date(json['updated_at'])),
     };
 }
 
-export function TaskReadToJSON(json: any): TaskRead {
-    return TaskReadToJSONTyped(json, false);
+export function ProjectSprintTaskSnapshotReadToJSON(json: any): ProjectSprintTaskSnapshotRead {
+    return ProjectSprintTaskSnapshotReadToJSONTyped(json, false);
 }
 
-export function TaskReadToJSONTyped(value?: TaskRead | null, ignoreDiscriminator: boolean = false): any {
+export function ProjectSprintTaskSnapshotReadToJSONTyped(value?: ProjectSprintTaskSnapshotRead | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }
@@ -182,19 +157,18 @@ export function TaskReadToJSONTyped(value?: TaskRead | null, ignoreDiscriminator
     return {
         
         'id': value['id'],
-        'project_id': value['projectId'],
         'sprint_id': value['sprintId'],
+        'task_id': value['taskId'],
         'column_id': value['columnId'],
         'title': value['title'],
+        'outcome': value['outcome'],
         'priority': value['priority'],
         'rank': value['rank'],
-        'backlog_rank': value['backlogRank'],
-        'assignee_id': value['assigneeId'],
         'description': value['description'],
         'acceptance_criteria': value['acceptanceCriteria'],
         'tag': value['tag'],
+        'live_task_exists': value['liveTaskExists'],
         'created_at': value['createdAt'] == null ? value['createdAt'] : value['createdAt'].toISOString(),
-        'updated_at': value['updatedAt'] == null ? value['updatedAt'] : value['updatedAt'].toISOString(),
     };
 }
 

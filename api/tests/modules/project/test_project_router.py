@@ -128,7 +128,9 @@ async def app(
     original_websocket_auth_boundary = deps.websocket_auth_boundary
     original_project_chat_fanout = project_routes.project_chat_fanout
     deps.websocket_auth_boundary = WebSocketAuthBoundary(authenticate_request)
-    project_routes.project_chat_fanout = ProjectChatFanout(FakeProjectChatFanoutBroker())
+    project_routes.project_chat_fanout = ProjectChatFanout(
+        FakeProjectChatFanoutBroker()
+    )
 
     yield app
 
@@ -671,9 +673,7 @@ async def test_active_sprint_task_list_filters_project_tasks_by_sprint_membershi
         "Sprint task",
         "Backlog task",
     }
-    assert [task["title"] for task in sprint_tasks_response.json()] == [
-        "Sprint task"
-    ]
+    assert [task["title"] for task in sprint_tasks_response.json()] == ["Sprint task"]
 
 
 @pytest.mark.asyncio
@@ -935,9 +935,10 @@ async def test_project_member_removes_active_sprint_task_to_top_of_backlog(
     assert remove_response.json()["sprint_id"] is None
     assert remove_response.json()["column_id"] == todo_column["id"]
     assert remove_response.json()["rank"] == sprint_task_response.json()["rank"]
-    assert remove_response.json()["backlog_rank"] < existing_backlog_response.json()[
-        "backlog_rank"
-    ]
+    assert (
+        remove_response.json()["backlog_rank"]
+        < existing_backlog_response.json()["backlog_rank"]
+    )
     assert active_sprint_response.json() == []
     assert [task["title"] for task in backlog_response.json()] == [
         "Removed sprint task",
@@ -1049,9 +1050,9 @@ async def test_project_backlog_lists_unfinished_non_sprint_tasks_in_backlog_orde
     assert first_response.status_code == 201
     assert second_response.status_code == 201
     assert second_response.json()["column_id"] == todo_column["id"]
-    assert second_response.json()["backlog_rank"] < first_response.json()[
-        "backlog_rank"
-    ]
+    assert (
+        second_response.json()["backlog_rank"] < first_response.json()["backlog_rank"]
+    )
     assert sprint_response.json()["sprint_id"] is not None
     assert done_task_response.json()["column_id"] == done_column["id"]
     assert [task["title"] for task in backlog_response.json()] == [
@@ -1642,7 +1643,8 @@ async def test_project_owner_closes_active_sprint_with_snapshots_and_carryover(
         "Finished task",
     ]
     assert {
-        snapshot["title"]: snapshot["outcome"] for snapshot in close_payload["snapshots"]
+        snapshot["title"]: snapshot["outcome"]
+        for snapshot in close_payload["snapshots"]
     } == {
         "First unfinished": "unfinished",
         "Second unfinished": "unfinished",
@@ -1654,13 +1656,16 @@ async def test_project_owner_closes_active_sprint_with_snapshots_and_carryover(
         "Second unfinished",
         "Removed before close",
     ]
-    assert backlog_response.json()[0]["backlog_rank"] < existing_backlog_response.json()[
-        "backlog_rank"
-    ]
+    assert (
+        backlog_response.json()[0]["backlog_rank"]
+        < existing_backlog_response.json()["backlog_rank"]
+    )
     assert backlog_response.json()[0]["column_id"] == todo_column["id"]
 
     async with session_factory() as session:
-        first_task = await session.get(Task, UUID(first_unfinished_response.json()["id"]))
+        first_task = await session.get(
+            Task, UUID(first_unfinished_response.json()["id"])
+        )
         second_task = await session.get(
             Task, UUID(second_unfinished_response.json()["id"])
         )
@@ -2748,6 +2753,31 @@ async def test_project_column_create_is_owner_only_and_rejects_duplicate_names(
 
 
 @pytest.mark.asyncio
+async def test_project_column_create_rejects_reserved_backlog_name(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Enterprise Launch", "code": "ENT", "priority": "medium"},
+    )
+    project_id = project_response.json()["id"]
+
+    response = await client.post(
+        f"/projects/{project_id}/columns",
+        headers={"Authorization": "Bearer token"},
+        json={"name": " BACKLOG "},
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "detail": "Backlog is reserved for the project backlog and cannot be used as a workflow column name"
+    }
+
+
+@pytest.mark.asyncio
 async def test_project_owner_can_rename_column_without_reordering(
     client: AsyncClient,
     users: dict[str, User],
@@ -2852,6 +2882,37 @@ async def test_project_column_rename_is_owner_only_and_rejects_duplicate_names(
     assert unauthorized_response.json() == {"detail": "Project not found"}
     assert duplicate_response.status_code == 409
     assert duplicate_response.json() == {"detail": "Column name already exists"}
+
+
+@pytest.mark.asyncio
+async def test_project_column_rename_rejects_reserved_backlog_name(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Enterprise Launch", "code": "ENT", "priority": "medium"},
+    )
+    project_id = project_response.json()["id"]
+
+    columns_response = await client.get(
+        f"/projects/{project_id}/columns",
+        headers={"Authorization": "Bearer token"},
+    )
+    column_id = columns_response.json()[1]["id"]
+
+    response = await client.patch(
+        f"/projects/{project_id}/columns/{column_id}",
+        headers={"Authorization": "Bearer token"},
+        json={"name": " backlog "},
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "detail": "Backlog is reserved for the project backlog and cannot be used as a workflow column name"
+    }
 
 
 @pytest.mark.asyncio

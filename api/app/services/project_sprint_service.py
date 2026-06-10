@@ -362,9 +362,7 @@ class ProjectSprintService:
             )
 
         values = payload.update_values()
-        planned_start_date = values.get(
-            "planned_start_date", sprint.planned_start_date
-        )
+        planned_start_date = values.get("planned_start_date", sprint.planned_start_date)
         planned_end_date = values.get("planned_end_date", sprint.planned_end_date)
         if not isinstance(planned_start_date, date) or not isinstance(
             planned_end_date, date

@@ -216,10 +216,16 @@ class ProjectSprintTaskSnapshot(SQLModel, table=True):
     )
     column_id: UUID = Field(sa_column=Column(Uuid(), nullable=False))
     title: str = Field(sa_column=Column(String(), nullable=False))
-    outcome: str = Field(sa_column=Column(String(length=16), nullable=False, index=True))
-    priority: str | None = Field(default=None, sa_column=Column(String(), nullable=True))
+    outcome: str = Field(
+        sa_column=Column(String(length=16), nullable=False, index=True)
+    )
+    priority: str | None = Field(
+        default=None, sa_column=Column(String(), nullable=True)
+    )
     rank: str = Field(sa_column=Column(String(length=64), nullable=False))
-    description: str | None = Field(default=None, sa_column=Column(Text(), nullable=True))
+    description: str | None = Field(
+        default=None, sa_column=Column(Text(), nullable=True)
+    )
     acceptance_criteria: str | None = Field(
         default=None,
         sa_column=Column(Text(), nullable=True),

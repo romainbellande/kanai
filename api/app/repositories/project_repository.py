@@ -112,7 +112,9 @@ class ProjectRepository:
         sprint_table = SQLModel.metadata.tables["project_sprints"]
         sprints = await self._session.scalars(
             select(ProjectSprint)
-            .filter_by(project_id=project_id, lifecycle_state=SprintLifecycleState.CLOSED)
+            .filter_by(
+                project_id=project_id, lifecycle_state=SprintLifecycleState.CLOSED
+            )
             .order_by(sprint_table.c.closed_at.desc(), sprint_table.c.created_at.desc())
         )
         return list(sprints.all())
@@ -137,9 +139,9 @@ class ProjectRepository:
     async def count_sprints_by_project(self, project_id: UUID) -> int:
         """Return the number of sprints created for a project."""
         count = await self._session.scalar(
-            select(func.count()).select_from(ProjectSprint).filter_by(
-                project_id=project_id
-            )
+            select(func.count())
+            .select_from(ProjectSprint)
+            .filter_by(project_id=project_id)
         )
         return int(count or 0)
 

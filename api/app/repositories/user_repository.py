@@ -38,7 +38,9 @@ class UserRepository:
             select(User).filter_by(externalId=external_id)
         )
 
-    async def list(self, *, search: str | None = None, limit: int | None = None) -> list[User]:
+    async def list(
+        self, *, search: str | None = None, limit: int | None = None
+    ) -> list[User]:
         """Return users ordered by external identity, optionally filtered by identity text."""
         statement = select(User)
         search_text = search.strip() if search is not None else ""

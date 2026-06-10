@@ -20,6 +20,7 @@ import { mapValues } from '../runtime';
  * Parameters:
  *     title: Task title.
  *     column_id: Optional workflow column ID. Defaults to the first project column.
+ *     include_in_active_sprint: Whether the new task belongs to the active sprint.
  *     priority: Optional priority level for the task.
  *     assignee_id: Optional user ID assigned to the task.
  *     description: Optional task details.
@@ -30,43 +31,49 @@ import { mapValues } from '../runtime';
  */
 export interface TaskCreate {
     /**
-     * 
+     *
      * @type {string}
      * @memberof TaskCreate
      */
     title: string;
     /**
-     * 
+     *
      * @type {string}
      * @memberof TaskCreate
      */
     columnId?: string | null;
     /**
-     * 
+     *
+     * @type {boolean}
+     * @memberof TaskCreate
+     */
+    includeInActiveSprint?: boolean;
+    /**
+     *
      * @type {string}
      * @memberof TaskCreate
      */
     priority?: string | null;
     /**
-     * 
+     *
      * @type {string}
      * @memberof TaskCreate
      */
     assigneeId?: string | null;
     /**
-     * 
+     *
      * @type {string}
      * @memberof TaskCreate
      */
     description?: string | null;
     /**
-     * 
+     *
      * @type {string}
      * @memberof TaskCreate
      */
     acceptanceCriteria?: string | null;
     /**
-     * 
+     *
      * @type {string}
      * @memberof TaskCreate
      */
@@ -93,6 +100,7 @@ export function TaskCreateFromJSONTyped(json: any, ignoreDiscriminator: boolean)
         
         'title': json['title'],
         'columnId': json['column_id'] == null ? undefined : json['column_id'],
+        'includeInActiveSprint': json['include_in_active_sprint'] == null ? undefined : json['include_in_active_sprint'],
         'priority': json['priority'] == null ? undefined : json['priority'],
         'assigneeId': json['assignee_id'] == null ? undefined : json['assignee_id'],
         'description': json['description'] == null ? undefined : json['description'],
@@ -114,6 +122,7 @@ export function TaskCreateToJSONTyped(value?: TaskCreate | null, ignoreDiscrimin
         
         'title': value['title'],
         'column_id': value['columnId'],
+        'include_in_active_sprint': value['includeInActiveSprint'],
         'priority': value['priority'],
         'assignee_id': value['assigneeId'],
         'description': value['description'],

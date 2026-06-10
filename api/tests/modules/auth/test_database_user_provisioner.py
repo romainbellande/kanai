@@ -116,7 +116,9 @@ async def test_provision_preserves_existing_display_name_when_claim_is_blank_or_
     await provisioner.provision(build_context("missing-user"))
 
     async with session_factory() as session:
-        blank_user = await session.scalar(select(User).filter_by(externalId="blank-user"))
+        blank_user = await session.scalar(
+            select(User).filter_by(externalId="blank-user")
+        )
         missing_user = await session.scalar(
             select(User).filter_by(externalId="missing-user")
         )

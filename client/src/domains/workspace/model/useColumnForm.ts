@@ -10,6 +10,8 @@ import {
 } from "#/api/client";
 
 export const COLUMN_DESCRIPTION_MAX_LENGTH = 500;
+export const RESERVED_COLUMN_NAME_MESSAGE =
+	"Backlog is reserved for the project backlog and cannot be used as a workflow column name.";
 
 export type ColumnFormValues = {
 	name: string;
@@ -71,6 +73,10 @@ function getDuplicateColumnName(
 				column.name.trim().toLocaleLowerCase() !== normalizedExcludedName,
 		)?.name ?? null
 	);
+}
+
+export function isReservedColumnName(name: string): boolean {
+	return name.trim().toLocaleLowerCase() === "backlog";
 }
 
 function isEditInput(input: UseColumnFormInput): input is EditColumnFormInput {
@@ -244,6 +250,11 @@ export function useColumnForm(input: UseColumnFormInput) {
 
 		if (!name) {
 			setErrorMessage("Column name is required.");
+			return null;
+		}
+
+		if (isReservedColumnName(name)) {
+			setErrorMessage(RESERVED_COLUMN_NAME_MESSAGE);
 			return null;
 		}
 

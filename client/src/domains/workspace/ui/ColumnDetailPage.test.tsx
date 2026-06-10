@@ -22,6 +22,7 @@ import {
 	projectTasksQueryOptions,
 	type Task,
 } from "#/api/client";
+import { RESERVED_COLUMN_NAME_MESSAGE } from "#/domains/workspace/model/useColumnForm";
 import { ColumnDetailPage } from "#/domains/workspace/ui/ColumnDetailPage";
 
 const navigateMock = vi.fn();
@@ -342,6 +343,36 @@ describe("ColumnDetailPage", () => {
 				params: { projectId: "project-1" },
 			}),
 		);
+	});
+
+	it("rejects reserved Backlog names before saving", async () => {
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project(),
+		);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({ name: "To Do" }),
+		]);
+		queryClient.setQueryData(
+			projectTasksQueryOptions("project-1").queryKey,
+			[],
+		);
+		queryClient.setQueryData(currentUserQueryOptions().queryKey, {
+			id: "user-1",
+		});
+		const fetchMock = vi.fn<typeof fetch>();
+		vi.stubGlobal("fetch", fetchMock);
+
+		renderColumnDetailPage(queryClient);
+
+		fireEvent.change(screen.getByLabelText(/column name/i), {
+			target: { value: " backlog " },
+		});
+		fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+
+		expect(await screen.findByText(RESERVED_COLUMN_NAME_MESSAGE)).toBeTruthy();
+		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
 	it("disables delete with helper text for final and non-empty columns", () => {

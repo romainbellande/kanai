@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Project, ProjectColumn, Task } from "#/api/client";
 import {
 	getColumnFormAccessState,
+	RESERVED_COLUMN_NAME_MESSAGE,
 	useColumnForm,
 } from "#/domains/workspace/model/useColumnForm";
 
@@ -178,6 +179,34 @@ describe("useColumnForm", () => {
 		expect(result.current.errorMessage).toBe(
 			"Column description must be 500 characters or fewer.",
 		);
+	});
+
+	it("rejects reserved Backlog names before saving", async () => {
+		const queryClient = createTestQueryClient();
+		const fetchMock = vi.fn();
+		vi.stubGlobal("fetch", fetchMock);
+		const { result } = renderHook(
+			() =>
+				useColumnForm({
+					projectId: "project-1",
+					columnId: "column-1",
+					project: project(),
+					columns: [column({ name: "To Do" })],
+					currentUserId: "user-1",
+					isProjectLoading: false,
+					isColumnsLoading: false,
+					isCurrentUserLoading: false,
+				}),
+			{ wrapper: createWrapper(queryClient) },
+		);
+
+		await act(async () => {
+			result.current.setField("name", " BACKLOG ");
+			await result.current.submit();
+		});
+
+		expect(result.current.errorMessage).toBe(RESERVED_COLUMN_NAME_MESSAGE);
+		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
 	it("trims and saves values", async () => {

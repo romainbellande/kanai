@@ -58,12 +58,10 @@ class ProjectChatService:
             )
 
         messages = await self._session.scalars(
-            statement
-            .order_by(
+            statement.order_by(
                 chat_messages.c.created_at.desc(),
                 chat_messages.c.id.desc(),
-            )
-            .limit(limit)
+            ).limit(limit)
         )
         ordered_messages = list(reversed(list(messages.all())))
         author_ids = {

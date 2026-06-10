@@ -17,14 +17,24 @@
 import * as runtime from '../runtime';
 import type {
   HTTPValidationError,
+  ProjectBacklogReorder,
   ProjectChatMessageRead,
   ProjectColumnCreate,
   ProjectColumnRead,
   ProjectColumnReorder,
   ProjectColumnUpdate,
   ProjectCreate,
+  ProjectDoneColumnRead,
+  ProjectDoneColumnUpdate,
   ProjectMemberCreate,
   ProjectRead,
+  ProjectSprintClosePreviewRead,
+  ProjectSprintCloseRead,
+  ProjectSprintCreate,
+  ProjectSprintHistoryRead,
+  ProjectSprintRead,
+  ProjectSprintTaskAdd,
+  ProjectSprintUpdate,
   ProjectUpdate,
   TaskCreate,
   TaskDestination,
@@ -34,6 +44,8 @@ import type {
 import {
     HTTPValidationErrorFromJSON,
     HTTPValidationErrorToJSON,
+    ProjectBacklogReorderFromJSON,
+    ProjectBacklogReorderToJSON,
     ProjectChatMessageReadFromJSON,
     ProjectChatMessageReadToJSON,
     ProjectColumnCreateFromJSON,
@@ -46,10 +58,28 @@ import {
     ProjectColumnUpdateToJSON,
     ProjectCreateFromJSON,
     ProjectCreateToJSON,
+    ProjectDoneColumnReadFromJSON,
+    ProjectDoneColumnReadToJSON,
+    ProjectDoneColumnUpdateFromJSON,
+    ProjectDoneColumnUpdateToJSON,
     ProjectMemberCreateFromJSON,
     ProjectMemberCreateToJSON,
     ProjectReadFromJSON,
     ProjectReadToJSON,
+    ProjectSprintClosePreviewReadFromJSON,
+    ProjectSprintClosePreviewReadToJSON,
+    ProjectSprintCloseReadFromJSON,
+    ProjectSprintCloseReadToJSON,
+    ProjectSprintCreateFromJSON,
+    ProjectSprintCreateToJSON,
+    ProjectSprintHistoryReadFromJSON,
+    ProjectSprintHistoryReadToJSON,
+    ProjectSprintReadFromJSON,
+    ProjectSprintReadToJSON,
+    ProjectSprintTaskAddFromJSON,
+    ProjectSprintTaskAddToJSON,
+    ProjectSprintUpdateFromJSON,
+    ProjectSprintUpdateToJSON,
     ProjectUpdateFromJSON,
     ProjectUpdateToJSON,
     TaskCreateFromJSON,
@@ -67,6 +97,20 @@ export interface AddProjectMemberProjectsProjectIdMembersPostRequest {
     projectMemberCreate: ProjectMemberCreate;
 }
 
+export interface AddTaskToActiveProjectSprintProjectsProjectIdSprintsActiveTasksPostRequest {
+    projectId: string;
+    projectSprintTaskAdd: ProjectSprintTaskAdd;
+}
+
+export interface CloseActiveProjectSprintProjectsProjectIdSprintsActiveClosePostRequest {
+    projectId: string;
+}
+
+export interface CreateProjectBacklogTaskProjectsProjectIdBacklogTasksPostRequest {
+    projectId: string;
+    taskCreate: TaskCreate;
+}
+
 export interface CreateProjectColumnProjectsProjectIdColumnsPostRequest {
     projectId: string;
     projectColumnCreate: ProjectColumnCreate;
@@ -74,6 +118,11 @@ export interface CreateProjectColumnProjectsProjectIdColumnsPostRequest {
 
 export interface CreateProjectEndpointProjectsPostRequest {
     projectCreate: ProjectCreate;
+}
+
+export interface CreateProjectSprintProjectsProjectIdSprintsPostRequest {
+    projectId: string;
+    projectSprintCreate: ProjectSprintCreate;
 }
 
 export interface CreateTaskEndpointProjectsProjectIdTasksPostRequest {
@@ -95,6 +144,18 @@ export interface DeleteTaskEndpointProjectsProjectIdTasksTaskIdDeleteRequest {
     taskId: string;
 }
 
+export interface GetActiveProjectSprintCloseConfirmationProjectsProjectIdSprintsActiveCloseConfirmationGetRequest {
+    projectId: string;
+}
+
+export interface GetActiveProjectSprintProjectsProjectIdSprintsActiveGetRequest {
+    projectId: string;
+}
+
+export interface GetProjectDoneColumnProjectsProjectIdDoneColumnGetRequest {
+    projectId: string;
+}
+
 export interface GetProjectProjectsProjectIdGetRequest {
     projectId: string;
 }
@@ -104,12 +165,24 @@ export interface GetTaskEndpointProjectsProjectIdTasksTaskIdGetRequest {
     taskId: string;
 }
 
+export interface ListActiveSprintTasksEndpointProjectsProjectIdTasksActiveSprintGetRequest {
+    projectId: string;
+}
+
+export interface ListProjectBacklogProjectsProjectIdBacklogGetRequest {
+    projectId: string;
+}
+
 export interface ListProjectChatMessagesProjectsProjectIdChatMessagesGetRequest {
     projectId: string;
     cursor?: string | null;
 }
 
 export interface ListProjectColumnsProjectsProjectIdColumnsGetRequest {
+    projectId: string;
+}
+
+export interface ListProjectSprintHistoryProjectsProjectIdSprintsHistoryGetRequest {
     projectId: string;
 }
 
@@ -123,15 +196,35 @@ export interface MoveTaskEndpointProjectsProjectIdTasksTaskIdMovePutRequest {
     taskDestination: TaskDestination;
 }
 
+export interface RemoveTaskFromActiveProjectSprintProjectsProjectIdSprintsActiveTasksTaskIdDeleteRequest {
+    projectId: string;
+    taskId: string;
+}
+
+export interface ReorderProjectBacklogProjectsProjectIdBacklogReorderPutRequest {
+    projectId: string;
+    projectBacklogReorder: ProjectBacklogReorder;
+}
+
 export interface ReorderProjectColumnsProjectsProjectIdColumnsReorderPutRequest {
     projectId: string;
     projectColumnReorder: ProjectColumnReorder;
+}
+
+export interface UpdateActiveProjectSprintProjectsProjectIdSprintsActivePatchRequest {
+    projectId: string;
+    projectSprintUpdate: ProjectSprintUpdate;
 }
 
 export interface UpdateProjectColumnProjectsProjectIdColumnsColumnIdPatchRequest {
     projectId: string;
     columnId: string;
     projectColumnUpdate: ProjectColumnUpdate;
+}
+
+export interface UpdateProjectDoneColumnProjectsProjectIdDoneColumnPatchRequest {
+    projectId: string;
+    projectDoneColumnUpdate: ProjectDoneColumnUpdate;
 }
 
 export interface UpdateProjectProjectsProjectIdPatchRequest {
@@ -204,6 +297,167 @@ export class ProjectsApi extends runtime.BaseAPI {
      */
     async addProjectMemberProjectsProjectIdMembersPost(requestParameters: AddProjectMemberProjectsProjectIdMembersPostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectRead> {
         const response = await this.addProjectMemberProjectsProjectIdMembersPostRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for addTaskToActiveProjectSprintProjectsProjectIdSprintsActiveTasksPost without sending the request
+     */
+    async addTaskToActiveProjectSprintProjectsProjectIdSprintsActiveTasksPostRequestOpts(requestParameters: AddTaskToActiveProjectSprintProjectsProjectIdSprintsActiveTasksPostRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling addTaskToActiveProjectSprintProjectsProjectIdSprintsActiveTasksPost().'
+            );
+        }
+
+        if (requestParameters['projectSprintTaskAdd'] == null) {
+            throw new runtime.RequiredError(
+                'projectSprintTaskAdd',
+                'Required parameter "projectSprintTaskAdd" was null or undefined when calling addTaskToActiveProjectSprintProjectsProjectIdSprintsActiveTasksPost().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+
+        let urlPath = `/projects/{project_id}/sprints/active/tasks`;
+        urlPath = urlPath.replace(`{${"project_id"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        return {
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+            body: ProjectSprintTaskAddToJSON(requestParameters['projectSprintTaskAdd']),
+        };
+    }
+
+    /**
+     * Add an existing Backlog task to the active sprint.
+     * Add Task To Active Project Sprint
+     */
+    async addTaskToActiveProjectSprintProjectsProjectIdSprintsActiveTasksPostRaw(requestParameters: AddTaskToActiveProjectSprintProjectsProjectIdSprintsActiveTasksPostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<TaskRead>> {
+        const requestOptions = await this.addTaskToActiveProjectSprintProjectsProjectIdSprintsActiveTasksPostRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => TaskReadFromJSON(jsonValue));
+    }
+
+    /**
+     * Add an existing Backlog task to the active sprint.
+     * Add Task To Active Project Sprint
+     */
+    async addTaskToActiveProjectSprintProjectsProjectIdSprintsActiveTasksPost(requestParameters: AddTaskToActiveProjectSprintProjectsProjectIdSprintsActiveTasksPostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<TaskRead> {
+        const response = await this.addTaskToActiveProjectSprintProjectsProjectIdSprintsActiveTasksPostRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for closeActiveProjectSprintProjectsProjectIdSprintsActiveClosePost without sending the request
+     */
+    async closeActiveProjectSprintProjectsProjectIdSprintsActiveClosePostRequestOpts(requestParameters: CloseActiveProjectSprintProjectsProjectIdSprintsActiveClosePostRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling closeActiveProjectSprintProjectsProjectIdSprintsActiveClosePost().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/projects/{project_id}/sprints/active/close`;
+        urlPath = urlPath.replace(`{${"project_id"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        return {
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     * Close the active sprint and create immutable task history.
+     * Close Active Project Sprint
+     */
+    async closeActiveProjectSprintProjectsProjectIdSprintsActiveClosePostRaw(requestParameters: CloseActiveProjectSprintProjectsProjectIdSprintsActiveClosePostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectSprintCloseRead>> {
+        const requestOptions = await this.closeActiveProjectSprintProjectsProjectIdSprintsActiveClosePostRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ProjectSprintCloseReadFromJSON(jsonValue));
+    }
+
+    /**
+     * Close the active sprint and create immutable task history.
+     * Close Active Project Sprint
+     */
+    async closeActiveProjectSprintProjectsProjectIdSprintsActiveClosePost(requestParameters: CloseActiveProjectSprintProjectsProjectIdSprintsActiveClosePostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectSprintCloseRead> {
+        const response = await this.closeActiveProjectSprintProjectsProjectIdSprintsActiveClosePostRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for createProjectBacklogTaskProjectsProjectIdBacklogTasksPost without sending the request
+     */
+    async createProjectBacklogTaskProjectsProjectIdBacklogTasksPostRequestOpts(requestParameters: CreateProjectBacklogTaskProjectsProjectIdBacklogTasksPostRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling createProjectBacklogTaskProjectsProjectIdBacklogTasksPost().'
+            );
+        }
+
+        if (requestParameters['taskCreate'] == null) {
+            throw new runtime.RequiredError(
+                'taskCreate',
+                'Required parameter "taskCreate" was null or undefined when calling createProjectBacklogTaskProjectsProjectIdBacklogTasksPost().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+
+        let urlPath = `/projects/{project_id}/backlog/tasks`;
+        urlPath = urlPath.replace(`{${"project_id"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        return {
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+            body: TaskCreateToJSON(requestParameters['taskCreate']),
+        };
+    }
+
+    /**
+     * Create a task at the top of the project Backlog.
+     * Create Project Backlog Task
+     */
+    async createProjectBacklogTaskProjectsProjectIdBacklogTasksPostRaw(requestParameters: CreateProjectBacklogTaskProjectsProjectIdBacklogTasksPostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<TaskRead>> {
+        const requestOptions = await this.createProjectBacklogTaskProjectsProjectIdBacklogTasksPostRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => TaskReadFromJSON(jsonValue));
+    }
+
+    /**
+     * Create a task at the top of the project Backlog.
+     * Create Project Backlog Task
+     */
+    async createProjectBacklogTaskProjectsProjectIdBacklogTasksPost(requestParameters: CreateProjectBacklogTaskProjectsProjectIdBacklogTasksPostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<TaskRead> {
+        const response = await this.createProjectBacklogTaskProjectsProjectIdBacklogTasksPostRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -310,6 +564,63 @@ export class ProjectsApi extends runtime.BaseAPI {
      */
     async createProjectEndpointProjectsPost(requestParameters: CreateProjectEndpointProjectsPostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectRead> {
         const response = await this.createProjectEndpointProjectsPostRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for createProjectSprintProjectsProjectIdSprintsPost without sending the request
+     */
+    async createProjectSprintProjectsProjectIdSprintsPostRequestOpts(requestParameters: CreateProjectSprintProjectsProjectIdSprintsPostRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling createProjectSprintProjectsProjectIdSprintsPost().'
+            );
+        }
+
+        if (requestParameters['projectSprintCreate'] == null) {
+            throw new runtime.RequiredError(
+                'projectSprintCreate',
+                'Required parameter "projectSprintCreate" was null or undefined when calling createProjectSprintProjectsProjectIdSprintsPost().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+
+        let urlPath = `/projects/{project_id}/sprints`;
+        urlPath = urlPath.replace(`{${"project_id"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        return {
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+            body: ProjectSprintCreateToJSON(requestParameters['projectSprintCreate']),
+        };
+    }
+
+    /**
+     * Create an empty active sprint for a project owned by the current user.
+     * Create Project Sprint
+     */
+    async createProjectSprintProjectsProjectIdSprintsPostRaw(requestParameters: CreateProjectSprintProjectsProjectIdSprintsPostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectSprintRead>> {
+        const requestOptions = await this.createProjectSprintProjectsProjectIdSprintsPostRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ProjectSprintReadFromJSON(jsonValue));
+    }
+
+    /**
+     * Create an empty active sprint for a project owned by the current user.
+     * Create Project Sprint
+     */
+    async createProjectSprintProjectsProjectIdSprintsPost(requestParameters: CreateProjectSprintProjectsProjectIdSprintsPostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectSprintRead> {
+        const response = await this.createProjectSprintProjectsProjectIdSprintsPostRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -525,6 +836,147 @@ export class ProjectsApi extends runtime.BaseAPI {
     }
 
     /**
+     * Creates request options for getActiveProjectSprintCloseConfirmationProjectsProjectIdSprintsActiveCloseConfirmationGet without sending the request
+     */
+    async getActiveProjectSprintCloseConfirmationProjectsProjectIdSprintsActiveCloseConfirmationGetRequestOpts(requestParameters: GetActiveProjectSprintCloseConfirmationProjectsProjectIdSprintsActiveCloseConfirmationGetRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling getActiveProjectSprintCloseConfirmationProjectsProjectIdSprintsActiveCloseConfirmationGet().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/projects/{project_id}/sprints/active/close-confirmation`;
+        urlPath = urlPath.replace(`{${"project_id"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        return {
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     * Preview the irreversible active sprint close outcome.
+     * Get Active Project Sprint Close Confirmation
+     */
+    async getActiveProjectSprintCloseConfirmationProjectsProjectIdSprintsActiveCloseConfirmationGetRaw(requestParameters: GetActiveProjectSprintCloseConfirmationProjectsProjectIdSprintsActiveCloseConfirmationGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectSprintClosePreviewRead>> {
+        const requestOptions = await this.getActiveProjectSprintCloseConfirmationProjectsProjectIdSprintsActiveCloseConfirmationGetRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ProjectSprintClosePreviewReadFromJSON(jsonValue));
+    }
+
+    /**
+     * Preview the irreversible active sprint close outcome.
+     * Get Active Project Sprint Close Confirmation
+     */
+    async getActiveProjectSprintCloseConfirmationProjectsProjectIdSprintsActiveCloseConfirmationGet(requestParameters: GetActiveProjectSprintCloseConfirmationProjectsProjectIdSprintsActiveCloseConfirmationGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectSprintClosePreviewRead> {
+        const response = await this.getActiveProjectSprintCloseConfirmationProjectsProjectIdSprintsActiveCloseConfirmationGetRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for getActiveProjectSprintProjectsProjectIdSprintsActiveGet without sending the request
+     */
+    async getActiveProjectSprintProjectsProjectIdSprintsActiveGetRequestOpts(requestParameters: GetActiveProjectSprintProjectsProjectIdSprintsActiveGetRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling getActiveProjectSprintProjectsProjectIdSprintsActiveGet().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/projects/{project_id}/sprints/active`;
+        urlPath = urlPath.replace(`{${"project_id"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        return {
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     * Get the active sprint for a project accessible to the current user.
+     * Get Active Project Sprint
+     */
+    async getActiveProjectSprintProjectsProjectIdSprintsActiveGetRaw(requestParameters: GetActiveProjectSprintProjectsProjectIdSprintsActiveGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectSprintRead>> {
+        const requestOptions = await this.getActiveProjectSprintProjectsProjectIdSprintsActiveGetRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ProjectSprintReadFromJSON(jsonValue));
+    }
+
+    /**
+     * Get the active sprint for a project accessible to the current user.
+     * Get Active Project Sprint
+     */
+    async getActiveProjectSprintProjectsProjectIdSprintsActiveGet(requestParameters: GetActiveProjectSprintProjectsProjectIdSprintsActiveGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectSprintRead> {
+        const response = await this.getActiveProjectSprintProjectsProjectIdSprintsActiveGetRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for getProjectDoneColumnProjectsProjectIdDoneColumnGet without sending the request
+     */
+    async getProjectDoneColumnProjectsProjectIdDoneColumnGetRequestOpts(requestParameters: GetProjectDoneColumnProjectsProjectIdDoneColumnGetRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling getProjectDoneColumnProjectsProjectIdDoneColumnGet().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/projects/{project_id}/done-column`;
+        urlPath = urlPath.replace(`{${"project_id"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        return {
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     * Get the Done Column designation for a project visible to the user.
+     * Get Project Done Column
+     */
+    async getProjectDoneColumnProjectsProjectIdDoneColumnGetRaw(requestParameters: GetProjectDoneColumnProjectsProjectIdDoneColumnGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectDoneColumnRead>> {
+        const requestOptions = await this.getProjectDoneColumnProjectsProjectIdDoneColumnGetRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ProjectDoneColumnReadFromJSON(jsonValue));
+    }
+
+    /**
+     * Get the Done Column designation for a project visible to the user.
+     * Get Project Done Column
+     */
+    async getProjectDoneColumnProjectsProjectIdDoneColumnGet(requestParameters: GetProjectDoneColumnProjectsProjectIdDoneColumnGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectDoneColumnRead> {
+        const response = await this.getProjectDoneColumnProjectsProjectIdDoneColumnGetRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
      * Creates request options for getProjectProjectsProjectIdGet without sending the request
      */
     async getProjectProjectsProjectIdGetRequestOpts(requestParameters: GetProjectProjectsProjectIdGetRequest): Promise<runtime.RequestOpts> {
@@ -627,6 +1079,100 @@ export class ProjectsApi extends runtime.BaseAPI {
     }
 
     /**
+     * Creates request options for listActiveSprintTasksEndpointProjectsProjectIdTasksActiveSprintGet without sending the request
+     */
+    async listActiveSprintTasksEndpointProjectsProjectIdTasksActiveSprintGetRequestOpts(requestParameters: ListActiveSprintTasksEndpointProjectsProjectIdTasksActiveSprintGetRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling listActiveSprintTasksEndpointProjectsProjectIdTasksActiveSprintGet().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/projects/{project_id}/tasks/active-sprint`;
+        urlPath = urlPath.replace(`{${"project_id"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        return {
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     * List tasks selected into the project\'s active sprint.
+     * List Active Sprint Tasks Endpoint
+     */
+    async listActiveSprintTasksEndpointProjectsProjectIdTasksActiveSprintGetRaw(requestParameters: ListActiveSprintTasksEndpointProjectsProjectIdTasksActiveSprintGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Array<TaskRead>>> {
+        const requestOptions = await this.listActiveSprintTasksEndpointProjectsProjectIdTasksActiveSprintGetRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(TaskReadFromJSON));
+    }
+
+    /**
+     * List tasks selected into the project\'s active sprint.
+     * List Active Sprint Tasks Endpoint
+     */
+    async listActiveSprintTasksEndpointProjectsProjectIdTasksActiveSprintGet(requestParameters: ListActiveSprintTasksEndpointProjectsProjectIdTasksActiveSprintGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Array<TaskRead>> {
+        const response = await this.listActiveSprintTasksEndpointProjectsProjectIdTasksActiveSprintGetRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for listProjectBacklogProjectsProjectIdBacklogGet without sending the request
+     */
+    async listProjectBacklogProjectsProjectIdBacklogGetRequestOpts(requestParameters: ListProjectBacklogProjectsProjectIdBacklogGetRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling listProjectBacklogProjectsProjectIdBacklogGet().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/projects/{project_id}/backlog`;
+        urlPath = urlPath.replace(`{${"project_id"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        return {
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     * List unfinished non-sprint tasks in project Backlog order.
+     * List Project Backlog
+     */
+    async listProjectBacklogProjectsProjectIdBacklogGetRaw(requestParameters: ListProjectBacklogProjectsProjectIdBacklogGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Array<TaskRead>>> {
+        const requestOptions = await this.listProjectBacklogProjectsProjectIdBacklogGetRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(TaskReadFromJSON));
+    }
+
+    /**
+     * List unfinished non-sprint tasks in project Backlog order.
+     * List Project Backlog
+     */
+    async listProjectBacklogProjectsProjectIdBacklogGet(requestParameters: ListProjectBacklogProjectsProjectIdBacklogGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Array<TaskRead>> {
+        const response = await this.listProjectBacklogProjectsProjectIdBacklogGetRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
      * Creates request options for listProjectChatMessagesProjectsProjectIdChatMessagesGet without sending the request
      */
     async listProjectChatMessagesProjectsProjectIdChatMessagesGetRequestOpts(requestParameters: ListProjectChatMessagesProjectsProjectIdChatMessagesGetRequest): Promise<runtime.RequestOpts> {
@@ -721,6 +1267,53 @@ export class ProjectsApi extends runtime.BaseAPI {
      */
     async listProjectColumnsProjectsProjectIdColumnsGet(requestParameters: ListProjectColumnsProjectsProjectIdColumnsGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Array<ProjectColumnRead>> {
         const response = await this.listProjectColumnsProjectsProjectIdColumnsGetRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for listProjectSprintHistoryProjectsProjectIdSprintsHistoryGet without sending the request
+     */
+    async listProjectSprintHistoryProjectsProjectIdSprintsHistoryGetRequestOpts(requestParameters: ListProjectSprintHistoryProjectsProjectIdSprintsHistoryGetRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling listProjectSprintHistoryProjectsProjectIdSprintsHistoryGet().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/projects/{project_id}/sprints/history`;
+        urlPath = urlPath.replace(`{${"project_id"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        return {
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     * List closed sprint history for a project participant.
+     * List Project Sprint History
+     */
+    async listProjectSprintHistoryProjectsProjectIdSprintsHistoryGetRaw(requestParameters: ListProjectSprintHistoryProjectsProjectIdSprintsHistoryGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Array<ProjectSprintHistoryRead>>> {
+        const requestOptions = await this.listProjectSprintHistoryProjectsProjectIdSprintsHistoryGetRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(ProjectSprintHistoryReadFromJSON));
+    }
+
+    /**
+     * List closed sprint history for a project participant.
+     * List Project Sprint History
+     */
+    async listProjectSprintHistoryProjectsProjectIdSprintsHistoryGet(requestParameters: ListProjectSprintHistoryProjectsProjectIdSprintsHistoryGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Array<ProjectSprintHistoryRead>> {
+        const response = await this.listProjectSprintHistoryProjectsProjectIdSprintsHistoryGetRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -876,6 +1469,118 @@ export class ProjectsApi extends runtime.BaseAPI {
     }
 
     /**
+     * Creates request options for removeTaskFromActiveProjectSprintProjectsProjectIdSprintsActiveTasksTaskIdDelete without sending the request
+     */
+    async removeTaskFromActiveProjectSprintProjectsProjectIdSprintsActiveTasksTaskIdDeleteRequestOpts(requestParameters: RemoveTaskFromActiveProjectSprintProjectsProjectIdSprintsActiveTasksTaskIdDeleteRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling removeTaskFromActiveProjectSprintProjectsProjectIdSprintsActiveTasksTaskIdDelete().'
+            );
+        }
+
+        if (requestParameters['taskId'] == null) {
+            throw new runtime.RequiredError(
+                'taskId',
+                'Required parameter "taskId" was null or undefined when calling removeTaskFromActiveProjectSprintProjectsProjectIdSprintsActiveTasksTaskIdDelete().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/projects/{project_id}/sprints/active/tasks/{task_id}`;
+        urlPath = urlPath.replace(`{${"project_id"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+        urlPath = urlPath.replace(`{${"task_id"}}`, encodeURIComponent(String(requestParameters['taskId'])));
+
+        return {
+            path: urlPath,
+            method: 'DELETE',
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     * Remove an active sprint task back to the project Backlog.
+     * Remove Task From Active Project Sprint
+     */
+    async removeTaskFromActiveProjectSprintProjectsProjectIdSprintsActiveTasksTaskIdDeleteRaw(requestParameters: RemoveTaskFromActiveProjectSprintProjectsProjectIdSprintsActiveTasksTaskIdDeleteRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<TaskRead>> {
+        const requestOptions = await this.removeTaskFromActiveProjectSprintProjectsProjectIdSprintsActiveTasksTaskIdDeleteRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => TaskReadFromJSON(jsonValue));
+    }
+
+    /**
+     * Remove an active sprint task back to the project Backlog.
+     * Remove Task From Active Project Sprint
+     */
+    async removeTaskFromActiveProjectSprintProjectsProjectIdSprintsActiveTasksTaskIdDelete(requestParameters: RemoveTaskFromActiveProjectSprintProjectsProjectIdSprintsActiveTasksTaskIdDeleteRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<TaskRead> {
+        const response = await this.removeTaskFromActiveProjectSprintProjectsProjectIdSprintsActiveTasksTaskIdDeleteRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for reorderProjectBacklogProjectsProjectIdBacklogReorderPut without sending the request
+     */
+    async reorderProjectBacklogProjectsProjectIdBacklogReorderPutRequestOpts(requestParameters: ReorderProjectBacklogProjectsProjectIdBacklogReorderPutRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling reorderProjectBacklogProjectsProjectIdBacklogReorderPut().'
+            );
+        }
+
+        if (requestParameters['projectBacklogReorder'] == null) {
+            throw new runtime.RequiredError(
+                'projectBacklogReorder',
+                'Required parameter "projectBacklogReorder" was null or undefined when calling reorderProjectBacklogProjectsProjectIdBacklogReorderPut().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+
+        let urlPath = `/projects/{project_id}/backlog/reorder`;
+        urlPath = urlPath.replace(`{${"project_id"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        return {
+            path: urlPath,
+            method: 'PUT',
+            headers: headerParameters,
+            query: queryParameters,
+            body: ProjectBacklogReorderToJSON(requestParameters['projectBacklogReorder']),
+        };
+    }
+
+    /**
+     * Persist a complete manual Backlog task order.
+     * Reorder Project Backlog
+     */
+    async reorderProjectBacklogProjectsProjectIdBacklogReorderPutRaw(requestParameters: ReorderProjectBacklogProjectsProjectIdBacklogReorderPutRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Array<TaskRead>>> {
+        const requestOptions = await this.reorderProjectBacklogProjectsProjectIdBacklogReorderPutRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(TaskReadFromJSON));
+    }
+
+    /**
+     * Persist a complete manual Backlog task order.
+     * Reorder Project Backlog
+     */
+    async reorderProjectBacklogProjectsProjectIdBacklogReorderPut(requestParameters: ReorderProjectBacklogProjectsProjectIdBacklogReorderPutRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Array<TaskRead>> {
+        const response = await this.reorderProjectBacklogProjectsProjectIdBacklogReorderPutRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
      * Creates request options for reorderProjectColumnsProjectsProjectIdColumnsReorderPut without sending the request
      */
     async reorderProjectColumnsProjectsProjectIdColumnsReorderPutRequestOpts(requestParameters: ReorderProjectColumnsProjectsProjectIdColumnsReorderPutRequest): Promise<runtime.RequestOpts> {
@@ -929,6 +1634,63 @@ export class ProjectsApi extends runtime.BaseAPI {
      */
     async reorderProjectColumnsProjectsProjectIdColumnsReorderPut(requestParameters: ReorderProjectColumnsProjectsProjectIdColumnsReorderPutRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Array<ProjectColumnRead>> {
         const response = await this.reorderProjectColumnsProjectsProjectIdColumnsReorderPutRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for updateActiveProjectSprintProjectsProjectIdSprintsActivePatch without sending the request
+     */
+    async updateActiveProjectSprintProjectsProjectIdSprintsActivePatchRequestOpts(requestParameters: UpdateActiveProjectSprintProjectsProjectIdSprintsActivePatchRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling updateActiveProjectSprintProjectsProjectIdSprintsActivePatch().'
+            );
+        }
+
+        if (requestParameters['projectSprintUpdate'] == null) {
+            throw new runtime.RequiredError(
+                'projectSprintUpdate',
+                'Required parameter "projectSprintUpdate" was null or undefined when calling updateActiveProjectSprintProjectsProjectIdSprintsActivePatch().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+
+        let urlPath = `/projects/{project_id}/sprints/active`;
+        urlPath = urlPath.replace(`{${"project_id"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        return {
+            path: urlPath,
+            method: 'PATCH',
+            headers: headerParameters,
+            query: queryParameters,
+            body: ProjectSprintUpdateToJSON(requestParameters['projectSprintUpdate']),
+        };
+    }
+
+    /**
+     * Update active sprint metadata for a project owned by the current user.
+     * Update Active Project Sprint
+     */
+    async updateActiveProjectSprintProjectsProjectIdSprintsActivePatchRaw(requestParameters: UpdateActiveProjectSprintProjectsProjectIdSprintsActivePatchRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectSprintRead>> {
+        const requestOptions = await this.updateActiveProjectSprintProjectsProjectIdSprintsActivePatchRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ProjectSprintReadFromJSON(jsonValue));
+    }
+
+    /**
+     * Update active sprint metadata for a project owned by the current user.
+     * Update Active Project Sprint
+     */
+    async updateActiveProjectSprintProjectsProjectIdSprintsActivePatch(requestParameters: UpdateActiveProjectSprintProjectsProjectIdSprintsActivePatchRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectSprintRead> {
+        const response = await this.updateActiveProjectSprintProjectsProjectIdSprintsActivePatchRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -994,6 +1756,63 @@ export class ProjectsApi extends runtime.BaseAPI {
      */
     async updateProjectColumnProjectsProjectIdColumnsColumnIdPatch(requestParameters: UpdateProjectColumnProjectsProjectIdColumnsColumnIdPatchRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectColumnRead> {
         const response = await this.updateProjectColumnProjectsProjectIdColumnsColumnIdPatchRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for updateProjectDoneColumnProjectsProjectIdDoneColumnPatch without sending the request
+     */
+    async updateProjectDoneColumnProjectsProjectIdDoneColumnPatchRequestOpts(requestParameters: UpdateProjectDoneColumnProjectsProjectIdDoneColumnPatchRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling updateProjectDoneColumnProjectsProjectIdDoneColumnPatch().'
+            );
+        }
+
+        if (requestParameters['projectDoneColumnUpdate'] == null) {
+            throw new runtime.RequiredError(
+                'projectDoneColumnUpdate',
+                'Required parameter "projectDoneColumnUpdate" was null or undefined when calling updateProjectDoneColumnProjectsProjectIdDoneColumnPatch().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+
+        let urlPath = `/projects/{project_id}/done-column`;
+        urlPath = urlPath.replace(`{${"project_id"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        return {
+            path: urlPath,
+            method: 'PATCH',
+            headers: headerParameters,
+            query: queryParameters,
+            body: ProjectDoneColumnUpdateToJSON(requestParameters['projectDoneColumnUpdate']),
+        };
+    }
+
+    /**
+     * Change the Done Column designation for a project owned by the user.
+     * Update Project Done Column
+     */
+    async updateProjectDoneColumnProjectsProjectIdDoneColumnPatchRaw(requestParameters: UpdateProjectDoneColumnProjectsProjectIdDoneColumnPatchRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectDoneColumnRead>> {
+        const requestOptions = await this.updateProjectDoneColumnProjectsProjectIdDoneColumnPatchRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ProjectDoneColumnReadFromJSON(jsonValue));
+    }
+
+    /**
+     * Change the Done Column designation for a project owned by the user.
+     * Update Project Done Column
+     */
+    async updateProjectDoneColumnProjectsProjectIdDoneColumnPatch(requestParameters: UpdateProjectDoneColumnProjectsProjectIdDoneColumnPatchRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectDoneColumnRead> {
+        const response = await this.updateProjectDoneColumnProjectsProjectIdDoneColumnPatchRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

@@ -18,6 +18,7 @@ import {
 	projectColumnsQueryOptions,
 	projectQueryOptions,
 } from "#/api/client";
+import { RESERVED_COLUMN_NAME_MESSAGE } from "#/domains/workspace/model/useColumnForm";
 
 const routerMocks = vi.hoisted(() => ({
 	navigate: vi.fn(),
@@ -192,7 +193,7 @@ describe("CreateColumnPage", () => {
 		});
 	});
 
-	it("validates blank names, duplicate names, and overlong descriptions", async () => {
+	it("validates blank names, reserved names, duplicate names, and overlong descriptions", async () => {
 		const { CreateColumnPage } = await import(
 			"#/domains/workspace/ui/CreateColumnPage"
 		);
@@ -203,6 +204,12 @@ describe("CreateColumnPage", () => {
 		renderWithQueryClient(<CreateColumnPage />);
 		fireEvent.submit(getCreateColumnForm());
 		expect(await screen.findByText("Column name is required.")).toBeTruthy();
+
+		fireEvent.change(screen.getByLabelText(/column name/i), {
+			target: { value: " backlog " },
+		});
+		fireEvent.submit(getCreateColumnForm());
+		expect(await screen.findByText(RESERVED_COLUMN_NAME_MESSAGE)).toBeTruthy();
 
 		fireEvent.change(screen.getByLabelText(/column name/i), {
 			target: { value: " review " },

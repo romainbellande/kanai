@@ -46,7 +46,9 @@ class ProjectChatFanoutBroker(Protocol):
 class RedisProjectChatFanoutBroker:
     """Redis pub/sub broker for project chat realtime events."""
 
-    def __init__(self, redis_url: str, channel: str = PROJECT_CHAT_FANOUT_CHANNEL) -> None:
+    def __init__(
+        self, redis_url: str, channel: str = PROJECT_CHAT_FANOUT_CHANNEL
+    ) -> None:
         """Initialize the Redis broker without opening a connection."""
         self._redis_url = redis_url
         self._channel = channel
@@ -124,9 +126,7 @@ class ProjectChatFanout:
         self._lock = asyncio.Lock()
         self._subscriber_task: asyncio.Task[None] | None = None
 
-    async def connect(
-        self, project_id: UUID, websocket: ProjectChatConnection
-    ) -> None:
+    async def connect(self, project_id: UUID, websocket: ProjectChatConnection) -> None:
         """Register a local WebSocket for project broadcasts."""
         async with self._lock:
             self._connections.setdefault(project_id, set()).add(websocket)
@@ -183,7 +183,9 @@ class ProjectChatFanout:
                 if not isinstance(project_id, str) or not isinstance(payload, dict):
                     continue
 
-                await self._send_local(UUID(project_id), cast("dict[str, object]", payload))
+                await self._send_local(
+                    UUID(project_id), cast("dict[str, object]", payload)
+                )
         except asyncio.CancelledError:
             raise
         except Exception as exc:

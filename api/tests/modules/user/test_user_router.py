@@ -206,17 +206,11 @@ async def test_user_list_searches_display_name_and_external_id_with_limit(
     )
 
     assert display_name_response.status_code == 200
-    assert [user["external_id"] for user in display_name_response.json()] == [
-        "amy-idp"
-    ]
+    assert [user["external_id"] for user in display_name_response.json()] == ["amy-idp"]
     assert external_id_response.status_code == 200
-    assert [user["display_name"] for user in external_id_response.json()] == [
-        "Jordan"
-    ]
+    assert [user["display_name"] for user in external_id_response.json()] == ["Jordan"]
     assert case_response.status_code == 200
-    assert [user["external_id"] for user in case_response.json()] == [
-        "case-user"
-    ]
+    assert [user["external_id"] for user in case_response.json()] == ["case-user"]
 
 
 @pytest.mark.asyncio

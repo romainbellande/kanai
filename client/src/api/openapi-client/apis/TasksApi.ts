@@ -50,6 +50,10 @@ export interface GetTaskEndpointProjectsProjectIdTasksTaskIdGetRequest {
     taskId: string;
 }
 
+export interface ListActiveSprintTasksEndpointProjectsProjectIdTasksActiveSprintGetRequest {
+    projectId: string;
+}
+
 export interface ListTasksEndpointProjectsProjectIdTasksGetRequest {
     projectId: string;
 }
@@ -234,6 +238,53 @@ export class TasksApi extends runtime.BaseAPI {
      */
     async getTaskEndpointProjectsProjectIdTasksTaskIdGet(requestParameters: GetTaskEndpointProjectsProjectIdTasksTaskIdGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<TaskRead> {
         const response = await this.getTaskEndpointProjectsProjectIdTasksTaskIdGetRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for listActiveSprintTasksEndpointProjectsProjectIdTasksActiveSprintGet without sending the request
+     */
+    async listActiveSprintTasksEndpointProjectsProjectIdTasksActiveSprintGetRequestOpts(requestParameters: ListActiveSprintTasksEndpointProjectsProjectIdTasksActiveSprintGetRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling listActiveSprintTasksEndpointProjectsProjectIdTasksActiveSprintGet().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/projects/{project_id}/tasks/active-sprint`;
+        urlPath = urlPath.replace(`{${"project_id"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        return {
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     * List tasks selected into the project\'s active sprint.
+     * List Active Sprint Tasks Endpoint
+     */
+    async listActiveSprintTasksEndpointProjectsProjectIdTasksActiveSprintGetRaw(requestParameters: ListActiveSprintTasksEndpointProjectsProjectIdTasksActiveSprintGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Array<TaskRead>>> {
+        const requestOptions = await this.listActiveSprintTasksEndpointProjectsProjectIdTasksActiveSprintGetRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(TaskReadFromJSON));
+    }
+
+    /**
+     * List tasks selected into the project\'s active sprint.
+     * List Active Sprint Tasks Endpoint
+     */
+    async listActiveSprintTasksEndpointProjectsProjectIdTasksActiveSprintGet(requestParameters: ListActiveSprintTasksEndpointProjectsProjectIdTasksActiveSprintGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Array<TaskRead>> {
+        const response = await this.listActiveSprintTasksEndpointProjectsProjectIdTasksActiveSprintGetRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

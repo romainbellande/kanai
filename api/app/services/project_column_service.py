@@ -17,6 +17,7 @@ from app.services.project_access import ProjectAccess, ProjectRole
 
 DEFAULT_PROJECT_COLUMN_NAMES = ("To Do", "In Progress", "Done")
 PROJECT_COLUMN_DESCRIPTION_MAX_LENGTH = 500
+RESERVED_PROJECT_COLUMN_NAME_MESSAGE = "Backlog is reserved for the project backlog and cannot be used as a workflow column name"
 
 
 class ProjectColumnService:
@@ -57,6 +58,7 @@ class ProjectColumnService:
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Column name is required",
             )
+        self._raise_if_reserved_name(column_name)
 
         existing_columns = await self._repository.list_columns_by_project(project_id)
         if column_name.casefold() in {
@@ -101,6 +103,7 @@ class ProjectColumnService:
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Column name is required",
             )
+        self._raise_if_reserved_name(column_name)
 
         existing_columns = await self._repository.list_columns_by_project(project_id)
         duplicate_names = {
@@ -211,6 +214,16 @@ class ProjectColumnService:
             )
 
         return normalized_description
+
+    @staticmethod
+    def _raise_if_reserved_name(name: str) -> None:
+        if name.casefold() != "backlog":
+            return
+
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=RESERVED_PROJECT_COLUMN_NAME_MESSAGE,
+        )
 
     @staticmethod
     def _to_read(column: ProjectColumn) -> ProjectColumnRead:
