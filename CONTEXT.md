@@ -53,8 +53,8 @@ A Task that is unfinished and not selected for the Current Sprint.
 _Avoid_: Unplanned task, unsprinted task
 
 **Backlog**:
-The list of Backlog Tasks for a Project.
-_Avoid_: Icebox, unscheduled work
+The non-editable planning list of Backlog Tasks for a Project, separate from the Project's workflow columns.
+_Avoid_: Icebox, unscheduled work, workflow column, backlog column
 
 **Backlog Order**:
 The manual priority order of Backlog Tasks in a Project.
