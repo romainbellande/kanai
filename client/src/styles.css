@@ -101,14 +101,14 @@ body::after {
   mask-image: radial-gradient(circle at 50% 30%, black, transparent 78%);
 }
 
-a {
+a:not([class]) {
   color: var(--primary);
   text-decoration-color: rgba(0, 82, 204, 0.28);
   text-decoration-thickness: 1px;
   text-underline-offset: 2px;
 }
 
-a:hover {
+a:not([class]):hover {
   color: var(--primary-container);
 }
 

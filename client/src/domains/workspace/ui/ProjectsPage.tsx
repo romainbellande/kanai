@@ -109,7 +109,7 @@ export function ProjectsPage() {
 								<button
 									type="button"
 									onClick={() => void projectsQuery.refetch()}
-									className="mt-3 rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--on-primary)]"
+									className="mt-3 rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[color:var(--on-primary)]"
 								>
 									Retry
 								</button>
@@ -156,7 +156,7 @@ export function ProjectsPage() {
 											{project.description || "No description provided."}
 										</p>
 									</div>
-									<span className="inline-flex items-center justify-center rounded-full bg-[var(--primary-container)] px-5 py-2 text-sm font-semibold text-[var(--on-primary)] hover:bg-[var(--primary)]">
+									<span className="inline-flex items-center justify-center rounded-full bg-[var(--primary-container)] px-5 py-2 text-sm font-semibold text-[color:var(--on-primary)] hover:bg-[var(--primary)]">
 										Open Board
 									</span>
 								</Link>
@@ -181,7 +181,7 @@ export function ProjectsPage() {
 					</div>
 					<div className="flex max-h-[400px] flex-col gap-5 overflow-y-auto p-5">
 						<div className="flex gap-3">
-							<span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-[var(--primary-container)] text-xs font-semibold text-[var(--on-primary)]">
+							<span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-[var(--primary-container)] text-xs font-semibold text-[color:var(--on-primary)]">
 								{accountInitials || "--"}
 							</span>
 							<div>

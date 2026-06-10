@@ -52,7 +52,7 @@ export function LoginHero({
 					type="button"
 					onClick={onSignIn}
 					disabled={isSigningIn}
-					className="inline-flex items-center justify-center gap-2 rounded-full bg-[linear-gradient(135deg,var(--primary),var(--primary-container))] px-5 py-3 text-sm font-semibold text-[var(--on-primary)] shadow-[0_18px_36px_rgba(12,86,208,0.18)] transition hover:-translate-y-0.5 disabled:translate-y-0 disabled:cursor-wait disabled:opacity-75"
+					className="inline-flex items-center justify-center gap-2 rounded-full bg-[linear-gradient(135deg,var(--primary),var(--primary-container))] px-5 py-3 text-sm font-semibold text-[color:var(--on-primary)] shadow-[0_18px_36px_rgba(12,86,208,0.18)] transition hover:-translate-y-0.5 disabled:translate-y-0 disabled:cursor-wait disabled:opacity-75"
 				>
 					<KeyRound className="h-4 w-4" />
 					{isSigningIn ? "Redirecting..." : `Continue with ${providerLabel}`}

@@ -68,7 +68,12 @@ class Project(SQLModel, table=True):
         default=None,
         sa_column=Column(
             Uuid(),
-            ForeignKey("project_columns.id", ondelete="SET NULL"),
+            ForeignKey(
+                "project_columns.id",
+                name="fk_projects_done_column_id_project_columns",
+                ondelete="SET NULL",
+                use_alter=True,
+            ),
             nullable=True,
         ),
     )

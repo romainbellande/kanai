@@ -40,6 +40,11 @@ def test_project_model_uses_expected_columns() -> None:
     assert columns.priority.nullable is False
     assert columns.description.nullable is True
     assert columns.status.nullable is True
+    [done_column_foreign_key] = columns.done_column_id.foreign_keys
+    constraint = done_column_foreign_key.constraint
+    assert constraint is not None
+    assert constraint.name == "fk_projects_done_column_id_project_columns"
+    assert constraint.use_alter is True
     assert columns.created_at.nullable is False
     assert columns.updated_at.nullable is False
 

@@ -799,7 +799,7 @@ function ActiveSprintSummary({
 								to="/projects/$projectId/tasks/new"
 								params={{ projectId }}
 								search={{ in_sprint: true }}
-								className="inline-flex items-center gap-2 rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-bold text-[var(--on-primary)] no-underline transition hover:brightness-105"
+								className="inline-flex items-center gap-2 rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-bold text-[color:var(--on-primary)] no-underline transition hover:brightness-105"
 							>
 								<Plus className="h-4 w-4" />
 								Add sprint task
@@ -890,7 +890,7 @@ function ActiveSprintSummary({
 						<button
 							type="submit"
 							disabled={isSaving}
-							className="rounded-full bg-[var(--primary)] px-5 py-2 text-sm font-bold text-[var(--on-primary)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+							className="rounded-full bg-[var(--primary)] px-5 py-2 text-sm font-bold text-[color:var(--on-primary)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
 						>
 							{isSaving ? "Saving..." : "Save sprint"}
 						</button>
@@ -1034,7 +1034,7 @@ function NoActiveSprintState({
 							type="button"
 							disabled={!isProjectOwner || isCreating}
 							onClick={onCreateSprint}
-							className="inline-flex items-center gap-2 rounded-full bg-[var(--primary)] px-5 py-2.5 text-sm font-bold text-[var(--on-primary)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+							className="inline-flex items-center gap-2 rounded-full bg-[var(--primary)] px-5 py-2.5 text-sm font-bold text-[color:var(--on-primary)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
 						>
 							<Plus className="h-4 w-4" />
 							Create Sprint
@@ -1145,7 +1145,7 @@ function NoActiveSprintState({
 						<button
 							type="submit"
 							disabled={!isProjectOwner || isCreating}
-							className="rounded-full bg-[var(--primary)] px-5 py-2 text-sm font-bold text-[var(--on-primary)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+							className="rounded-full bg-[var(--primary)] px-5 py-2 text-sm font-bold text-[color:var(--on-primary)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
 						>
 							{isCreating ? "Creating..." : "Create Sprint"}
 						</button>
@@ -1233,7 +1233,7 @@ function DoneColumnSettings({
 								selectedColumnId === "" ||
 								selectedColumnId === doneColumnId
 							}
-							className="rounded-full bg-[var(--primary)] px-5 py-2.5 text-sm font-bold text-[var(--on-primary)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+							className="rounded-full bg-[var(--primary)] px-5 py-2.5 text-sm font-bold text-[color:var(--on-primary)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
 						>
 							{isSaving ? "Saving..." : "Save Done Column"}
 						</button>
@@ -1322,7 +1322,7 @@ function ProjectBacklogView({
 				<button
 					type="submit"
 					disabled={isCreating || draftTitle.trim() === ""}
-					className="rounded-full bg-[var(--primary)] px-5 py-2 text-sm font-bold text-[var(--on-primary)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+					className="rounded-full bg-[var(--primary)] px-5 py-2 text-sm font-bold text-[color:var(--on-primary)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
 				>
 					{isCreating ? "Creating..." : "Add to Backlog"}
 				</button>
@@ -1343,7 +1343,7 @@ function ProjectBacklogView({
 					<button
 						type="button"
 						onClick={onRetry}
-						className="ml-3 rounded-full bg-[var(--primary)] px-3 py-1.5 text-xs font-semibold text-[var(--on-primary)]"
+						className="ml-3 rounded-full bg-[var(--primary)] px-3 py-1.5 text-xs font-semibold text-[color:var(--on-primary)]"
 					>
 						Retry
 					</button>
@@ -1449,7 +1449,7 @@ function ProjectSprintHistoryView({
 					<button
 						type="button"
 						onClick={onRetry}
-						className="ml-3 rounded-full bg-[var(--primary)] px-3 py-1.5 text-xs font-semibold text-[var(--on-primary)]"
+						className="ml-3 rounded-full bg-[var(--primary)] px-3 py-1.5 text-xs font-semibold text-[color:var(--on-primary)]"
 					>
 						Retry
 					</button>
@@ -1922,7 +1922,7 @@ function ProjectMembersModal({
 								type="button"
 								disabled={selectedCount === 0 || isAddingMembers}
 								onClick={() => void handleAddSelected()}
-								className="inline-flex items-center justify-center rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-bold text-[var(--on-primary)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+								className="inline-flex items-center justify-center rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-bold text-[color:var(--on-primary)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
 							>
 								{isAddingMembers
 									? "Adding..."
@@ -2209,7 +2209,7 @@ function ProjectChatPanel({
 							<button
 								type="button"
 								onClick={jumpToLatestMessages}
-								className="rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-bold text-[var(--on-primary)] shadow-lg transition hover:brightness-105"
+								className="rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-bold text-[color:var(--on-primary)] shadow-lg transition hover:brightness-105"
 							>
 								New messages
 							</button>
@@ -2291,7 +2291,7 @@ function ChatComposer({ chat }: { chat: ReturnType<typeof useProjectChat> }) {
 					type="button"
 					onClick={sendDraft}
 					disabled={!canSend}
-					className="rounded-full bg-[var(--primary)] px-5 py-2 text-sm font-bold text-[var(--on-primary)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+					className="rounded-full bg-[var(--primary)] px-5 py-2 text-sm font-bold text-[color:var(--on-primary)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
 				>
 					Send
 				</button>
@@ -2948,7 +2948,7 @@ export function ProjectBoardPage() {
 								<Settings2 className="h-4 w-4" />
 							</WorkspaceIconButton>
 							<div className="flex items-center gap-2 rounded-full border-l border-[var(--outline-variant)] py-1 pl-3 pr-4 text-sm font-semibold hover:bg-[var(--surface-container-low)]">
-								<span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--primary-container)] text-xs font-bold text-[var(--on-primary)]">
+								<span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--primary-container)] text-xs font-bold text-[color:var(--on-primary)]">
 									{accountInitials || <User className="h-4 w-4" />}
 								</span>
 								Account
@@ -3079,7 +3079,7 @@ export function ProjectBoardPage() {
 										<button
 											type="submit"
 											disabled={isMetadataSaving}
-											className="rounded-full bg-[var(--primary)] px-5 py-2 text-sm font-bold text-[var(--on-primary)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+											className="rounded-full bg-[var(--primary)] px-5 py-2 text-sm font-bold text-[color:var(--on-primary)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
 										>
 											{isMetadataSaving ? "Saving..." : "Save details"}
 										</button>
@@ -3104,7 +3104,7 @@ export function ProjectBoardPage() {
 								<button
 									type="button"
 									onClick={() => void columnsQuery.refetch()}
-									className="ml-3 rounded-full bg-[var(--primary)] px-3 py-1.5 text-xs font-semibold text-[var(--on-primary)]"
+									className="ml-3 rounded-full bg-[var(--primary)] px-3 py-1.5 text-xs font-semibold text-[color:var(--on-primary)]"
 								>
 									Retry
 								</button>
@@ -3118,7 +3118,7 @@ export function ProjectBoardPage() {
 								<button
 									type="button"
 									onClick={() => void tasksQuery.refetch()}
-									className="ml-3 rounded-full bg-[var(--primary)] px-3 py-1.5 text-xs font-semibold text-[var(--on-primary)]"
+									className="ml-3 rounded-full bg-[var(--primary)] px-3 py-1.5 text-xs font-semibold text-[color:var(--on-primary)]"
 								>
 									Retry
 								</button>
@@ -3142,7 +3142,7 @@ export function ProjectBoardPage() {
 								<button
 									type="button"
 									onClick={() => void activeSprintQuery.refetch()}
-									className="ml-3 rounded-full bg-[var(--primary)] px-3 py-1.5 text-xs font-semibold text-[var(--on-primary)]"
+									className="ml-3 rounded-full bg-[var(--primary)] px-3 py-1.5 text-xs font-semibold text-[color:var(--on-primary)]"
 								>
 									Retry
 								</button>

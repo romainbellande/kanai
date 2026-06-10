@@ -17,7 +17,7 @@ export function AboutPage() {
 				<div className="mt-6 flex flex-wrap gap-3">
 					<Link
 						to="/"
-						className="inline-flex items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--primary),var(--primary-container))] px-5 py-2.5 text-sm font-semibold text-[var(--on-primary)] no-underline shadow-[0_18px_36px_rgba(12,86,208,0.18)]"
+						className="inline-flex items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--primary),var(--primary-container))] px-5 py-2.5 text-sm font-semibold text-[color:var(--on-primary)] no-underline shadow-[0_18px_36px_rgba(12,86,208,0.18)]"
 					>
 						Open Board
 					</Link>

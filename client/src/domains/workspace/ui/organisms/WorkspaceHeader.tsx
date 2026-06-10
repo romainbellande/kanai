@@ -30,7 +30,7 @@ export function WorkspaceHeader() {
 					type="button"
 					className="flex items-center gap-2 rounded-full border-l border-[var(--outline-variant)] py-1 pl-3 pr-4 text-sm font-semibold text-[var(--on-surface)] hover:bg-[var(--surface-container-low)]"
 				>
-					<span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--primary-container)] text-xs font-bold text-[var(--on-primary)]">
+					<span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--primary-container)] text-xs font-bold text-[color:var(--on-primary)]">
 						{accountInitials || <User className="h-4 w-4" />}
 					</span>
 					Account
