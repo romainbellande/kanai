@@ -30,6 +30,10 @@ This repository has two active workspaces: `client/` and `api/`.
 - Backend verification: `just typecheck` and `just tests`
 - Keycloak: `docker compose up keycloak`
 
+## Quality Gate
+
+The current quality gate is `just pre-commit`
+
 ## Detailed Instructions
 
 - [Frontend Guidelines](docs/agent-instructions/frontend.md)
@@ -37,125 +41,69 @@ This repository has two active workspaces: `client/` and `api/`.
 - [Testing Guidelines](docs/agent-instructions/testing.md)
 - [Workflow Notes](docs/agent-instructions/workflow.md)
 
-<!-- BEGIN BEADS INTEGRATION v:1 profile:full hash:0a1bbe8a -->
-## Issue Tracking with br (beads)
+<!-- br-agent-instructions-v1 -->
 
-**IMPORTANT**: This project uses **br (beads rust)** for ALL issue tracking. Do NOT use markdown TODOs, task lists, or other tracking methods.
+---
 
-### Why bd?
+## Beads Workflow Integration
 
-- Dependency-aware: Track blockers and relationships between issues
-- Git-friendly: Dolt-powered version control with native sync
-- Agent-optimized: JSON output, ready work detection, discovered-from links
-- Prevents duplicate tracking systems and confusion
+This project uses [beads_rust](https://github.com/Dicklesworthstone/beads_rust) (`br`/`bd`) for issue tracking. Issues are stored in `.beads/` and tracked in git.
 
-### Quick Start
-
-**Check for ready work:**
+### Essential Commands
 
 ```bash
-br ready --json
+# View ready issues (open, unblocked, not deferred)
+br ready              # or: bd ready
+
+# List and search
+br list --status=open # All open issues
+br show <id>          # Full issue details with dependencies
+br search "keyword"   # Full-text search
+
+# Create and update
+br create --title="..." --description="..." --type=task --priority=2
+br update <id> --status=in_progress
+br close <id> --reason="Completed"
+br close <id1> <id2>  # Close multiple issues at once
+
+# Sync with git
+br sync --flush-only  # Export DB to JSONL
+br sync --status      # Check sync status
 ```
 
-**Create new issues:**
+### Workflow Pattern
+
+1. **Start**: Run `br ready` to find actionable work
+2. **Claim**: Use `br update <id> --status=in_progress`
+3. **Work**: Implement the task
+4. **Complete**: Use `br close <id>`
+5. **Sync**: Always run `br sync --flush-only` at session end
+
+### Key Concepts
+
+- **Dependencies**: Issues can block other issues. `br ready` shows only open, unblocked work.
+- **Priority**: P0=critical, P1=high, P2=medium, P3=low, P4=backlog (use numbers 0-4, not words)
+- **Types**: task, bug, feature, epic, chore, docs, question
+- **Blocking**: `br dep add <issue> <depends-on>` to add dependencies
+
+### Session Protocol
+
+**Before ending any session, run this checklist:**
 
 ```bash
-br create "Issue title" --description="Detailed context" -t bug|feature|task -p 0-4 --json
-br create "Issue title" --description="What this issue is about" -p 1 --deps discovered-from:bd-123 --json
+git status              # Check what changed
+git add <files>         # Stage code changes
+br sync --flush-only    # Export beads changes to JSONL
+git commit -m "..."     # Commit everything
+git push                # Push to remote
 ```
 
-**Claim and update:**
+### Best Practices
 
-```bash
-br update <id> --claim --json
-br update bd-42 --priority 1 --json
-```
+- Check `br ready` at session start to find available work
+- Update status as you work (in_progress → closed)
+- Create new issues with `br create` when you discover tasks
+- Use descriptive titles and set appropriate priority/type
+- Always sync before ending session
 
-**Complete work:**
-
-```bash
-br close bd-42 --reason "Completed" --json
-```
-
-### Issue Types
-
-- `bug` - Something broken
-- `feature` - New functionality
-- `task` - Work item (tests, docs, refactoring)
-- `epic` - Large feature with subtasks
-- `chore` - Maintenance (dependencies, tooling)
-
-### Priorities
-
-- `0` - Critical (security, data loss, broken builds)
-- `1` - High (major features, important bugs)
-- `2` - Medium (default, nice-to-have)
-- `3` - Low (polish, optimization)
-- `4` - Backlog (future ideas)
-
-### Workflow for AI Agents
-
-1. **Check ready work**: `br ready` shows unblocked issues
-2. **Claim your task atomically**: `br update <id> --claim`
-3. **Work on it**: Implement, test, document
-4. **Discover new work?** Create linked issue:
-   - `br create "Found bug" --description="Details about what was found" -p 1 --deps discovered-from:<parent-id>`
-5. **Complete**: `br close <id> --reason "Done"`
-
-### Quality
-- Use `--acceptance` and `--design` fields when creating issues
-- Use `--validate` to check description completeness
-
-### Lifecycle
-- `br defer <id>` / `br supersede <id>` for issue management
-- `br stale` / `br orphans` / `br lint` for hygiene
-- `br human <id>` to flag for human decisions
-- `br formula list` / `br mol pour <name>` for structured workflows
-
-### Auto-Sync
-
-br automatically syncs via Dolt:
-
-- Each write auto-commits to Dolt history
-- No manual export/import needed!
-
-**Architecture in one line:** issues live in a local Dolt DB; sync uses `refs/dolt/data` on your git remote; `.beads/issues.jsonl` is a passive export. See https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md for details and anti-patterns.
-
-### Important Rules
-
-- ✅ Use br for ALL task tracking
-- ✅ Always use `--json` flag for programmatic use
-- ✅ Link discovered work with `discovered-from` dependencies
-- ✅ Check `br ready` before asking "what should I work on?"
-- ❌ Do NOT create markdown TODO lists
-- ❌ Do NOT use external issue trackers
-- ❌ Do NOT duplicate tracking systems
-
-For more details, see README.md and docs/QUICKSTART.md.
-
-## Session Completion
-
-**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
-
-**MANDATORY WORKFLOW:**
-
-1. **File issues for remaining work** - Create issues for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
-3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** - This is MANDATORY:
-   ```bash
-   git pull --rebase
-   git push
-   git status  # MUST show "up to date with origin"
-   ```
-5. **Clean up** - Clear stashes, prune remote branches
-6. **Verify** - All changes committed AND pushed
-7. **Hand off** - Provide context for next session
-
-**CRITICAL RULES:**
-- Work is NOT complete until `git push` succeeds
-- NEVER stop before pushing - that leaves work stranded locally
-- NEVER say "ready to push when you are" - YOU must push
-- If push fails, resolve and retry until it succeeds
-
-<!-- END BEADS INTEGRATION -->
+<!-- end-br-agent-instructions -->

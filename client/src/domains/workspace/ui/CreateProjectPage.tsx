@@ -189,7 +189,7 @@ export function CreateProjectPage() {
 						<button
 							disabled={createProjectMutation.isPending}
 							type="submit"
-							className="inline-flex items-center justify-center gap-2 rounded-full bg-[var(--primary)] px-5 py-2.5 text-sm font-semibold text-[var(--on-primary)] shadow-[0_12px_28px_rgba(0,61,155,0.18)] transition hover:bg-[var(--primary-container)]"
+							className="inline-flex items-center justify-center gap-2 rounded-full bg-[var(--primary)] px-5 py-2.5 text-sm font-semibold text-[color:var(--on-primary)] shadow-[0_12px_28px_rgba(0,61,155,0.18)] transition hover:bg-[var(--primary-container)]"
 						>
 							<CirclePlus className="h-4 w-4" />
 							{createProjectMutation.isPending

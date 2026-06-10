@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.auth import AuthenticatedContext
-from app.services.auth_service import RequestAuthBoundary
+from app.services.auth_service import RequestAuthBoundary, WebSocketAuthBoundary
 
 
 class _NoopAuthenticateRequest:
@@ -20,6 +20,9 @@ class _NoopAuthenticateRequest:
 DatabaseSession = Annotated[AsyncSession, Depends(get_db)]
 
 request_auth_boundary = RequestAuthBoundary(
+    authenticate_request=_NoopAuthenticateRequest()
+)
+websocket_auth_boundary = WebSocketAuthBoundary(
     authenticate_request=_NoopAuthenticateRequest()
 )
 

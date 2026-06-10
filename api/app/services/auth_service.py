@@ -7,7 +7,7 @@ from collections.abc import Callable, Iterable
 from datetime import UTC, datetime
 from typing import Protocol
 
-from fastapi import HTTPException, Request, status
+from fastapi import HTTPException, Request, WebSocket, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.datastructures import Headers
 from starlette.types import Scope
@@ -155,6 +155,68 @@ class RequestAuthBoundary:
             )
 
         return token.strip()
+
+
+class WebSocketAuthError(Exception):
+    """Client-facing WebSocket authentication failure."""
+
+    def __init__(self, code: str, message: str) -> None:
+        """Initialize a WebSocket auth failure."""
+        super().__init__(message)
+        self.code = code
+        self.message = message
+
+
+class WebSocketAuthBoundary:
+    """Authenticate WebSockets using bearer tokens from subprotocols."""
+
+    def __init__(
+        self,
+        authenticate_request: AuthenticateRequestHandler,
+        *,
+        user_repository_factory: Callable[
+            [AsyncSession], CurrentUserRepository
+        ] = UserRepository,
+    ) -> None:
+        """Initialize the WebSocket authentication boundary."""
+        self._authenticate_request = authenticate_request
+        self._user_repository_factory = user_repository_factory
+
+    async def current_user(self, websocket: WebSocket, session: AsyncSession) -> User:
+        """Resolve a local user from the WebSocket bearer subprotocol token."""
+        token = self._extract_subprotocol_bearer_token(websocket)
+        try:
+            auth_context = await self._authenticate_request.execute(token)
+        except InvalidTokenException as error:
+            raise WebSocketAuthError("invalid_token", error.message) from error
+
+        user = await self._user_repository_factory(session).get_by_external_id(
+            auth_context.subject
+        )
+        if user is None:
+            raise WebSocketAuthError(
+                "authenticated_user_not_found",
+                "Authenticated user not found",
+            )
+
+        return user
+
+    def _extract_subprotocol_bearer_token(self, websocket: WebSocket) -> str:
+        subprotocols = websocket.scope.get("subprotocols", [])
+        if not isinstance(subprotocols, list):
+            subprotocols = []
+
+        for subprotocol in subprotocols:
+            if not isinstance(subprotocol, str):
+                continue
+            scheme, separator, token = subprotocol.partition(".")
+            if separator and scheme.lower() == "bearer" and token.strip():
+                return token.strip()
+
+        raise WebSocketAuthError(
+            "missing_token",
+            "Missing bearer token subprotocol",
+        )
 
 
 class AuthenticateRequestHandler(Protocol):

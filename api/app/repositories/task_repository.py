@@ -36,6 +36,38 @@ class TaskRepository:
         )
         return list(tasks.all())
 
+    async def list_by_project_and_sprint(
+        self, project_id: UUID, sprint_id: UUID
+    ) -> list[Task]:
+        """Return tasks in one project sprint ordered by board column and rank."""
+        tasks = await self._session.scalars(
+            select(Task)
+            .filter_by(project_id=project_id, sprint_id=sprint_id)
+            .order_by(
+                column("column_id"),
+                column("task_rank"),
+                column("created_at"),
+                column("id"),
+            )
+        )
+        return list(tasks.all())
+
+    async def list_backlog_candidates(
+        self, project_id: UUID, done_column_id: UUID | None
+    ) -> list[Task]:
+        """Return unfinished non-sprint project tasks eligible for backlog."""
+        statement = select(Task).filter_by(project_id=project_id, sprint_id=None)
+        if done_column_id is not None:
+            statement = statement.where(column("column_id") != done_column_id)
+        tasks = await self._session.scalars(
+            statement.order_by(
+                column("backlog_rank"),
+                column("created_at"),
+                column("id"),
+            )
+        )
+        return list(tasks.all())
+
     async def list_by_project_and_column(
         self, project_id: UUID, column_id: UUID
     ) -> list[Task]:

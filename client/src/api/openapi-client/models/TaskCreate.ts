@@ -20,7 +20,7 @@ import { mapValues } from '../runtime';
  * Parameters:
  *     title: Task title.
  *     column_id: Optional workflow column ID. Defaults to the first project column.
- *     priority: Priority level for the task. Defaults to "medium".
+ *     priority: Optional priority level for the task.
  *     assignee_id: Optional user ID assigned to the task.
  *     description: Optional task details.
  *     acceptance_criteria: Optional criteria required to complete the task.
@@ -46,7 +46,7 @@ export interface TaskCreate {
      * @type {string}
      * @memberof TaskCreate
      */
-    priority?: string;
+    priority?: string | null;
     /**
      * 
      * @type {string}

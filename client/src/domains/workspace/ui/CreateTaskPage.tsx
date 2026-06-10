@@ -8,8 +8,10 @@ import { useTaskForm } from "#/domains/workspace/model/useTaskForm";
 import { WorkspaceLayout } from "#/domains/workspace/ui/templates/WorkspaceLayout";
 
 export function CreateTaskPage({
+	includeInActiveSprint = false,
 	initialColumnId,
 }: {
+	includeInActiveSprint?: boolean;
 	initialColumnId?: string;
 }) {
 	const { projectId } = useParams({ from: "/projects_/$projectId/tasks/new" });
@@ -17,10 +19,19 @@ export function CreateTaskPage({
 	const api = useKanaiApi();
 	const projectQuery = useQuery(api.projects.get(projectId));
 	const columnsQuery = useQuery(api.projectColumns.list(projectId));
+	const doneColumnQuery = useQuery(api.doneColumn.get(projectId));
+	const defaultColumnId =
+		includeInActiveSprint && !initialColumnId
+			? columnsQuery.data?.find(
+					(column) => column.id !== doneColumnQuery.data?.doneColumnId,
+				)?.id
+			: undefined;
 	const form = useTaskForm({
 		projectId,
 		mode: "create",
+		includeInActiveSprint,
 		initialColumnId,
+		defaultColumnId,
 		workflowColumns: columnsQuery.data,
 		isWorkflowLoading: columnsQuery.isLoading,
 		onSaved: () => {
@@ -51,7 +62,9 @@ export function CreateTaskPage({
 			contentContainerClassName="mx-auto flex w-full max-w-[760px] flex-col gap-8"
 			contentClassName="px-4 py-8 pb-12 sm:px-6 lg:px-8"
 			pageDescription="Capture the work item and assign the details needed to move it forward."
-			pageTitle="Create New Task"
+			pageTitle={
+				includeInActiveSprint ? "Create Current Sprint Task" : "Create New Task"
+			}
 			sectionClassName="lg:min-h-screen"
 		>
 			<section className="rise-in rounded-[1.75rem] border border-[color:color-mix(in_srgb,var(--outline-variant)_50%,transparent)] bg-[var(--surface-container-lowest)] p-6 shadow-[0_18px_42px_rgba(25,28,30,0.04)] sm:p-10">
@@ -153,10 +166,11 @@ export function CreateTaskPage({
 										form.setField("priority", event.target.value)
 									}
 								>
+									<option value="">No priority</option>
 									<option value="low">Low</option>
 									<option value="medium">Medium</option>
 									<option value="high">High</option>
-									<option value="urgent">Urgent</option>
+									<option value="critical">Critical</option>
 								</select>
 							</div>
 
@@ -240,7 +254,7 @@ export function CreateTaskPage({
 								columnsQuery.isError
 							}
 							type="submit"
-							className="inline-flex items-center justify-center gap-2 rounded-full bg-[var(--primary)] px-5 py-2.5 text-sm font-semibold text-[var(--on-primary)] shadow-[0_12px_28px_rgba(0,61,155,0.18)] transition hover:bg-[var(--primary-container)]"
+							className="inline-flex items-center justify-center gap-2 rounded-full bg-[var(--primary)] px-5 py-2.5 text-sm font-semibold text-[color:var(--on-primary)] shadow-[0_12px_28px_rgba(0,61,155,0.18)] transition hover:bg-[var(--primary-container)]"
 						>
 							<CirclePlus className="h-4 w-4" />
 							{form.isSaving ? "Creating..." : "Create Task"}

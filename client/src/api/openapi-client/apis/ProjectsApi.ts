@@ -17,6 +17,7 @@
 import * as runtime from '../runtime';
 import type {
   HTTPValidationError,
+  ProjectChatMessageRead,
   ProjectColumnCreate,
   ProjectColumnRead,
   ProjectColumnReorder,
@@ -33,6 +34,8 @@ import type {
 import {
     HTTPValidationErrorFromJSON,
     HTTPValidationErrorToJSON,
+    ProjectChatMessageReadFromJSON,
+    ProjectChatMessageReadToJSON,
     ProjectColumnCreateFromJSON,
     ProjectColumnCreateToJSON,
     ProjectColumnReadFromJSON,
@@ -99,6 +102,11 @@ export interface GetProjectProjectsProjectIdGetRequest {
 export interface GetTaskEndpointProjectsProjectIdTasksTaskIdGetRequest {
     projectId: string;
     taskId: string;
+}
+
+export interface ListProjectChatMessagesProjectsProjectIdChatMessagesGetRequest {
+    projectId: string;
+    cursor?: string | null;
 }
 
 export interface ListProjectColumnsProjectsProjectIdColumnsGetRequest {
@@ -615,6 +623,57 @@ export class ProjectsApi extends runtime.BaseAPI {
      */
     async getTaskEndpointProjectsProjectIdTasksTaskIdGet(requestParameters: GetTaskEndpointProjectsProjectIdTasksTaskIdGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<TaskRead> {
         const response = await this.getTaskEndpointProjectsProjectIdTasksTaskIdGetRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for listProjectChatMessagesProjectsProjectIdChatMessagesGet without sending the request
+     */
+    async listProjectChatMessagesProjectsProjectIdChatMessagesGetRequestOpts(requestParameters: ListProjectChatMessagesProjectsProjectIdChatMessagesGetRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling listProjectChatMessagesProjectsProjectIdChatMessagesGet().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        if (requestParameters['cursor'] != null) {
+            queryParameters['cursor'] = requestParameters['cursor'];
+        }
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/projects/{project_id}/chat/messages`;
+        urlPath = urlPath.replace(`{${"project_id"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        return {
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     * List chat history for a project accessible to the current user.
+     * List Project Chat Messages
+     */
+    async listProjectChatMessagesProjectsProjectIdChatMessagesGetRaw(requestParameters: ListProjectChatMessagesProjectsProjectIdChatMessagesGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Array<ProjectChatMessageRead>>> {
+        const requestOptions = await this.listProjectChatMessagesProjectsProjectIdChatMessagesGetRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(ProjectChatMessageReadFromJSON));
+    }
+
+    /**
+     * List chat history for a project accessible to the current user.
+     * List Project Chat Messages
+     */
+    async listProjectChatMessagesProjectsProjectIdChatMessagesGet(requestParameters: ListProjectChatMessagesProjectsProjectIdChatMessagesGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Array<ProjectChatMessageRead>> {
+        const response = await this.listProjectChatMessagesProjectsProjectIdChatMessagesGetRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

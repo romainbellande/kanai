@@ -2,11 +2,20 @@
 
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import column, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import SQLModel
 
-from app.models.project import Project, ProjectColumn, ProjectMember, ProjectOwner
+from app.models.project import (
+    Project,
+    ProjectChatMessage,
+    ProjectColumn,
+    ProjectMember,
+    ProjectOwner,
+    ProjectSprint,
+    ProjectSprintTaskSnapshot,
+    SprintLifecycleState,
+)
 
 
 class ProjectRepository:
@@ -46,6 +55,12 @@ class ProjectRepository:
         """Add a project workflow column row."""
         self._session.add(column)
 
+    async def add_sprint(self, sprint: ProjectSprint) -> ProjectSprint:
+        """Add a project sprint and flush so generated fields are available."""
+        self._session.add(sprint)
+        await self._session.flush()
+        return sprint
+
     async def get_column(self, column_id: UUID) -> ProjectColumn | None:
         """Return a project workflow column by ID."""
         return await self._session.get(ProjectColumn, column_id)
@@ -78,6 +93,64 @@ class ProjectRepository:
             select(ProjectMember).filter_by(project_id=project_id)
         )
         return list(members.all())
+
+    async def get_active_sprint(self, project_id: UUID) -> ProjectSprint | None:
+        """Return the active sprint for a project, if one exists."""
+        sprint_table = SQLModel.metadata.tables["project_sprints"]
+        sprint = await self._session.scalars(
+            select(ProjectSprint)
+            .filter_by(
+                project_id=project_id,
+                lifecycle_state=SprintLifecycleState.ACTIVE,
+            )
+            .order_by(sprint_table.c.created_at.desc(), sprint_table.c.id)
+        )
+        return sprint.first()
+
+    async def list_closed_sprints(self, project_id: UUID) -> list[ProjectSprint]:
+        """Return closed project sprints newest first."""
+        sprint_table = SQLModel.metadata.tables["project_sprints"]
+        sprints = await self._session.scalars(
+            select(ProjectSprint)
+            .filter_by(project_id=project_id, lifecycle_state=SprintLifecycleState.CLOSED)
+            .order_by(sprint_table.c.closed_at.desc(), sprint_table.c.created_at.desc())
+        )
+        return list(sprints.all())
+
+    async def list_sprint_task_snapshots(
+        self,
+        sprint_id: UUID,
+    ) -> list[ProjectSprintTaskSnapshot]:
+        """Return historical task snapshots for one sprint."""
+        snapshots = await self._session.scalars(
+            select(ProjectSprintTaskSnapshot)
+            .filter_by(sprint_id=sprint_id)
+            .order_by(
+                column("outcome"),
+                column("column_id"),
+                column("rank"),
+                column("created_at"),
+            )
+        )
+        return list(snapshots.all())
+
+    async def count_sprints_by_project(self, project_id: UUID) -> int:
+        """Return the number of sprints created for a project."""
+        count = await self._session.scalar(
+            select(func.count()).select_from(ProjectSprint).filter_by(
+                project_id=project_id
+            )
+        )
+        return int(count or 0)
+
+    async def list_sprints_by_project(self, project_id: UUID) -> list[ProjectSprint]:
+        """Return every sprint for a project ordered by planned timebox."""
+        sprints = await self._session.scalars(
+            select(ProjectSprint)
+            .filter_by(project_id=project_id)
+            .order_by(column("planned_start_date"), column("planned_end_date"))
+        )
+        return list(sprints.all())
 
     async def list_owner_rows_by_user(self, user_id: UUID) -> list[ProjectOwner]:
         """Return project ownership rows for a user."""
@@ -114,6 +187,22 @@ class ProjectRepository:
         for member in await self.list_member_rows_by_project(project_id):
             await self._session.delete(member)
 
+    async def delete_chat_messages(self, project_id: UUID) -> None:
+        """Delete chat messages for a project without committing."""
+        messages = await self._session.scalars(
+            select(ProjectChatMessage).filter_by(project_id=project_id)
+        )
+        for message in messages.all():
+            await self._session.delete(message)
+
+    async def delete_sprints(self, project_id: UUID) -> None:
+        """Delete sprint rows for a project without committing."""
+        sprints = await self._session.scalars(
+            select(ProjectSprint).filter_by(project_id=project_id)
+        )
+        for sprint in sprints.all():
+            await self._session.delete(sprint)
+
     async def delete(self, project: Project) -> None:
         """Delete a project without committing."""
         await self._session.delete(project)
@@ -137,3 +226,7 @@ class ProjectRepository:
     async def refresh_column(self, column: ProjectColumn) -> None:
         """Refresh a project column from the database."""
         await self._session.refresh(column)
+
+    async def refresh_sprint(self, sprint: ProjectSprint) -> None:
+        """Refresh a project sprint from the database."""
+        await self._session.refresh(sprint)

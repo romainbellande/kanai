@@ -98,7 +98,7 @@ describe("ProjectsPage", () => {
 		expect(screen.queryByText("Enterprise Launch")).toBeNull();
 	});
 
-	it("renders an empty state with a create-project link", async () => {
+	it("renders a true-empty state with a calm create-project link", async () => {
 		const { ProjectsPage } = await import(
 			"#/domains/workspace/ui/ProjectsPage"
 		);
@@ -108,11 +108,54 @@ describe("ProjectsPage", () => {
 		renderWithQueryClient(<ProjectsPage />, queryClient);
 
 		expect(screen.getByText("No projects yet.")).toBeTruthy();
+		const createProjectLink = screen.getByRole("link", {
+			name: /create a project/i,
+		});
+		expect(createProjectLink.getAttribute("href")).toBe("/projects/new");
+		expect(createProjectLink.className).toContain(
+			"bg-[var(--surface-container-lowest)]",
+		);
+		expect(createProjectLink.className).toContain("text-[var(--primary)]");
+		expect(createProjectLink.className).toContain(
+			"border-[var(--outline-variant)]",
+		);
+		expect(createProjectLink.className).toContain(
+			"hover:bg-[var(--surface-container)]",
+		);
+		expect(createProjectLink.className).not.toContain("text-white");
+	});
+
+	it("renders a search-empty state without the true-empty create CTA", async () => {
+		const { ProjectsPage } = await import(
+			"#/domains/workspace/ui/ProjectsPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(projectsQueryOptions().queryKey, [
+			{
+				id: "project-api-id",
+				name: "Persisted Project",
+				code: "PRS",
+				priority: "high",
+				description: "Loaded from API",
+				status: "on-track",
+				ownerIds: [],
+				memberIds: [],
+				createdAt: null,
+				updatedAt: null,
+			},
+		]);
+
+		renderWithQueryClient(<ProjectsPage />, queryClient);
+		fireEvent.change(screen.getByPlaceholderText("Search projects..."), {
+			target: { value: "missing" },
+		});
+
+		expect(screen.getByText("No projects match your search.")).toBeTruthy();
+		expect(screen.queryByText("No projects yet.")).toBeNull();
 		expect(
-			screen
-				.getByRole("link", { name: /create a project/i })
-				.getAttribute("href"),
-		).toBe("/projects/new");
+			screen.queryByRole("link", { name: /create a project/i }),
+		).toBeNull();
+		expect(screen.getByRole("link", { name: /add project/i })).toBeTruthy();
 	});
 
 	it("renders an auth error with retry", async () => {

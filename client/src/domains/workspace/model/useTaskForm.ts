@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 
 import { type ProjectColumn, type Task, useKanaiApi } from "#/api/client";
 
+const NO_TASK_PRIORITY = "";
+
 export type TaskFormValues = {
 	title: string;
 	status: string;
@@ -16,6 +18,7 @@ export type TaskFormWorkflowColumn = Pick<ProjectColumn, "id" | "name">;
 
 type TaskFormWorkflowInput = {
 	columns: readonly TaskFormWorkflowColumn[] | undefined;
+	defaultColumnId?: string;
 	isLoading: boolean;
 	selectedColumnId: string;
 	requireSelectedColumn?: boolean;
@@ -31,7 +34,9 @@ type UseTaskFormInput =
 	| {
 			projectId: string;
 			mode: "create";
+			includeInActiveSprint?: boolean;
 			initialColumnId?: string;
+			defaultColumnId?: string;
 			workflowColumns?: readonly TaskFormWorkflowColumn[];
 			isWorkflowLoading?: boolean;
 			onSaved?: (task: Task) => void;
@@ -47,6 +52,7 @@ type UseTaskFormInput =
 	  };
 export function getTaskFormWorkflowState({
 	columns,
+	defaultColumnId,
 	isLoading,
 	requireSelectedColumn,
 	selectedColumnId,
@@ -88,7 +94,10 @@ export function getTaskFormWorkflowState({
 	}
 
 	return {
-		selectedColumnId: selectedColumn?.id ?? columns[0].id,
+		selectedColumnId:
+			selectedColumn?.id ??
+			columns.find((column) => column.id === defaultColumnId)?.id ??
+			columns[0].id,
 		isBlocked: false,
 		message: null,
 	};
@@ -100,7 +109,7 @@ function createInitialValues(
 	return {
 		title: "",
 		status: initialColumnId ?? "",
-		priority: "medium",
+		priority: NO_TASK_PRIORITY,
 		description: "",
 		acceptanceCriteria: "",
 		tag: "",
@@ -111,11 +120,19 @@ function editInitialValues(task: Task | null | undefined): TaskFormValues {
 	return {
 		title: task?.title ?? "",
 		status: task?.columnId ?? "todo",
-		priority: task?.priority ?? "medium",
+		priority: normalizeTaskPriority(task?.priority),
 		description: task?.description ?? "",
 		acceptanceCriteria: task?.acceptanceCriteria ?? "",
 		tag: task?.tag ?? "",
 	};
+}
+
+function normalizeTaskPriority(priority: string | null | undefined): string {
+	const normalizedPriority = priority?.trim().toLowerCase() ?? NO_TASK_PRIORITY;
+	if (normalizedPriority === "urgent") {
+		return "critical";
+	}
+	return normalizedPriority;
 }
 
 function initialValues(input: UseTaskFormInput): TaskFormValues {
@@ -137,6 +154,7 @@ export function useTaskForm(input: UseTaskFormInput) {
 		input.mode === "create"
 			? getTaskFormWorkflowState({
 					columns: input.workflowColumns,
+					defaultColumnId: input.defaultColumnId,
 					isLoading: input.isWorkflowLoading ?? false,
 					selectedColumnId: values.status,
 				})
@@ -195,6 +213,7 @@ export function useTaskForm(input: UseTaskFormInput) {
 		const description = values.description.trim();
 		const acceptanceCriteria = values.acceptanceCriteria.trim();
 		const tag = values.tag.trim();
+		const priority = normalizeTaskPriority(values.priority);
 
 		if (!title) {
 			setErrorMessage("Task title is required.");
@@ -213,7 +232,7 @@ export function useTaskForm(input: UseTaskFormInput) {
 					values: {
 						title,
 						columnId: values.status,
-						priority: values.priority,
+						priority: priority || null,
 						description: description || null,
 						acceptanceCriteria: acceptanceCriteria || null,
 						tag: tag || null,
@@ -230,7 +249,8 @@ export function useTaskForm(input: UseTaskFormInput) {
 			const task = await createTaskMutation.mutateAsync({
 				title,
 				columnId: workflowState.selectedColumnId,
-				priority: values.priority,
+				includeInActiveSprint: input.includeInActiveSprint,
+				priority: priority || undefined,
 				description: description || undefined,
 				acceptanceCriteria: acceptanceCriteria || undefined,
 				tag: tag || undefined,

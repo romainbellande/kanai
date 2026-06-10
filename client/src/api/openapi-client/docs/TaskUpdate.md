@@ -1,7 +1,7 @@
 
 # TaskUpdate
 
-Request payload for updating a project task.  Parameters:     title: Optional replacement task title.     column_id: Optional replacement workflow column ID.     priority: Optional replacement priority level.     assignee_id: Optional replacement user ID assigned to the task.     description: Optional replacement task details.     acceptance_criteria: Optional replacement completion criteria.     tag: Optional replacement task tag.
+Request payload for updating a project task.  Parameters:     title: Optional replacement task title.     column_id: Optional replacement workflow column ID.     priority: Optional replacement priority level. Explicit null clears it.     assignee_id: Optional replacement user ID assigned to the task.     description: Optional replacement task details.     acceptance_criteria: Optional replacement completion criteria.     tag: Optional replacement task tag.
 
 ## Properties
 

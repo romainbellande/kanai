@@ -26,6 +26,12 @@ export interface ProjectColumnUpdate {
      * @memberof ProjectColumnUpdate
      */
     name: string;
+    /**
+     * 
+     * @type {string}
+     * @memberof ProjectColumnUpdate
+     */
+    description?: string | null;
 }
 
 /**
@@ -47,6 +53,7 @@ export function ProjectColumnUpdateFromJSONTyped(json: any, ignoreDiscriminator:
     return {
         
         'name': json['name'],
+        'description': json['description'] == null ? undefined : json['description'],
     };
 }
 
@@ -62,6 +69,7 @@ export function ProjectColumnUpdateToJSONTyped(value?: ProjectColumnUpdate | nul
     return {
         
         'name': value['name'],
+        'description': value['description'],
     };
 }
 

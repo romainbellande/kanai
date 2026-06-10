@@ -11,11 +11,19 @@ vi.mock("openid-client", () => ({
 }));
 
 import {
+	addProjectBacklogTaskToActiveSprint,
 	CurrentUserAuthError,
+	createProjectBacklogTask,
 	createProjectTask,
+	listProjectActiveSprintTasks,
+	listProjectBacklog,
 	listProjectTasks,
 	moveProjectTask,
+	projectActiveSprintTasksQueryOptions,
+	projectBacklogQueryOptions,
 	projectTasksQueryOptions,
+	removeProjectActiveSprintTaskToBacklog,
+	reorderProjectBacklog,
 	updateProjectTask,
 } from "#/api/client";
 
@@ -27,6 +35,213 @@ describe("tasks client", () => {
 		vi.stubEnv("VITE_AUTH_CLIENT_ID", "kanai-web");
 		vi.stubEnv("VITE_AUTH_ISSUER", "https://auth.example.test/realms/kanai");
 		window.sessionStorage.clear();
+	});
+
+	it("lists active sprint tasks through the active sprint endpoint", async () => {
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test/");
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({ accessToken: "task-token" }),
+		);
+		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(
+				JSON.stringify([
+					{
+						id: "task-1",
+						project_id: "project-1",
+						sprint_id: "sprint-1",
+						title: "Sprint Task",
+						column_id: "column-todo",
+						priority: null,
+						rank: "U",
+						assignee_id: null,
+						description: null,
+						acceptance_criteria: null,
+						tag: null,
+						created_at: null,
+						updated_at: null,
+					},
+				]),
+				{ headers: { "content-type": "application/json" }, status: 200 },
+			),
+		);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		await expect(listProjectActiveSprintTasks("project-1")).resolves.toEqual([
+			expect.objectContaining({
+				id: "task-1",
+				projectId: "project-1",
+				sprintId: "sprint-1",
+				title: "Sprint Task",
+			}),
+		]);
+		expect(fetchSpy.mock.calls[0][0]).toBe(
+			"https://api.example.test/projects/project-1/tasks/active-sprint",
+		);
+	});
+
+	it("lists, creates, and reorders project backlog tasks", async () => {
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test/");
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({ accessToken: "backlog-token" }),
+		);
+		const taskJson = (id: string, title: string, backlog_rank: string) => ({
+			id,
+			project_id: "project-1",
+			sprint_id: null,
+			title,
+			column_id: "column-todo",
+			priority: null,
+			rank: "U",
+			backlog_rank,
+			assignee_id: null,
+			description: null,
+			acceptance_criteria: null,
+			tag: null,
+			created_at: null,
+			updated_at: null,
+		});
+		const fetchSpy = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(
+				new Response(JSON.stringify([taskJson("task-1", "First", "F")]), {
+					headers: { "content-type": "application/json" },
+					status: 200,
+				}),
+			)
+			.mockResolvedValueOnce(
+				new Response(JSON.stringify(taskJson("task-2", "Created", "8")), {
+					headers: { "content-type": "application/json" },
+					status: 201,
+				}),
+			)
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify([
+						taskJson("task-2", "Created", "U"),
+						taskJson("task-1", "First", "j"),
+					]),
+					{ headers: { "content-type": "application/json" }, status: 200 },
+				),
+			);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		await expect(listProjectBacklog("project-1")).resolves.toEqual([
+			expect.objectContaining({ id: "task-1", backlogRank: "F" }),
+		]);
+		await createProjectBacklogTask({
+			projectId: "project-1",
+			taskCreate: { title: "Created" },
+		});
+		await reorderProjectBacklog("project-1", {
+			taskIds: ["task-2", "task-1"],
+		});
+
+		expect(fetchSpy.mock.calls[0][0]).toBe(
+			"https://api.example.test/projects/project-1/backlog",
+		);
+		expect(fetchSpy.mock.calls[1][0]).toBe(
+			"https://api.example.test/projects/project-1/backlog/tasks",
+		);
+		expect(JSON.parse(String(fetchSpy.mock.calls[1][1]?.body))).toEqual({
+			title: "Created",
+		});
+		expect(fetchSpy.mock.calls[2][0]).toBe(
+			"https://api.example.test/projects/project-1/backlog/reorder",
+		);
+		expect(JSON.parse(String(fetchSpy.mock.calls[2][1]?.body))).toEqual({
+			task_ids: ["task-2", "task-1"],
+		});
+	});
+
+	it("adds a backlog task to the active sprint through the sprint membership endpoint", async () => {
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test/");
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({ accessToken: "sprint-token" }),
+		);
+		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					id: "task-1",
+					project_id: "project-1",
+					sprint_id: "sprint-1",
+					title: "Selected task",
+					column_id: "column-review",
+					priority: null,
+					rank: "U",
+					backlog_rank: null,
+					assignee_id: null,
+					description: null,
+					acceptance_criteria: null,
+					tag: null,
+					created_at: null,
+					updated_at: null,
+				}),
+				{ headers: { "content-type": "application/json" }, status: 200 },
+			),
+		);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		await expect(
+			addProjectBacklogTaskToActiveSprint("project-1", { taskId: "task-1" }),
+		).resolves.toMatchObject({
+			id: "task-1",
+			sprintId: "sprint-1",
+			columnId: "column-review",
+			backlogRank: null,
+		});
+		expect(fetchSpy.mock.calls[0][0]).toBe(
+			"https://api.example.test/projects/project-1/sprints/active/tasks",
+		);
+		expect(fetchSpy.mock.calls[0][1]?.method).toBe("POST");
+		expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toEqual({
+			task_id: "task-1",
+		});
+	});
+
+	it("removes an active sprint task back to backlog through the sprint membership endpoint", async () => {
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test/");
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({ accessToken: "sprint-token" }),
+		);
+		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					id: "task-1",
+					project_id: "project-1",
+					sprint_id: null,
+					title: "Removed task",
+					column_id: "column-todo",
+					priority: null,
+					rank: "U",
+					backlog_rank: "F",
+					assignee_id: null,
+					description: null,
+					acceptance_criteria: null,
+					tag: null,
+					created_at: null,
+					updated_at: null,
+				}),
+				{ headers: { "content-type": "application/json" }, status: 200 },
+			),
+		);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		await expect(
+			removeProjectActiveSprintTaskToBacklog("project-1", "task-1"),
+		).resolves.toMatchObject({
+			id: "task-1",
+			sprintId: null,
+			columnId: "column-todo",
+			backlogRank: "F",
+		});
+		expect(fetchSpy.mock.calls[0][0]).toBe(
+			"https://api.example.test/projects/project-1/sprints/active/tasks/task-1",
+		);
+		expect(fetchSpy.mock.calls[0][1]?.method).toBe("DELETE");
 	});
 
 	function buildTokenSet(
@@ -57,7 +272,7 @@ describe("tasks client", () => {
 						project_id: "project-1",
 						title: "API Task",
 						column_id: "column-todo",
-						priority: "high",
+						priority: "urgent",
 						rank: "U",
 						assignee_id: null,
 						description: null,
@@ -80,6 +295,7 @@ describe("tasks client", () => {
 				projectId: "project-1",
 				title: "API Task",
 				columnId: "column-todo",
+				priority: "critical",
 				rank: "U",
 			},
 		]);
@@ -91,6 +307,42 @@ describe("tasks client", () => {
 		expect(new Headers(init?.headers).get("Authorization")).toBe(
 			"Bearer task-token",
 		);
+	});
+
+	it("maps blank task priority responses to null", async () => {
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test/");
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({ accessToken: "task-token" }),
+		);
+		vi.stubGlobal(
+			"fetch",
+			vi.fn<typeof fetch>().mockResolvedValue(
+				new Response(
+					JSON.stringify([
+						{
+							id: "task-1",
+							project_id: "project-1",
+							title: "API Task",
+							column_id: "column-todo",
+							priority: "",
+							rank: "U",
+							assignee_id: null,
+							description: null,
+							acceptance_criteria: null,
+							tag: null,
+							created_at: null,
+							updated_at: null,
+						},
+					]),
+					{ headers: { "content-type": "application/json" }, status: 200 },
+				),
+			),
+		);
+
+		await expect(listProjectTasks("project-1")).resolves.toMatchObject([
+			{ priority: null },
+		]);
 	});
 
 	it("creates tasks with column IDs and no legacy status payload", async () => {
@@ -348,6 +600,17 @@ describe("tasks client", () => {
 			"projects",
 			"project-1",
 			"tasks",
+		]);
+		expect(projectActiveSprintTasksQueryOptions("project-1").queryKey).toEqual([
+			"projects",
+			"project-1",
+			"tasks",
+			"active-sprint",
+		]);
+		expect(projectBacklogQueryOptions("project-1").queryKey).toEqual([
+			"projects",
+			"project-1",
+			"backlog",
 		]);
 	});
 });

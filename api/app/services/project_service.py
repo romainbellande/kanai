@@ -198,10 +198,10 @@ async def update_project_for_user(
     """Update a project owned by a user."""
     repository = ProjectRepository(session)
     project = await require_project_owner(session, project_id, user_id)
-    for field_name in ("name", "code", "priority", "description", "status"):
-        value = getattr(payload, field_name)
-        if value is not None:
-            setattr(project, field_name, value)
+    for field_name, value in payload.update_values().items():
+        if field_name not in {"name", "code", "priority", "description", "status"}:
+            continue
+        setattr(project, field_name, value)
 
     await ProjectAccess(session).replace_membership(
         project_id,
@@ -232,6 +232,8 @@ async def delete_project_for_user(
     task_repository = TaskRepository(session)
     project = await require_project_owner(session, project_id, user_id)
     await task_repository.delete_by_project(project_id)
+    await project_repository.delete_sprints(project_id)
+    await project_repository.delete_chat_messages(project_id)
     await project_repository.delete_relationships(project_id)
     await project_repository.delete(project)
     await project_repository.commit()

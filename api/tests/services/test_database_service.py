@@ -1,9 +1,12 @@
 from collections.abc import AsyncIterator
 from pathlib import Path
+from typing import cast
 
 import pytest
 import pytest_asyncio
 from sqlalchemy import inspect
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlmodel import SQLModel
 
@@ -49,6 +52,25 @@ async def get_column_names(engine: AsyncEngine, table_name: str) -> list[str]:
                 column["name"] for column in inspect(sync_conn).get_columns(table_name)
             ]
         )
+
+
+class RecordingPostgresConnection:
+    def __init__(self) -> None:
+        self.dialect = postgresql.dialect()
+        self.statements: list[str] = []
+
+    def exec_driver_sql(self, statement: str) -> None:
+        self.statements.append(statement)
+
+
+def test_drop_metadata_tables_uses_cascade_for_postgresql() -> None:
+    database_service.import_models()
+    connection = RecordingPostgresConnection()
+
+    database_service.drop_metadata_tables(cast("Connection", connection))
+
+    assert "DROP TABLE IF EXISTS projects CASCADE" in connection.statements
+    assert "DROP TABLE IF EXISTS project_columns CASCADE" in connection.statements
 
 
 @pytest.mark.asyncio

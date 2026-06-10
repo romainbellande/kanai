@@ -47,6 +47,8 @@ function task(overrides: Partial<Task> = {}): Task {
 	return {
 		id: "task-1",
 		projectId: "project-1",
+		sprintId: null,
+		backlogRank: null,
 		title: "Original Task",
 		columnId: "todo",
 		priority: "medium",
@@ -82,6 +84,7 @@ function column(overrides: Partial<ProjectColumn> = {}): ProjectColumn {
 		id: "todo",
 		projectId: "project-1",
 		name: "Ready",
+		description: null,
 		position: 0,
 		createdAt: null,
 		updatedAt: null,
@@ -182,6 +185,17 @@ describe("TaskDetailPage", () => {
 		vi.stubGlobal("fetch", fetchSpy);
 
 		renderTaskDetailPage(<TaskDetailPage />, queryClient);
+		expect(
+			Array.from(
+				screen.getByLabelText<HTMLSelectElement>("Priority").options,
+			).map((option) => [option.value, option.textContent]),
+		).toEqual([
+			["", "No priority"],
+			["low", "Low"],
+			["medium", "Medium"],
+			["high", "High"],
+			["critical", "Critical"],
+		]);
 
 		fireEvent.change(screen.getByLabelText("Task Title"), {
 			target: { value: "Updated Task" },
@@ -216,6 +230,58 @@ describe("TaskDetailPage", () => {
 				projectTasksQueryOptions("project-1").queryKey,
 			)?.[0].title,
 		).toBe("Updated Task");
+	});
+
+	it("shows legacy urgent priority as critical and can clear it", async () => {
+		const { TaskDetailPage } = await import(
+			"#/domains/workspace/ui/TaskDetailPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project(),
+		);
+		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
+			task({ priority: "urgent" }),
+		]);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column(),
+		]);
+		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					id: "task-1",
+					project_id: "project-1",
+					title: "Original Task",
+					column_id: "todo",
+					priority: null,
+					rank: "U",
+					assignee_id: null,
+					description: "Original notes",
+					acceptance_criteria: "Original criteria",
+					tag: "Feature",
+					created_at: null,
+					updated_at: null,
+				}),
+				{ headers: { "content-type": "application/json" }, status: 200 },
+			),
+		);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		renderTaskDetailPage(<TaskDetailPage />, queryClient);
+
+		expect(screen.getByLabelText<HTMLSelectElement>("Priority").value).toBe(
+			"critical",
+		);
+		fireEvent.change(screen.getByLabelText("Priority"), {
+			target: { value: "" },
+		});
+		fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+
+		await screen.findByText("Task changes saved.");
+		expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toEqual(
+			expect.objectContaining({ priority: null }),
+		);
 	});
 
 	it("keeps unsaved edits visible when saving fails", async () => {

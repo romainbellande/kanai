@@ -79,7 +79,7 @@ export function TaskDetailPage() {
 						<button
 							type="button"
 							onClick={() => void tasksQuery.refetch()}
-							className="ml-3 rounded-full bg-[var(--primary)] px-3 py-1.5 text-xs font-semibold text-[var(--on-primary)]"
+							className="ml-3 rounded-full bg-[var(--primary)] px-3 py-1.5 text-xs font-semibold text-[color:var(--on-primary)]"
 						>
 							Retry
 						</button>
@@ -187,10 +187,11 @@ export function TaskDetailPage() {
 									}
 									value={form.values.priority}
 								>
+									<option value="">No priority</option>
 									<option value="low">Low</option>
 									<option value="medium">Medium</option>
 									<option value="high">High</option>
-									<option value="urgent">Urgent</option>
+									<option value="critical">Critical</option>
 								</select>
 							</div>
 
@@ -289,7 +290,7 @@ export function TaskDetailPage() {
 									columnsQuery.isError
 								}
 								type="submit"
-								className="inline-flex items-center justify-center gap-2 rounded-full bg-[var(--primary)] px-5 py-2.5 text-sm font-semibold text-[var(--on-primary)] shadow-[0_12px_28px_rgba(0,61,155,0.18)] transition hover:bg-[var(--primary-container)]"
+								className="inline-flex items-center justify-center gap-2 rounded-full bg-[var(--primary)] px-5 py-2.5 text-sm font-semibold text-[color:var(--on-primary)] shadow-[0_12px_28px_rgba(0,61,155,0.18)] transition hover:bg-[var(--primary-container)]"
 							>
 								<Save className="h-4 w-4" />
 								{form.isSaving ? "Saving..." : "Save Changes"}

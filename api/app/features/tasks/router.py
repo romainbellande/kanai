@@ -52,6 +52,21 @@ async def list_tasks_endpoint(
     )
 
 
+@task_router.get("/active-sprint", response_model=list[TaskRead])
+async def list_active_sprint_tasks_endpoint(
+    project_id: UUID,
+    session: DatabaseSession,
+    current_user: CurrentUser,
+) -> list[TaskRead]:
+    """List tasks selected into the project's active sprint."""
+    from app.features.tasks import TaskService
+
+    return await TaskService(session).list_active_sprint(
+        project_id=project_id,
+        user_id=_require_current_user_id(current_user.id),
+    )
+
+
 @task_router.get("/{task_id}", response_model=TaskRead)
 async def get_task_endpoint(
     project_id: UUID,

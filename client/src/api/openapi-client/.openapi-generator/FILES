@@ -4,6 +4,8 @@ apis/UsersApi.ts
 apis/index.ts
 docs/HTTPValidationError.md
 docs/LocationInner.md
+docs/ProjectChatAuthorRead.md
+docs/ProjectChatMessageRead.md
 docs/ProjectColumnCreate.md
 docs/ProjectColumnRead.md
 docs/ProjectColumnReorder.md
@@ -26,6 +28,8 @@ docs/ValidationError.md
 index.ts
 models/HTTPValidationError.ts
 models/LocationInner.ts
+models/ProjectChatAuthorRead.ts
+models/ProjectChatMessageRead.ts
 models/ProjectColumnCreate.ts
 models/ProjectColumnRead.ts
 models/ProjectColumnReorder.ts

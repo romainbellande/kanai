@@ -40,6 +40,12 @@ export interface ProjectColumnRead {
     name: string;
     /**
      * 
+     * @type {string}
+     * @memberof ProjectColumnRead
+     */
+    description: string | null;
+    /**
+     * 
      * @type {number}
      * @memberof ProjectColumnRead
      */
@@ -65,6 +71,7 @@ export function instanceOfProjectColumnRead(value: object): value is ProjectColu
     if (!('id' in value) || value['id'] === undefined) return false;
     if (!('projectId' in value) || value['projectId'] === undefined) return false;
     if (!('name' in value) || value['name'] === undefined) return false;
+    if (!('description' in value) || value['description'] === undefined) return false;
     if (!('position' in value) || value['position'] === undefined) return false;
     if (!('createdAt' in value) || value['createdAt'] === undefined) return false;
     if (!('updatedAt' in value) || value['updatedAt'] === undefined) return false;
@@ -84,6 +91,7 @@ export function ProjectColumnReadFromJSONTyped(json: any, ignoreDiscriminator: b
         'id': json['id'],
         'projectId': json['project_id'],
         'name': json['name'],
+        'description': json['description'],
         'position': json['position'],
         'createdAt': (json['created_at'] == null ? null : new Date(json['created_at'])),
         'updatedAt': (json['updated_at'] == null ? null : new Date(json['updated_at'])),
@@ -104,6 +112,7 @@ export function ProjectColumnReadToJSONTyped(value?: ProjectColumnRead | null, i
         'id': value['id'],
         'project_id': value['projectId'],
         'name': value['name'],
+        'description': value['description'],
         'position': value['position'],
         'created_at': value['createdAt'] == null ? value['createdAt'] : value['createdAt'].toISOString(),
         'updated_at': value['updatedAt'] == null ? value['updatedAt'] : value['updatedAt'].toISOString(),

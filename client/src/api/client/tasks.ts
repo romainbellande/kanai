@@ -11,10 +11,12 @@ import { fetchAuthenticatedApi } from "./utils";
 export type Task = {
 	id: string;
 	projectId: string;
+	sprintId: string | null;
 	title: string;
 	columnId: string;
-	priority: string;
+	priority: string | null;
 	rank: string;
+	backlogRank: string | null;
 	assigneeId: string | null;
 	description: string | null;
 	acceptanceCriteria: string | null;
@@ -24,16 +26,27 @@ export type Task = {
 };
 
 export type CreateTaskInput = TaskCreate;
+export type CreateProjectTaskInput = CreateTaskInput & {
+	includeInActiveSprint?: boolean;
+};
+export type ReorderProjectBacklogInput = {
+	taskIds: string[];
+};
+export type AddProjectSprintTaskInput = {
+	taskId: string;
+};
 export type UpdateTaskInput = TaskUpdate;
 export type MoveTaskInput = TaskDestination;
 
 type TaskJson = {
 	id: string;
 	project_id: string;
+	sprint_id?: string | null;
 	title: string;
 	column_id: string;
-	priority: string;
+	priority: string | null;
 	rank: string;
+	backlog_rank?: string | null;
 	assignee_id: string | null;
 	description: string | null;
 	acceptance_criteria: string | null;
@@ -46,14 +59,24 @@ export function projectTasksQueryKey(projectId: string) {
 	return ["projects", projectId, "tasks"] as const;
 }
 
+export function projectActiveSprintTasksQueryKey(projectId: string) {
+	return ["projects", projectId, "tasks", "active-sprint"] as const;
+}
+
+export function projectBacklogQueryKey(projectId: string) {
+	return ["projects", projectId, "backlog"] as const;
+}
+
 function mapTask(task: TaskJson): Task {
 	return {
 		id: task.id,
 		projectId: task.project_id,
+		sprintId: task.sprint_id ?? null,
 		title: task.title,
 		columnId: task.column_id,
-		priority: task.priority,
+		priority: normalizeTaskPriority(task.priority),
 		rank: task.rank,
+		backlogRank: task.backlog_rank ?? null,
 		assigneeId: task.assignee_id,
 		description: task.description,
 		acceptanceCriteria: task.acceptance_criteria,
@@ -63,10 +86,24 @@ function mapTask(task: TaskJson): Task {
 	};
 }
 
-function taskInputToJson(values: CreateTaskInput | UpdateTaskInput) {
+function normalizeTaskPriority(
+	priority: string | null | undefined,
+): string | null {
+	const normalizedPriority = priority?.trim().toLowerCase() ?? "";
+	if (!normalizedPriority) {
+		return null;
+	}
+	return normalizedPriority === "urgent" ? "critical" : normalizedPriority;
+}
+
+function taskInputToJson(values: CreateProjectTaskInput | UpdateTaskInput) {
 	return {
 		title: values.title,
 		column_id: values.columnId,
+		include_in_active_sprint:
+			"includeInActiveSprint" in values
+				? values.includeInActiveSprint
+				: undefined,
 		priority: values.priority,
 		assignee_id: values.assigneeId,
 		description: values.description,
@@ -114,12 +151,32 @@ export async function listProjectTasks(projectId: string): Promise<Task[]> {
 	return tasks.map(mapTask);
 }
 
+export async function listProjectActiveSprintTasks(
+	projectId: string,
+): Promise<Task[]> {
+	const tasks = await requestProjectTasks<TaskJson[]>(
+		`/projects/${projectId}/tasks/active-sprint`,
+		{ method: "GET" },
+	);
+
+	return tasks.map(mapTask);
+}
+
+export async function listProjectBacklog(projectId: string): Promise<Task[]> {
+	const tasks = await requestProjectTasks<TaskJson[]>(
+		`/projects/${projectId}/backlog`,
+		{ method: "GET" },
+	);
+
+	return tasks.map(mapTask);
+}
+
 export async function createProjectTask({
 	projectId,
 	taskCreate,
 }: {
 	projectId: string;
-	taskCreate: CreateTaskInput;
+	taskCreate: CreateProjectTaskInput;
 }): Promise<Task> {
 	const task = await requestProjectTasks<TaskJson>(
 		`/projects/${projectId}/tasks`,
@@ -127,6 +184,66 @@ export async function createProjectTask({
 			method: "POST",
 			body: JSON.stringify(taskInputToJson(taskCreate)),
 		},
+	);
+
+	return mapTask(task);
+}
+
+export async function createProjectBacklogTask({
+	projectId,
+	taskCreate,
+}: {
+	projectId: string;
+	taskCreate: CreateTaskInput;
+}): Promise<Task> {
+	const task = await requestProjectTasks<TaskJson>(
+		`/projects/${projectId}/backlog/tasks`,
+		{
+			method: "POST",
+			body: JSON.stringify(taskInputToJson(taskCreate)),
+		},
+	);
+
+	return mapTask(task);
+}
+
+export async function reorderProjectBacklog(
+	projectId: string,
+	values: ReorderProjectBacklogInput,
+): Promise<Task[]> {
+	const tasks = await requestProjectTasks<TaskJson[]>(
+		`/projects/${projectId}/backlog/reorder`,
+		{
+			method: "PUT",
+			body: JSON.stringify({ task_ids: values.taskIds }),
+		},
+	);
+
+	return tasks.map(mapTask);
+}
+
+export async function addProjectBacklogTaskToActiveSprint(
+	projectId: string,
+	values: AddProjectSprintTaskInput,
+): Promise<Task> {
+	const task = await requestProjectTasks<TaskJson>(
+		`/projects/${projectId}/sprints/active/tasks`,
+		{
+			method: "POST",
+			body: JSON.stringify({ task_id: values.taskId }),
+		},
+	);
+
+	return mapTask(task);
+}
+
+export async function removeProjectActiveSprintTaskToBacklog(
+	projectId: string,
+	taskId: string,
+): Promise<Task> {
+	const task = await requestProjectTasks<TaskJson>(
+		`/projects/${projectId}/sprints/active/tasks/${taskId}`,
+		{ method: "DELETE" },
 	);
 
 	return mapTask(task);
@@ -176,6 +293,20 @@ export function projectTasksQueryOptions(projectId: string) {
 	return queryOptions({
 		queryKey: projectTasksQueryKey(projectId),
 		queryFn: () => listProjectTasks(projectId),
+	});
+}
+
+export function projectActiveSprintTasksQueryOptions(projectId: string) {
+	return queryOptions({
+		queryKey: projectActiveSprintTasksQueryKey(projectId),
+		queryFn: () => listProjectActiveSprintTasks(projectId),
+	});
+}
+
+export function projectBacklogQueryOptions(projectId: string) {
+	return queryOptions({
+		queryKey: projectBacklogQueryKey(projectId),
+		queryFn: () => listProjectBacklog(projectId),
 	});
 }
 

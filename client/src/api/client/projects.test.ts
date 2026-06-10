@@ -13,17 +13,28 @@ vi.mock("openid-client", () => ({
 import {
 	addProjectMember,
 	CurrentUserAuthError,
+	closeActiveProjectSprint,
 	createProject,
 	createProjectColumn,
+	createProjectSprint,
 	deleteProjectColumn,
+	getActiveProjectSprint,
+	getActiveProjectSprintCloseConfirmation,
 	getProject,
+	getProjectDoneColumn,
 	listProjectColumns,
 	listProjects,
+	projectActiveSprintQueryOptions,
 	projectColumnsQueryOptions,
+	projectDoneColumnQueryOptions,
 	projectQueryOptions,
+	projectSprintHistoryQueryOptions,
 	projectsQueryOptions,
 	reorderProjectColumns,
+	updateActiveProjectSprint,
+	updateProject,
 	updateProjectColumn,
+	updateProjectDoneColumn,
 } from "#/api/client";
 
 describe("projects client", () => {
@@ -166,6 +177,46 @@ describe("projects client", () => {
 		});
 	});
 
+	it("updates project metadata and preserves explicit null descriptions", async () => {
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({ accessToken: "project-token" }),
+		);
+		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					id: "project-1",
+					name: "Renamed Project",
+					code: "API",
+					priority: "high",
+					description: null,
+					status: "active",
+					owner_ids: [],
+					member_ids: [],
+					created_at: null,
+					updated_at: null,
+				}),
+				{ headers: { "content-type": "application/json" }, status: 200 },
+			),
+		);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		await updateProject("project-1", {
+			name: "Renamed Project",
+			description: null,
+		});
+
+		const [url, init] = fetchSpy.mock.calls[0];
+
+		expect(url).toBe("https://api.example.test/projects/project-1");
+		expect(init?.method).toBe("PATCH");
+		expect(JSON.parse(String(init?.body))).toEqual({
+			name: "Renamed Project",
+			description: null,
+		});
+	});
+
 	it("rejects before projects fetch when the token is missing", async () => {
 		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
 		const fetchSpy = vi.fn<typeof fetch>();
@@ -190,6 +241,315 @@ describe("projects client", () => {
 			"project-1",
 			"columns",
 		]);
+		expect(projectActiveSprintQueryOptions("project-1").queryKey).toEqual([
+			"projects",
+			"project-1",
+			"sprints",
+			"active",
+		]);
+		expect(projectDoneColumnQueryOptions("project-1").queryKey).toEqual([
+			"projects",
+			"project-1",
+			"done-column",
+		]);
+		expect(projectSprintHistoryQueryOptions("project-1").queryKey).toEqual([
+			"projects",
+			"project-1",
+			"sprints",
+			"history",
+		]);
+	});
+
+	it("gets and creates active project sprints through nested project endpoints", async () => {
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test/");
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({ accessToken: "sprint-token" }),
+		);
+		const fetchSpy = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						id: "sprint-1",
+						project_id: "project-1",
+						name: "Sprint 1",
+						lifecycle_state: "active",
+						planned_start_date: "2026-06-01",
+						planned_end_date: "2026-06-14",
+						goal: null,
+						closed_at: null,
+						created_at: null,
+						updated_at: null,
+					}),
+					{ headers: { "content-type": "application/json" }, status: 200 },
+				),
+			)
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						id: "sprint-1",
+						project_id: "project-1",
+						name: "Sprint 1",
+						lifecycle_state: "active",
+						planned_start_date: "2026-06-01",
+						planned_end_date: "2026-06-14",
+						goal: "Planning goal",
+						closed_at: null,
+						created_at: null,
+						updated_at: null,
+					}),
+					{ headers: { "content-type": "application/json" }, status: 201 },
+				),
+			);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		await expect(getActiveProjectSprint("project-1")).resolves.toMatchObject({
+			id: "sprint-1",
+			projectId: "project-1",
+			name: "Sprint 1",
+			lifecycleState: "active",
+			plannedStartDate: "2026-06-01",
+			plannedEndDate: "2026-06-14",
+			goal: null,
+		});
+		await expect(
+			createProjectSprint("project-1", {
+				plannedStartDate: "2026-06-01",
+				plannedEndDate: "2026-06-14",
+				goal: "Planning goal",
+				taskIds: ["task-1", "task-2"],
+			}),
+		).resolves.toMatchObject({
+			name: "Sprint 1",
+			goal: "Planning goal",
+		});
+
+		expect(fetchSpy.mock.calls[0][0]).toBe(
+			"https://api.example.test/projects/project-1/sprints/active",
+		);
+		expect(fetchSpy.mock.calls[0][1]?.method).toBe("GET");
+		expect(fetchSpy.mock.calls[1][0]).toBe(
+			"https://api.example.test/projects/project-1/sprints",
+		);
+		expect(fetchSpy.mock.calls[1][1]?.method).toBe("POST");
+		expect(JSON.parse(String(fetchSpy.mock.calls[1][1]?.body))).toEqual({
+			planned_start_date: "2026-06-01",
+			planned_end_date: "2026-06-14",
+			goal: "Planning goal",
+			task_ids: ["task-1", "task-2"],
+		});
+	});
+
+	it("updates active project sprint metadata through the active sprint endpoint", async () => {
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test/");
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({ accessToken: "sprint-token" }),
+		);
+		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					id: "sprint-1",
+					project_id: "project-1",
+					name: "Sprint 1",
+					lifecycle_state: "active",
+					planned_start_date: "2026-06-02",
+					planned_end_date: "2026-06-15",
+					goal: null,
+					closed_at: null,
+					created_at: null,
+					updated_at: null,
+				}),
+				{ headers: { "content-type": "application/json" }, status: 200 },
+			),
+		);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		await expect(
+			updateActiveProjectSprint("project-1", {
+				plannedStartDate: "2026-06-02",
+				plannedEndDate: "2026-06-15",
+				goal: null,
+			}),
+		).resolves.toMatchObject({
+			name: "Sprint 1",
+			plannedStartDate: "2026-06-02",
+			plannedEndDate: "2026-06-15",
+			goal: null,
+		});
+
+		expect(fetchSpy.mock.calls[0][0]).toBe(
+			"https://api.example.test/projects/project-1/sprints/active",
+		);
+		expect(fetchSpy.mock.calls[0][1]?.method).toBe("PATCH");
+		expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toEqual({
+			planned_start_date: "2026-06-02",
+			planned_end_date: "2026-06-15",
+			goal: null,
+		});
+	});
+
+	it("loads close confirmation and closes active project sprints", async () => {
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test/");
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({ accessToken: "sprint-token" }),
+		);
+		const sprintJson = {
+			id: "sprint-1",
+			project_id: "project-1",
+			name: "Sprint 1",
+			lifecycle_state: "active",
+			planned_start_date: "2026-06-01",
+			planned_end_date: "2026-06-14",
+			goal: null,
+			closed_at: null,
+			created_at: null,
+			updated_at: null,
+		};
+		const taskJson = {
+			id: "task-1",
+			project_id: "project-1",
+			sprint_id: "sprint-1",
+			title: "Unfinished task",
+			column_id: "column-todo",
+			priority: null,
+			rank: "U",
+			backlog_rank: null,
+			assignee_id: null,
+			description: null,
+			acceptance_criteria: null,
+			tag: null,
+			created_at: null,
+			updated_at: null,
+		};
+		const fetchSpy = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						sprint: sprintJson,
+						finished_count: 1,
+						unfinished_count: 1,
+						unfinished_tasks: [taskJson],
+						carryover_statement:
+							"Unfinished tasks will move to the top of the Backlog.",
+					}),
+					{ headers: { "content-type": "application/json" }, status: 200 },
+				),
+			)
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						sprint: {
+							...sprintJson,
+							lifecycle_state: "closed",
+							closed_at: "2026-06-09T20:00:00Z",
+						},
+						finished_count: 1,
+						unfinished_count: 1,
+						unfinished_tasks: [
+							{ ...taskJson, sprint_id: null, backlog_rank: "!" },
+						],
+						carryover_statement:
+							"Unfinished tasks will move to the top of the Backlog.",
+						snapshots: [
+							{
+								id: "snapshot-1",
+								sprint_id: "sprint-1",
+								task_id: "task-1",
+								column_id: "column-todo",
+								title: "Unfinished task",
+								outcome: "unfinished",
+								priority: null,
+								rank: "U",
+								description: null,
+								acceptance_criteria: null,
+								tag: null,
+								created_at: null,
+							},
+						],
+					}),
+					{ headers: { "content-type": "application/json" }, status: 200 },
+				),
+			);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		await expect(
+			getActiveProjectSprintCloseConfirmation("project-1"),
+		).resolves.toMatchObject({
+			finishedCount: 1,
+			unfinishedCount: 1,
+			unfinishedTasks: [expect.objectContaining({ title: "Unfinished task" })],
+		});
+		await expect(closeActiveProjectSprint("project-1")).resolves.toMatchObject({
+			sprint: { lifecycleState: "closed" },
+			snapshots: [expect.objectContaining({ outcome: "unfinished" })],
+		});
+		expect(fetchSpy.mock.calls[0][0]).toBe(
+			"https://api.example.test/projects/project-1/sprints/active/close-confirmation",
+		);
+		expect(fetchSpy.mock.calls[1][0]).toBe(
+			"https://api.example.test/projects/project-1/sprints/active/close",
+		);
+		expect(fetchSpy.mock.calls[1][1]?.method).toBe("POST");
+	});
+
+	it("gets and updates project Done Column configuration", async () => {
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test/");
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({ accessToken: "done-token" }),
+		);
+		const fetchSpy = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						project_id: "project-1",
+						done_column_id: null,
+						requires_designation: true,
+					}),
+					{ headers: { "content-type": "application/json" }, status: 200 },
+				),
+			)
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						project_id: "project-1",
+						done_column_id: "column-done",
+						requires_designation: false,
+					}),
+					{ headers: { "content-type": "application/json" }, status: 200 },
+				),
+			);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		await expect(getProjectDoneColumn("project-1")).resolves.toEqual({
+			projectId: "project-1",
+			doneColumnId: null,
+			requiresDesignation: true,
+		});
+		await expect(
+			updateProjectDoneColumn("project-1", { doneColumnId: "column-done" }),
+		).resolves.toEqual({
+			projectId: "project-1",
+			doneColumnId: "column-done",
+			requiresDesignation: false,
+		});
+
+		expect(fetchSpy.mock.calls[0][0]).toBe(
+			"https://api.example.test/projects/project-1/done-column",
+		);
+		expect(fetchSpy.mock.calls[0][1]?.method).toBe("GET");
+		expect(fetchSpy.mock.calls[1][0]).toBe(
+			"https://api.example.test/projects/project-1/done-column",
+		);
+		expect(fetchSpy.mock.calls[1][1]?.method).toBe("PATCH");
+		expect(JSON.parse(String(fetchSpy.mock.calls[1][1]?.body))).toEqual({
+			done_column_id: "column-done",
+		});
 	});
 
 	it("lists project columns with the API base URL and stored bearer token", async () => {
@@ -205,6 +565,7 @@ describe("projects client", () => {
 						id: "column-1",
 						project_id: "project-1",
 						name: "To Do",
+						description: "Ready to start",
 						position: 0,
 						created_at: null,
 						updated_at: null,
@@ -220,6 +581,7 @@ describe("projects client", () => {
 				id: "column-1",
 				projectId: "project-1",
 				name: "To Do",
+				description: "Ready to start",
 				position: 0,
 				createdAt: null,
 				updatedAt: null,
@@ -244,6 +606,7 @@ describe("projects client", () => {
 			id: "column-1",
 			project_id: "project-1",
 			name: "Review",
+			description: "Needs QA",
 			position: 3,
 			created_at: null,
 			updated_at: null,
@@ -271,8 +634,14 @@ describe("projects client", () => {
 			.mockResolvedValueOnce(new Response(null, { status: 204 }));
 		vi.stubGlobal("fetch", fetchSpy);
 
-		await createProjectColumn("project-1", { name: "Review" });
-		await updateProjectColumn("project-1", "column-1", { name: "QA" });
+		await createProjectColumn("project-1", {
+			name: "Review",
+			description: "Needs QA",
+		});
+		await updateProjectColumn("project-1", "column-1", {
+			name: "QA",
+			description: null,
+		});
 		await reorderProjectColumns("project-1", {
 			columnIds: ["column-2", "column-1"],
 		});
@@ -291,9 +660,11 @@ describe("projects client", () => {
 		]);
 		expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toEqual({
 			name: "Review",
+			description: "Needs QA",
 		});
 		expect(JSON.parse(String(fetchSpy.mock.calls[1][1]?.body))).toEqual({
 			name: "QA",
+			description: null,
 		});
 		expect(JSON.parse(String(fetchSpy.mock.calls[2][1]?.body))).toEqual({
 			column_ids: ["column-2", "column-1"],
@@ -315,6 +686,7 @@ describe("projects client", () => {
 			id: "column-1",
 			project_id: "project-1",
 			name: "Review",
+			description: "Needs QA",
 			position: 3,
 			created_at: null,
 			updated_at: null,

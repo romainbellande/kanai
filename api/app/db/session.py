@@ -2,6 +2,7 @@
 
 from collections.abc import AsyncIterator
 
+from sqlalchemy.engine import Connection
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel
@@ -17,6 +18,17 @@ settings = get_settings()
 
 engine = create_async_engine(settings.database_url)
 DBSession = async_sessionmaker[AsyncSession](engine, expire_on_commit=False)
+
+
+def drop_metadata_tables(connection: Connection) -> None:
+    """Drop registered metadata tables for startup schema reset."""
+    if connection.dialect.name == "postgresql":
+        for table in SQLModel.metadata.tables.values():
+            table_name = connection.dialect.identifier_preparer.format_table(table)
+            connection.exec_driver_sql(f"DROP TABLE IF EXISTS {table_name} CASCADE")
+        return
+
+    SQLModel.metadata.drop_all(connection)
 
 
 async def get_db() -> AsyncIterator[AsyncSession]:
@@ -59,7 +71,7 @@ async def create_db_and_tables() -> None:
                 )
                 return
 
-            await conn.run_sync(SQLModel.metadata.drop_all)
+            await conn.run_sync(drop_metadata_tables)
             await conn.run_sync(SQLModel.metadata.create_all)
         logger.info("Database tables reset successfully")
     except SQLAlchemyError as e:

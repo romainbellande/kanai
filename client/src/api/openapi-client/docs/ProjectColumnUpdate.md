@@ -8,6 +8,7 @@ Request payload for updating a project workflow column.
 Name | Type
 ------------ | -------------
 `name` | string
+`description` | string
 
 ## Example
 
@@ -17,6 +18,7 @@ import type { ProjectColumnUpdate } from ''
 // TODO: Update the object below with actual values
 const example = {
   "name": null,
+  "description": null,
 } satisfies ProjectColumnUpdate
 
 console.log(example)

@@ -16,6 +16,7 @@ from app.services.project_access import ProjectAccess, ProjectRole
 
 
 DEFAULT_PROJECT_COLUMN_NAMES = ("To Do", "In Progress", "Done")
+PROJECT_COLUMN_DESCRIPTION_MAX_LENGTH = 500
 
 
 class ProjectColumnService:
@@ -46,6 +47,7 @@ class ProjectColumnService:
         user_id: UUID,
         *,
         name: str,
+        description: str | None = None,
     ) -> ProjectColumnRead:
         """Create a workflow column at the end of a project board."""
         await self._access.require_project(project_id, user_id, role=ProjectRole.OWNER)
@@ -68,6 +70,7 @@ class ProjectColumnService:
         column = ProjectColumn(
             project_id=project_id,
             name=column_name,
+            description=self._normalize_description(description),
             position=len(existing_columns),
         )
         self._repository.add_column(column)
@@ -83,6 +86,8 @@ class ProjectColumnService:
         user_id: UUID,
         *,
         name: str,
+        description: str | None = None,
+        update_description: bool = False,
     ) -> ProjectColumnRead:
         """Rename a workflow column for a project owned by the current user."""
         await self._access.require_project(project_id, user_id, role=ProjectRole.OWNER)
@@ -110,6 +115,8 @@ class ProjectColumnService:
             )
 
         column.name = column_name
+        if update_description:
+            column.description = self._normalize_description(description)
         await self._repository.commit()
         await self._repository.refresh_column(column)
         return self._to_read(column)
@@ -145,7 +152,9 @@ class ProjectColumnService:
 
     async def delete(self, project_id: UUID, column_id: UUID, user_id: UUID) -> None:
         """Delete an empty workflow column from a project owned by the user."""
-        await self._access.require_project(project_id, user_id, role=ProjectRole.OWNER)
+        project = await self._access.require_project(
+            project_id, user_id, role=ProjectRole.OWNER
+        )
         columns = await self._repository.list_columns_by_project(project_id)
         column = next((column for column in columns if column.id == column_id), None)
         if column is None:
@@ -158,6 +167,11 @@ class ProjectColumnService:
             )
         if column.id is None:
             self._raise_column_not_found()
+        if project.done_column_id == column.id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Designate another Done Column before deleting this column",
+            )
         tasks = await self._task_repository.list_by_project_and_column(
             project_id, column.id
         )
@@ -183,6 +197,22 @@ class ProjectColumnService:
         )
 
     @staticmethod
+    def _normalize_description(description: str | None) -> str | None:
+        if description is None:
+            return None
+
+        normalized_description = description.strip()
+        if normalized_description == "":
+            return None
+        if len(normalized_description) > PROJECT_COLUMN_DESCRIPTION_MAX_LENGTH:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Column description must be 500 characters or fewer",
+            )
+
+        return normalized_description
+
+    @staticmethod
     def _to_read(column: ProjectColumn) -> ProjectColumnRead:
         if column.id is None:
             raise RuntimeError("Project column ID is missing")
@@ -191,6 +221,7 @@ class ProjectColumnService:
             id=column.id,
             project_id=column.project_id,
             name=column.name,
+            description=column.description,
             position=column.position,
             created_at=column.created_at,
             updated_at=column.updated_at,
