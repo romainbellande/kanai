@@ -21,7 +21,15 @@ from app.api.v1.endpoints.projects import project_router
 from app.core.exceptions import InvalidTokenException
 from app.core.security import AuthMiddleware
 from app.db.session import get_db
-from app.models.project import Project, ProjectChatMessage, ProjectMember, ProjectOwner
+from app.models.project import (
+    Project,
+    ProjectChatMessage,
+    ProjectMember,
+    ProjectOwner,
+    ProjectSprint,
+    ProjectSprintTaskSnapshot,
+    SprintLifecycleState,
+)
 from app.models.task import Task
 from app.models.user import User
 from app.schemas.auth import AuthenticatedContext
@@ -404,6 +412,1392 @@ async def test_project_chat_history_denies_outsiders(
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Project not found"}
+
+
+@pytest.mark.asyncio
+async def test_project_owner_creates_empty_active_sprint(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Enterprise Launch", "code": "SP1", "priority": "medium"},
+    )
+    project_id = project_response.json()["id"]
+
+    response = await client.post(
+        f"/projects/{project_id}/sprints",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "planned_start_date": "2026-06-01",
+            "planned_end_date": "2026-06-14",
+            "goal": "  Ship sprint planning  ",
+        },
+    )
+
+    assert response.status_code == 201
+    sprint = response.json()
+    assert sprint["project_id"] == project_id
+    assert sprint["name"] == "Sprint 1"
+    assert sprint["lifecycle_state"] == "active"
+    assert sprint["planned_start_date"] == "2026-06-01"
+    assert sprint["planned_end_date"] == "2026-06-14"
+    assert sprint["goal"] == "Ship sprint planning"
+
+    async with session_factory() as session:
+        persisted = await session.get(ProjectSprint, UUID(sprint["id"]))
+
+    assert persisted is not None
+    assert persisted.name == "Sprint 1"
+
+
+@pytest.mark.asyncio
+async def test_project_participants_can_read_active_sprint_but_only_owners_create(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    member_id = users["member"].id
+    assert member_id is not None
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "name": "Enterprise Launch",
+            "code": "SPR",
+            "priority": "medium",
+            "member_ids": [str(member_id)],
+        },
+    )
+    project_id = project_response.json()["id"]
+    create_response = await client.post(
+        f"/projects/{project_id}/sprints",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "planned_start_date": "2026-06-01",
+            "planned_end_date": "2026-06-14",
+        },
+    )
+
+    member_read_response = await client.get(
+        f"/projects/{project_id}/sprints/active",
+        headers={"Authorization": "Bearer member-token"},
+    )
+    member_create_response = await client.post(
+        f"/projects/{project_id}/sprints",
+        headers={"Authorization": "Bearer member-token"},
+        json={
+            "planned_start_date": "2026-06-15",
+            "planned_end_date": "2026-06-28",
+        },
+    )
+    outsider_read_response = await client.get(
+        f"/projects/{project_id}/sprints/active",
+        headers={"Authorization": "Bearer outsider-token"},
+    )
+
+    assert create_response.status_code == 201
+    assert member_read_response.status_code == 200
+    assert member_read_response.json()["name"] == "Sprint 1"
+    assert member_create_response.status_code == 404
+    assert outsider_read_response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_project_sprint_creation_rejects_invalid_dates_and_second_active_sprint(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Enterprise Launch", "code": "SP2", "priority": "medium"},
+    )
+    project_id = project_response.json()["id"]
+
+    invalid_date_response = await client.post(
+        f"/projects/{project_id}/sprints",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "planned_start_date": "2026-06-14",
+            "planned_end_date": "2026-06-01",
+        },
+    )
+    first_response = await client.post(
+        f"/projects/{project_id}/sprints",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "planned_start_date": "2026-05-01",
+            "planned_end_date": "2026-05-14",
+        },
+    )
+    duplicate_response = await client.post(
+        f"/projects/{project_id}/sprints",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "planned_start_date": "2026-06-01",
+            "planned_end_date": "2026-06-14",
+        },
+    )
+
+    assert invalid_date_response.status_code == 422
+    assert invalid_date_response.json() == {
+        "detail": "Sprint end date must be on or after start date"
+    }
+    assert first_response.status_code == 201
+    assert duplicate_response.status_code == 409
+    assert duplicate_response.json() == {
+        "detail": "Project already has an active sprint"
+    }
+
+
+@pytest.mark.asyncio
+async def test_project_owner_creates_active_sprint_with_initial_backlog_tasks(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Enterprise Launch", "code": "SP3", "priority": "medium"},
+    )
+    project_id = project_response.json()["id"]
+    columns_response = await client.get(
+        f"/projects/{project_id}/columns",
+        headers={"Authorization": "Bearer token"},
+    )
+    todo_column = next(
+        column for column in columns_response.json() if column["name"] == "To Do"
+    )
+    backlog_task_response = await client.post(
+        f"/projects/{project_id}/backlog/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={"title": "Selected backlog task"},
+    )
+
+    sprint_response = await client.post(
+        f"/projects/{project_id}/sprints",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "planned_start_date": "2026-06-01",
+            "planned_end_date": "2026-06-14",
+            "task_ids": [backlog_task_response.json()["id"]],
+        },
+    )
+    sprint_tasks_response = await client.get(
+        f"/projects/{project_id}/tasks/active-sprint",
+        headers={"Authorization": "Bearer token"},
+    )
+    backlog_response = await client.get(
+        f"/projects/{project_id}/backlog",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert sprint_response.status_code == 201
+    sprint_id = sprint_response.json()["id"]
+    assert sprint_tasks_response.status_code == 200
+    assert sprint_tasks_response.json() == [
+        {
+            **backlog_task_response.json(),
+            "sprint_id": sprint_id,
+            "backlog_rank": None,
+        }
+    ]
+    assert sprint_tasks_response.json()[0]["column_id"] == todo_column["id"]
+    assert backlog_response.json() == []
+
+
+@pytest.mark.asyncio
+async def test_active_sprint_task_list_filters_project_tasks_by_sprint_membership(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Enterprise Launch", "code": "SB1", "priority": "medium"},
+    )
+    project_id = project_response.json()["id"]
+    columns_response = await client.get(
+        f"/projects/{project_id}/columns",
+        headers={"Authorization": "Bearer token"},
+    )
+    todo_column = next(
+        column for column in columns_response.json() if column["name"] == "To Do"
+    )
+    sprint_response = await client.post(
+        f"/projects/{project_id}/sprints",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "planned_start_date": "2026-06-01",
+            "planned_end_date": "2026-06-14",
+        },
+    )
+    sprint_id = sprint_response.json()["id"]
+    sprint_task_response = await client.post(
+        f"/projects/{project_id}/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "title": "Sprint task",
+            "column_id": todo_column["id"],
+            "include_in_active_sprint": True,
+        },
+    )
+    backlog_task_response = await client.post(
+        f"/projects/{project_id}/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={"title": "Backlog task", "column_id": todo_column["id"]},
+    )
+
+    all_tasks_response = await client.get(
+        f"/projects/{project_id}/tasks",
+        headers={"Authorization": "Bearer token"},
+    )
+    sprint_tasks_response = await client.get(
+        f"/projects/{project_id}/tasks/active-sprint",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert sprint_task_response.status_code == 201
+    assert sprint_task_response.json()["sprint_id"] == sprint_id
+    assert backlog_task_response.status_code == 201
+    assert backlog_task_response.json()["sprint_id"] is None
+    assert {task["title"] for task in all_tasks_response.json()} == {
+        "Sprint task",
+        "Backlog task",
+    }
+    assert [task["title"] for task in sprint_tasks_response.json()] == [
+        "Sprint task"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_sprint_task_creation_without_column_uses_first_non_done_column(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Enterprise Launch", "code": "SB2", "priority": "medium"},
+    )
+    project_id = project_response.json()["id"]
+    columns_response = await client.get(
+        f"/projects/{project_id}/columns",
+        headers={"Authorization": "Bearer token"},
+    )
+    todo_column = next(
+        column for column in columns_response.json() if column["name"] == "To Do"
+    )
+    done_column = next(
+        column for column in columns_response.json() if column["name"] == "Done"
+    )
+    await client.patch(
+        f"/projects/{project_id}/done-column",
+        headers={"Authorization": "Bearer token"},
+        json={"done_column_id": done_column["id"]},
+    )
+    sprint_response = await client.post(
+        f"/projects/{project_id}/sprints",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "planned_start_date": "2026-06-01",
+            "planned_end_date": "2026-06-14",
+        },
+    )
+
+    response = await client.post(
+        f"/projects/{project_id}/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={"title": "General sprint task", "include_in_active_sprint": True},
+    )
+
+    assert response.status_code == 201
+    task = response.json()
+    assert task["sprint_id"] == sprint_response.json()["id"]
+    assert task["column_id"] == todo_column["id"]
+
+
+@pytest.mark.asyncio
+async def test_sprint_task_creation_requires_active_sprint(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Enterprise Launch", "code": "SB3", "priority": "medium"},
+    )
+    project_id = project_response.json()["id"]
+
+    response = await client.post(
+        f"/projects/{project_id}/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={"title": "Missing sprint task", "include_in_active_sprint": True},
+    )
+    list_response = await client.get(
+        f"/projects/{project_id}/tasks/active-sprint",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "Project has no active sprint"}
+    assert list_response.status_code == 404
+    assert list_response.json() == {"detail": "Active sprint not found"}
+
+
+@pytest.mark.asyncio
+async def test_project_member_adds_backlog_task_to_active_sprint_preserving_column(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    member_id = users["member"].id
+    assert member_id is not None
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "name": "Enterprise Launch",
+            "code": "SB4",
+            "priority": "medium",
+            "member_ids": [str(member_id)],
+        },
+    )
+    project_id = project_response.json()["id"]
+    columns_response = await client.get(
+        f"/projects/{project_id}/columns",
+        headers={"Authorization": "Bearer token"},
+    )
+    todo_column = next(
+        column for column in columns_response.json() if column["name"] == "To Do"
+    )
+    backlog_task_response = await client.post(
+        f"/projects/{project_id}/backlog/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={"title": "Member selected task", "column_id": todo_column["id"]},
+    )
+    sprint_response = await client.post(
+        f"/projects/{project_id}/sprints",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "planned_start_date": "2026-06-01",
+            "planned_end_date": "2026-06-14",
+        },
+    )
+
+    add_response = await client.post(
+        f"/projects/{project_id}/sprints/active/tasks",
+        headers={"Authorization": "Bearer member-token"},
+        json={"task_id": backlog_task_response.json()["id"]},
+    )
+    backlog_response = await client.get(
+        f"/projects/{project_id}/backlog",
+        headers={"Authorization": "Bearer member-token"},
+    )
+    outsider_response = await client.post(
+        f"/projects/{project_id}/sprints/active/tasks",
+        headers={"Authorization": "Bearer outsider-token"},
+        json={"task_id": backlog_task_response.json()["id"]},
+    )
+
+    assert add_response.status_code == 200
+    assert add_response.json()["sprint_id"] == sprint_response.json()["id"]
+    assert add_response.json()["column_id"] == todo_column["id"]
+    assert add_response.json()["rank"] == backlog_task_response.json()["rank"]
+    assert add_response.json()["backlog_rank"] is None
+    assert backlog_response.json() == []
+    assert outsider_response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_done_backlog_task_cannot_be_added_to_active_sprint(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Enterprise Launch", "code": "SB5", "priority": "medium"},
+    )
+    project_id = project_response.json()["id"]
+    columns_response = await client.get(
+        f"/projects/{project_id}/columns",
+        headers={"Authorization": "Bearer token"},
+    )
+    done_column = next(
+        column for column in columns_response.json() if column["name"] == "Done"
+    )
+    await client.patch(
+        f"/projects/{project_id}/done-column",
+        headers={"Authorization": "Bearer token"},
+        json={"done_column_id": done_column["id"]},
+    )
+    await client.post(
+        f"/projects/{project_id}/sprints",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "planned_start_date": "2026-06-01",
+            "planned_end_date": "2026-06-14",
+        },
+    )
+    done_task_response = await client.post(
+        f"/projects/{project_id}/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={"title": "Finished task", "column_id": done_column["id"]},
+    )
+
+    response = await client.post(
+        f"/projects/{project_id}/sprints/active/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={"task_id": done_task_response.json()["id"]},
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "detail": "Done tasks cannot be added to the active sprint"
+    }
+
+
+@pytest.mark.asyncio
+async def test_project_member_removes_active_sprint_task_to_top_of_backlog(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    member_id = users["member"].id
+    assert member_id is not None
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "name": "Enterprise Launch",
+            "code": "SB6",
+            "priority": "medium",
+            "member_ids": [str(member_id)],
+        },
+    )
+    project_id = project_response.json()["id"]
+    columns_response = await client.get(
+        f"/projects/{project_id}/columns",
+        headers={"Authorization": "Bearer token"},
+    )
+    todo_column = next(
+        column for column in columns_response.json() if column["name"] == "To Do"
+    )
+    await client.post(
+        f"/projects/{project_id}/sprints",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "planned_start_date": "2026-06-01",
+            "planned_end_date": "2026-06-14",
+        },
+    )
+    existing_backlog_response = await client.post(
+        f"/projects/{project_id}/backlog/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={"title": "Existing backlog"},
+    )
+    sprint_task_response = await client.post(
+        f"/projects/{project_id}/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "title": "Removed sprint task",
+            "column_id": todo_column["id"],
+            "include_in_active_sprint": True,
+        },
+    )
+
+    remove_response = await client.delete(
+        f"/projects/{project_id}/sprints/active/tasks/{sprint_task_response.json()['id']}",
+        headers={"Authorization": "Bearer member-token"},
+    )
+    active_sprint_response = await client.get(
+        f"/projects/{project_id}/tasks/active-sprint",
+        headers={"Authorization": "Bearer member-token"},
+    )
+    backlog_response = await client.get(
+        f"/projects/{project_id}/backlog",
+        headers={"Authorization": "Bearer member-token"},
+    )
+    outsider_response = await client.delete(
+        f"/projects/{project_id}/sprints/active/tasks/{sprint_task_response.json()['id']}",
+        headers={"Authorization": "Bearer outsider-token"},
+    )
+
+    assert remove_response.status_code == 200
+    assert remove_response.json()["sprint_id"] is None
+    assert remove_response.json()["column_id"] == todo_column["id"]
+    assert remove_response.json()["rank"] == sprint_task_response.json()["rank"]
+    assert remove_response.json()["backlog_rank"] < existing_backlog_response.json()[
+        "backlog_rank"
+    ]
+    assert active_sprint_response.json() == []
+    assert [task["title"] for task in backlog_response.json()] == [
+        "Removed sprint task",
+        "Existing backlog",
+    ]
+    assert outsider_response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_remove_from_active_sprint_rejects_non_sprint_tasks(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Enterprise Launch", "code": "SB7", "priority": "medium"},
+    )
+    project_id = project_response.json()["id"]
+    await client.post(
+        f"/projects/{project_id}/sprints",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "planned_start_date": "2026-06-01",
+            "planned_end_date": "2026-06-14",
+        },
+    )
+    backlog_task_response = await client.post(
+        f"/projects/{project_id}/backlog/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={"title": "Backlog only"},
+    )
+
+    response = await client.delete(
+        f"/projects/{project_id}/sprints/active/tasks/{backlog_task_response.json()['id']}",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Task is not in the active sprint"}
+
+
+@pytest.mark.asyncio
+async def test_project_backlog_lists_unfinished_non_sprint_tasks_in_backlog_order(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Enterprise Launch", "code": "BL1", "priority": "medium"},
+    )
+    project_id = project_response.json()["id"]
+    columns_response = await client.get(
+        f"/projects/{project_id}/columns",
+        headers={"Authorization": "Bearer token"},
+    )
+    todo_column = next(
+        column for column in columns_response.json() if column["name"] == "To Do"
+    )
+    done_column = next(
+        column for column in columns_response.json() if column["name"] == "Done"
+    )
+    await client.patch(
+        f"/projects/{project_id}/done-column",
+        headers={"Authorization": "Bearer token"},
+        json={"done_column_id": done_column["id"]},
+    )
+    await client.post(
+        f"/projects/{project_id}/sprints",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "planned_start_date": "2026-06-01",
+            "planned_end_date": "2026-06-14",
+        },
+    )
+    first_response = await client.post(
+        f"/projects/{project_id}/backlog/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={"title": "First backlog task"},
+    )
+    second_response = await client.post(
+        f"/projects/{project_id}/backlog/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={"title": "Second backlog task"},
+    )
+    sprint_response = await client.post(
+        f"/projects/{project_id}/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "title": "Sprint task",
+            "column_id": todo_column["id"],
+            "include_in_active_sprint": True,
+        },
+    )
+    done_task_response = await client.post(
+        f"/projects/{project_id}/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={"title": "Done task", "column_id": done_column["id"]},
+    )
+
+    backlog_response = await client.get(
+        f"/projects/{project_id}/backlog",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert first_response.status_code == 201
+    assert second_response.status_code == 201
+    assert second_response.json()["column_id"] == todo_column["id"]
+    assert second_response.json()["backlog_rank"] < first_response.json()[
+        "backlog_rank"
+    ]
+    assert sprint_response.json()["sprint_id"] is not None
+    assert done_task_response.json()["column_id"] == done_column["id"]
+    assert [task["title"] for task in backlog_response.json()] == [
+        "Second backlog task",
+        "First backlog task",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_project_backlog_reorder_persists_independent_of_board_rank(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Enterprise Launch", "code": "BL2", "priority": "medium"},
+    )
+    project_id = project_response.json()["id"]
+    first_response = await client.post(
+        f"/projects/{project_id}/backlog/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={"title": "First"},
+    )
+    second_response = await client.post(
+        f"/projects/{project_id}/backlog/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={"title": "Second"},
+    )
+    first_id = first_response.json()["id"]
+    second_id = second_response.json()["id"]
+
+    reorder_response = await client.put(
+        f"/projects/{project_id}/backlog/reorder",
+        headers={"Authorization": "Bearer token"},
+        json={"task_ids": [first_id, second_id]},
+    )
+    refetch_response = await client.get(
+        f"/projects/{project_id}/backlog",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert reorder_response.status_code == 200
+    assert [task["id"] for task in reorder_response.json()] == [first_id, second_id]
+    assert [task["id"] for task in refetch_response.json()] == [first_id, second_id]
+    assert refetch_response.json()[0]["rank"] == first_response.json()["rank"]
+
+
+@pytest.mark.asyncio
+async def test_project_backlog_reorder_requires_complete_backlog_task_set(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Enterprise Launch", "code": "BL3", "priority": "medium"},
+    )
+    project_id = project_response.json()["id"]
+    first_response = await client.post(
+        f"/projects/{project_id}/backlog/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={"title": "First"},
+    )
+    await client.post(
+        f"/projects/{project_id}/backlog/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={"title": "Second"},
+    )
+
+    response = await client.put(
+        f"/projects/{project_id}/backlog/reorder",
+        headers={"Authorization": "Bearer token"},
+        json={"task_ids": [first_response.json()["id"]]},
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "detail": "Backlog reorder must include each backlog task exactly once"
+    }
+
+
+@pytest.mark.asyncio
+async def test_project_done_column_auto_detects_single_done_column(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Enterprise Launch", "code": "DC1", "priority": "medium"},
+    )
+    project_id = UUID(project_response.json()["id"])
+    columns_response = await client.get(
+        f"/projects/{project_id}/columns",
+        headers={"Authorization": "Bearer token"},
+    )
+    done_column = next(
+        column for column in columns_response.json() if column["name"] == "Done"
+    )
+
+    response = await client.get(
+        f"/projects/{project_id}/done-column",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "project_id": str(project_id),
+        "done_column_id": done_column["id"],
+        "requires_designation": False,
+    }
+    async with session_factory() as session:
+        project = await session.get(Project, project_id)
+
+    assert project is not None
+    assert project.done_column_id == UUID(done_column["id"])
+
+
+@pytest.mark.asyncio
+async def test_project_done_column_requires_designation_when_done_name_is_missing(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Enterprise Launch", "code": "DC2", "priority": "medium"},
+    )
+    project_id = project_response.json()["id"]
+    columns_response = await client.get(
+        f"/projects/{project_id}/columns",
+        headers={"Authorization": "Bearer token"},
+    )
+    done_column = next(
+        column for column in columns_response.json() if column["name"] == "Done"
+    )
+    await client.patch(
+        f"/projects/{project_id}/columns/{done_column['id']}",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Complete", "description": None},
+    )
+
+    response = await client.get(
+        f"/projects/{project_id}/done-column",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "project_id": project_id,
+        "done_column_id": None,
+        "requires_designation": True,
+    }
+
+
+@pytest.mark.asyncio
+async def test_project_owner_updates_done_column_and_members_cannot(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    member_id = users["member"].id
+    assert member_id is not None
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "name": "Enterprise Launch",
+            "code": "DC3",
+            "priority": "medium",
+            "member_ids": [str(member_id)],
+        },
+    )
+    project_id = project_response.json()["id"]
+    columns_response = await client.get(
+        f"/projects/{project_id}/columns",
+        headers={"Authorization": "Bearer token"},
+    )
+    todo_column = next(
+        column for column in columns_response.json() if column["name"] == "To Do"
+    )
+
+    owner_response = await client.patch(
+        f"/projects/{project_id}/done-column",
+        headers={"Authorization": "Bearer token"},
+        json={"done_column_id": todo_column["id"]},
+    )
+    member_response = await client.patch(
+        f"/projects/{project_id}/done-column",
+        headers={"Authorization": "Bearer member-token"},
+        json={"done_column_id": todo_column["id"]},
+    )
+    member_get_response = await client.get(
+        f"/projects/{project_id}/done-column",
+        headers={"Authorization": "Bearer member-token"},
+    )
+
+    assert owner_response.status_code == 200
+    assert owner_response.json()["done_column_id"] == todo_column["id"]
+    assert owner_response.json()["requires_designation"] is False
+    assert member_response.status_code == 404
+    assert member_get_response.status_code == 200
+    assert member_get_response.json()["done_column_id"] == todo_column["id"]
+
+
+@pytest.mark.asyncio
+async def test_current_done_column_deletion_is_blocked_until_reassigned(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Enterprise Launch", "code": "DC4", "priority": "medium"},
+    )
+    project_id = project_response.json()["id"]
+    columns_response = await client.get(
+        f"/projects/{project_id}/columns",
+        headers={"Authorization": "Bearer token"},
+    )
+    done_column = next(
+        column for column in columns_response.json() if column["name"] == "Done"
+    )
+    todo_column = next(
+        column for column in columns_response.json() if column["name"] == "To Do"
+    )
+    await client.get(
+        f"/projects/{project_id}/done-column",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    blocked_response = await client.delete(
+        f"/projects/{project_id}/columns/{done_column['id']}",
+        headers={"Authorization": "Bearer token"},
+    )
+    await client.patch(
+        f"/projects/{project_id}/done-column",
+        headers={"Authorization": "Bearer token"},
+        json={"done_column_id": todo_column["id"]},
+    )
+    delete_response = await client.delete(
+        f"/projects/{project_id}/columns/{done_column['id']}",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert blocked_response.status_code == 409
+    assert blocked_response.json() == {
+        "detail": "Designate another Done Column before deleting this column"
+    }
+    assert delete_response.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_project_owner_updates_active_sprint_dates_and_goal(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Enterprise Launch", "code": "SE1", "priority": "medium"},
+    )
+    project_id = project_response.json()["id"]
+    await client.post(
+        f"/projects/{project_id}/sprints",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "planned_start_date": "2026-06-01",
+            "planned_end_date": "2026-06-14",
+            "goal": "Initial goal",
+        },
+    )
+
+    update_response = await client.patch(
+        f"/projects/{project_id}/sprints/active",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "planned_start_date": "2026-05-30",
+            "planned_end_date": "2026-06-12",
+            "goal": "  Updated goal  ",
+        },
+    )
+    clear_goal_response = await client.patch(
+        f"/projects/{project_id}/sprints/active",
+        headers={"Authorization": "Bearer token"},
+        json={"goal": None},
+    )
+
+    assert update_response.status_code == 200
+    updated = update_response.json()
+    assert updated["name"] == "Sprint 1"
+    assert updated["lifecycle_state"] == "active"
+    assert updated["planned_start_date"] == "2026-05-30"
+    assert updated["planned_end_date"] == "2026-06-12"
+    assert updated["goal"] == "Updated goal"
+    assert clear_goal_response.status_code == 200
+    assert clear_goal_response.json()["goal"] is None
+
+
+@pytest.mark.asyncio
+async def test_active_sprint_update_rejects_invalid_ranges_and_non_owners(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    member_id = users["member"].id
+    assert member_id is not None
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "name": "Enterprise Launch",
+            "code": "SE2",
+            "priority": "medium",
+            "member_ids": [str(member_id)],
+        },
+    )
+    project_id = project_response.json()["id"]
+    await client.post(
+        f"/projects/{project_id}/sprints",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "planned_start_date": "2026-06-01",
+            "planned_end_date": "2026-06-14",
+        },
+    )
+
+    invalid_response = await client.patch(
+        f"/projects/{project_id}/sprints/active",
+        headers={"Authorization": "Bearer token"},
+        json={"planned_start_date": "2026-06-15"},
+    )
+    member_response = await client.patch(
+        f"/projects/{project_id}/sprints/active",
+        headers={"Authorization": "Bearer member-token"},
+        json={"goal": "Member edit"},
+    )
+
+    assert invalid_response.status_code == 422
+    assert invalid_response.json() == {
+        "detail": "Sprint end date must be on or after start date"
+    }
+    assert member_response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_closed_sprint_metadata_is_not_editable_through_active_endpoint(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Enterprise Launch", "code": "SE3", "priority": "medium"},
+    )
+    project_id = UUID(project_response.json()["id"])
+    create_response = await client.post(
+        f"/projects/{project_id}/sprints",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "planned_start_date": "2026-06-01",
+            "planned_end_date": "2026-06-14",
+            "goal": "Closed goal",
+        },
+    )
+    sprint_id = UUID(create_response.json()["id"])
+    async with session_factory() as session:
+        sprint = await session.get(ProjectSprint, sprint_id)
+        assert sprint is not None
+        sprint.lifecycle_state = SprintLifecycleState.CLOSED
+        await session.commit()
+
+    response = await client.patch(
+        f"/projects/{project_id}/sprints/active",
+        headers={"Authorization": "Bearer token"},
+        json={"goal": "Changed after close"},
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Active sprint not found"}
+    async with session_factory() as session:
+        sprint = await session.get(ProjectSprint, sprint_id)
+
+    assert sprint is not None
+    assert sprint.lifecycle_state == SprintLifecycleState.CLOSED
+    assert sprint.goal == "Closed goal"
+
+
+@pytest.mark.asyncio
+async def test_active_sprint_close_confirmation_counts_finished_and_unfinished(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Enterprise Launch", "code": "SC1", "priority": "medium"},
+    )
+    project_id = project_response.json()["id"]
+    columns_response = await client.get(
+        f"/projects/{project_id}/columns",
+        headers={"Authorization": "Bearer token"},
+    )
+    todo_column = next(
+        column for column in columns_response.json() if column["name"] == "To Do"
+    )
+    done_column = next(
+        column for column in columns_response.json() if column["name"] == "Done"
+    )
+    await client.patch(
+        f"/projects/{project_id}/done-column",
+        headers={"Authorization": "Bearer token"},
+        json={"done_column_id": done_column["id"]},
+    )
+    sprint_response = await client.post(
+        f"/projects/{project_id}/sprints",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "planned_start_date": "2026-06-01",
+            "planned_end_date": "2026-06-14",
+            "goal": "Close goal",
+        },
+    )
+    await client.post(
+        f"/projects/{project_id}/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "title": "Unfinished",
+            "column_id": todo_column["id"],
+            "include_in_active_sprint": True,
+        },
+    )
+    await client.post(
+        f"/projects/{project_id}/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "title": "Finished",
+            "column_id": done_column["id"],
+            "include_in_active_sprint": True,
+        },
+    )
+
+    response = await client.get(
+        f"/projects/{project_id}/sprints/active/close-confirmation",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert response.status_code == 200
+    confirmation = response.json()
+    assert confirmation["sprint"]["id"] == sprint_response.json()["id"]
+    assert confirmation["sprint"]["name"] == "Sprint 1"
+    assert confirmation["sprint"]["planned_start_date"] == "2026-06-01"
+    assert confirmation["sprint"]["planned_end_date"] == "2026-06-14"
+    assert confirmation["finished_count"] == 1
+    assert confirmation["unfinished_count"] == 1
+    assert [task["title"] for task in confirmation["unfinished_tasks"]] == [
+        "Unfinished"
+    ]
+    assert "top of the Backlog" in confirmation["carryover_statement"]
+
+
+@pytest.mark.asyncio
+async def test_project_owner_closes_active_sprint_with_snapshots_and_carryover(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    users: dict[str, User],
+) -> None:
+    member_id = users["member"].id
+    assert member_id is not None
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "name": "Enterprise Launch",
+            "code": "SC2",
+            "priority": "medium",
+            "member_ids": [str(member_id)],
+        },
+    )
+    project_id = project_response.json()["id"]
+    columns_response = await client.get(
+        f"/projects/{project_id}/columns",
+        headers={"Authorization": "Bearer token"},
+    )
+    todo_column = next(
+        column for column in columns_response.json() if column["name"] == "To Do"
+    )
+    done_column = next(
+        column for column in columns_response.json() if column["name"] == "Done"
+    )
+    await client.patch(
+        f"/projects/{project_id}/done-column",
+        headers={"Authorization": "Bearer token"},
+        json={"done_column_id": done_column["id"]},
+    )
+    sprint_response = await client.post(
+        f"/projects/{project_id}/sprints",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "planned_start_date": "2026-06-01",
+            "planned_end_date": "2026-06-14",
+        },
+    )
+    existing_backlog_response = await client.post(
+        f"/projects/{project_id}/backlog/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={"title": "Existing backlog"},
+    )
+    first_unfinished_response = await client.post(
+        f"/projects/{project_id}/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "title": "First unfinished",
+            "column_id": todo_column["id"],
+            "description": "Close-time notes",
+            "include_in_active_sprint": True,
+        },
+    )
+    second_unfinished_response = await client.post(
+        f"/projects/{project_id}/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "title": "Second unfinished",
+            "column_id": todo_column["id"],
+            "include_in_active_sprint": True,
+        },
+    )
+    finished_response = await client.post(
+        f"/projects/{project_id}/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "title": "Finished task",
+            "column_id": done_column["id"],
+            "include_in_active_sprint": True,
+        },
+    )
+    removed_response = await client.post(
+        f"/projects/{project_id}/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "title": "Removed before close",
+            "column_id": todo_column["id"],
+            "include_in_active_sprint": True,
+        },
+    )
+    await client.delete(
+        f"/projects/{project_id}/sprints/active/tasks/{removed_response.json()['id']}",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    member_close_response = await client.post(
+        f"/projects/{project_id}/sprints/active/close",
+        headers={"Authorization": "Bearer member-token"},
+    )
+    close_response = await client.post(
+        f"/projects/{project_id}/sprints/active/close",
+        headers={"Authorization": "Bearer token"},
+    )
+    active_sprint_response = await client.get(
+        f"/projects/{project_id}/sprints/active",
+        headers={"Authorization": "Bearer token"},
+    )
+    backlog_response = await client.get(
+        f"/projects/{project_id}/backlog",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert member_close_response.status_code == 404
+    assert close_response.status_code == 200
+    close_payload = close_response.json()
+    assert close_payload["sprint"]["id"] == sprint_response.json()["id"]
+    assert close_payload["sprint"]["lifecycle_state"] == "closed"
+    assert close_payload["sprint"]["closed_at"] is not None
+    assert close_payload["finished_count"] == 1
+    assert close_payload["unfinished_count"] == 2
+    assert [snapshot["title"] for snapshot in close_payload["snapshots"]] == [
+        "First unfinished",
+        "Second unfinished",
+        "Finished task",
+    ]
+    assert {
+        snapshot["title"]: snapshot["outcome"] for snapshot in close_payload["snapshots"]
+    } == {
+        "First unfinished": "unfinished",
+        "Second unfinished": "unfinished",
+        "Finished task": "finished",
+    }
+    assert active_sprint_response.json() is None
+    assert [task["title"] for task in backlog_response.json()][:3] == [
+        "First unfinished",
+        "Second unfinished",
+        "Removed before close",
+    ]
+    assert backlog_response.json()[0]["backlog_rank"] < existing_backlog_response.json()[
+        "backlog_rank"
+    ]
+    assert backlog_response.json()[0]["column_id"] == todo_column["id"]
+
+    async with session_factory() as session:
+        first_task = await session.get(Task, UUID(first_unfinished_response.json()["id"]))
+        second_task = await session.get(
+            Task, UUID(second_unfinished_response.json()["id"])
+        )
+        finished_task = await session.get(Task, UUID(finished_response.json()["id"]))
+        snapshots = (
+            await session.scalars(
+                select(ProjectSprintTaskSnapshot).filter_by(
+                    sprint_id=UUID(sprint_response.json()["id"])
+                )
+            )
+        ).all()
+        assert first_task is not None
+        assert second_task is not None
+        assert finished_task is not None
+        assert first_task.sprint_id is None
+        assert second_task.sprint_id is None
+        assert finished_task.sprint_id == UUID(sprint_response.json()["id"])
+        first_task.title = "Edited after close"
+        await session.delete(first_task)
+        await session.commit()
+
+    assert {snapshot.title for snapshot in snapshots} == {
+        "First unfinished",
+        "Second unfinished",
+        "Finished task",
+    }
+    assert all(snapshot.title != "Removed before close" for snapshot in snapshots)
+
+    async with session_factory() as session:
+        persisted_snapshots = (
+            await session.scalars(
+                select(ProjectSprintTaskSnapshot).filter_by(
+                    sprint_id=UUID(sprint_response.json()["id"])
+                )
+            )
+        ).all()
+
+    assert {snapshot.title for snapshot in persisted_snapshots} == {
+        "First unfinished",
+        "Second unfinished",
+        "Finished task",
+    }
+
+    await client.patch(
+        f"/projects/{project_id}/done-column",
+        headers={"Authorization": "Bearer token"},
+        json={"done_column_id": todo_column["id"]},
+    )
+    history_response = await client.get(
+        f"/projects/{project_id}/sprints/history",
+        headers={"Authorization": "Bearer member-token"},
+    )
+    outsider_history_response = await client.get(
+        f"/projects/{project_id}/sprints/history",
+        headers={"Authorization": "Bearer outsider-token"},
+    )
+
+    assert history_response.status_code == 200
+    assert outsider_history_response.status_code == 404
+    history = history_response.json()
+    assert len(history) == 1
+    assert history[0]["sprint"]["id"] == sprint_response.json()["id"]
+    assert history[0]["finished_count"] == 1
+    assert history[0]["unfinished_count"] == 2
+    assert {
+        snapshot["title"]: (snapshot["outcome"], snapshot["live_task_exists"])
+        for snapshot in history[0]["snapshots"]
+    } == {
+        "First unfinished": ("unfinished", False),
+        "Second unfinished": ("unfinished", True),
+        "Finished task": ("finished", True),
+    }
+
+
+@pytest.mark.asyncio
+async def test_subsequent_sprint_creation_uses_next_name_and_rejects_overlap(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Enterprise Launch", "code": "SC3", "priority": "medium"},
+    )
+    project_id = project_response.json()["id"]
+    first_response = await client.post(
+        f"/projects/{project_id}/sprints",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "planned_start_date": "2026-06-01",
+            "planned_end_date": "2026-06-14",
+        },
+    )
+    await client.post(
+        f"/projects/{project_id}/sprints/active/close",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    overlap_response = await client.post(
+        f"/projects/{project_id}/sprints",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "planned_start_date": "2026-06-14",
+            "planned_end_date": "2026-06-28",
+        },
+    )
+    second_response = await client.post(
+        f"/projects/{project_id}/sprints",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "planned_start_date": "2026-06-15",
+            "planned_end_date": "2026-06-28",
+        },
+    )
+    other_project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Other Launch", "code": "SC4", "priority": "medium"},
+    )
+    other_first_response = await client.post(
+        f"/projects/{other_project_response.json()['id']}/sprints",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "planned_start_date": "2026-06-01",
+            "planned_end_date": "2026-06-14",
+        },
+    )
+
+    assert first_response.json()["name"] == "Sprint 1"
+    assert overlap_response.status_code == 422
+    assert overlap_response.json() == {
+        "detail": "Sprint timebox overlaps an existing sprint"
+    }
+    assert second_response.status_code == 201
+    assert second_response.json()["name"] == "Sprint 2"
+    assert other_first_response.json()["name"] == "Sprint 1"
 
 
 @pytest.mark.asyncio

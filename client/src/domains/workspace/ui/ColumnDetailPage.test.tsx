@@ -15,7 +15,9 @@ import {
 	currentUserQueryOptions,
 	type Project,
 	type ProjectColumn,
+	type ProjectDoneColumn,
 	projectColumnsQueryOptions,
+	projectDoneColumnQueryOptions,
 	projectQueryOptions,
 	projectTasksQueryOptions,
 	type Task,
@@ -88,6 +90,8 @@ function task(overrides: Partial<Task> = {}): Task {
 	return {
 		id: "task-1",
 		projectId: "project-1",
+		sprintId: null,
+		backlogRank: null,
 		title: "Draft launch checklist",
 		columnId: "column-1",
 		priority: "medium",
@@ -102,7 +106,36 @@ function task(overrides: Partial<Task> = {}): Task {
 	};
 }
 
+function doneColumn(
+	overrides: Partial<ProjectDoneColumn> = {},
+): ProjectDoneColumn {
+	return {
+		projectId: "project-1",
+		doneColumnId: "column-done",
+		requiresDesignation: false,
+		...overrides,
+	};
+}
+
+function seedDoneColumn(
+	queryClient: QueryClient,
+	value: ProjectDoneColumn = doneColumn(),
+) {
+	queryClient.setQueryData(
+		projectDoneColumnQueryOptions("project-1").queryKey,
+		value,
+	);
+}
+
 function renderColumnDetailPage(queryClient = createTestQueryClient()) {
+	if (
+		queryClient.getQueryData(
+			projectDoneColumnQueryOptions("project-1").queryKey,
+		) === undefined
+	) {
+		seedDoneColumn(queryClient);
+	}
+
 	return render(
 		<QueryClientProvider client={queryClient}>
 			<ColumnDetailPage />
@@ -195,6 +228,37 @@ describe("ColumnDetailPage", () => {
 				}) as HTMLAnchorElement
 			).getAttribute("href"),
 		).toBe("/projects/project-1");
+	});
+
+	it("blocks deleting the current Done Column", () => {
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project(),
+		);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({ id: "column-1", name: "Done" }),
+			column({ id: "column-2", name: "To Do", position: 1 }),
+		]);
+		queryClient.setQueryData(
+			projectTasksQueryOptions("project-1").queryKey,
+			[],
+		);
+		queryClient.setQueryData(currentUserQueryOptions().queryKey, {
+			id: "user-1",
+		});
+		seedDoneColumn(queryClient, doneColumn({ doneColumnId: "column-1" }));
+
+		renderColumnDetailPage(queryClient);
+
+		expect(
+			screen.getByText(
+				"Designate another Done Column before deleting this column.",
+			),
+		).toBeTruthy();
+		expect(
+			screen.getByRole("button", { name: /delete column/i }),
+		).toHaveProperty("disabled", true);
 	});
 
 	it("shows not-found state for stale column URLs", () => {

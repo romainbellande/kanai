@@ -32,6 +32,7 @@ function createdTask(overrides: Record<string, unknown> = {}) {
 		id: "task-1",
 		projectId: "project-1",
 		project_id: "project-1",
+		sprint_id: null,
 		title: "Created task",
 		column_id: "todo",
 		priority: null,
@@ -50,6 +51,8 @@ function task(overrides: Record<string, unknown> = {}) {
 	return {
 		id: "task-1",
 		projectId: "project-1",
+		sprintId: null,
+		backlogRank: null,
 		title: "Existing task",
 		columnId: "in-progress",
 		priority: "high",
@@ -348,6 +351,55 @@ describe("useTaskForm create mode", () => {
 		expect(result.current.errorMessage).toBe(
 			"Task could not be created. Please try again.",
 		);
+	});
+
+	it("marks created tasks for active sprint membership when requested", async () => {
+		const queryClient = createTestQueryClient();
+		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(
+				JSON.stringify(
+					createdTask({
+						title: "Sprint task",
+						sprint_id: "sprint-1",
+					}),
+				),
+				{ headers: { "content-type": "application/json" }, status: 200 },
+			),
+		);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		const { result } = renderHook(
+			() =>
+				useTaskForm({
+					projectId: "project-1",
+					mode: "create",
+					includeInActiveSprint: true,
+					defaultColumnId: "column-todo",
+					workflowColumns: [
+						{ id: "column-done", name: "Done" },
+						{ id: "column-todo", name: "To Do" },
+					],
+				}),
+			{ wrapper: createWrapper(queryClient) },
+		);
+
+		await waitFor(() =>
+			expect(result.current.values.status).toBe("column-todo"),
+		);
+
+		act(() => {
+			result.current.setField("title", "Sprint task");
+		});
+
+		await act(async () => {
+			await result.current.submit();
+		});
+
+		expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toEqual({
+			title: "Sprint task",
+			column_id: "column-todo",
+			include_in_active_sprint: true,
+		});
 	});
 });
 

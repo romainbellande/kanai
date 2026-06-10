@@ -10,20 +10,34 @@ from app.api import deps
 from app.api.deps import CurrentUser, DatabaseSession
 from app.features.tasks import task_router
 from app.schemas.project import (
+    ProjectBacklogReorder,
     ProjectColumnCreate,
     ProjectColumnRead,
     ProjectColumnReorder,
     ProjectColumnUpdate,
     ProjectChatMessageRead,
     ProjectCreate,
+    ProjectDoneColumnRead,
+    ProjectDoneColumnUpdate,
     ProjectMemberCreate,
     ProjectRead,
+    ProjectSprintCreate,
+    ProjectSprintClosePreviewRead,
+    ProjectSprintCloseRead,
+    ProjectSprintHistoryRead,
+    ProjectSprintRead,
+    ProjectSprintTaskAdd,
+    ProjectSprintUpdate,
     ProjectUpdate,
 )
+from app.schemas.task import TaskCreate, TaskRead
 from app.services.project_chat_fanout import project_chat_fanout
 from app.services.project_chat_service import ProjectChatService
 from app.services.project_column_service import ProjectColumnService
 from app.services.project_access import ProjectAccess
+from app.services.project_backlog_service import ProjectBacklogService
+from app.services.project_done_column_service import ProjectDoneColumnService
+from app.services.project_sprint_service import ProjectSprintService
 from app.services.project_service import (
     add_project_member_for_user,
     create_project_for_user,
@@ -102,6 +116,214 @@ async def list_project_columns(
     return await ProjectColumnService(session).list(
         project_id,
         require_current_user_id(current_user.id),
+    )
+
+
+@project_router.get("/{project_id}/done-column", response_model=ProjectDoneColumnRead)
+async def get_project_done_column(
+    project_id: UUID,
+    session: DatabaseSession,
+    current_user: CurrentUser,
+) -> ProjectDoneColumnRead:
+    """Get the Done Column designation for a project visible to the user."""
+    return await ProjectDoneColumnService(session).get(
+        project_id,
+        require_current_user_id(current_user.id),
+    )
+
+
+@project_router.patch("/{project_id}/done-column", response_model=ProjectDoneColumnRead)
+async def update_project_done_column(
+    project_id: UUID,
+    payload: ProjectDoneColumnUpdate,
+    session: DatabaseSession,
+    current_user: CurrentUser,
+) -> ProjectDoneColumnRead:
+    """Change the Done Column designation for a project owned by the user."""
+    return await ProjectDoneColumnService(session).update(
+        project_id,
+        require_current_user_id(current_user.id),
+        done_column_id=payload.done_column_id,
+    )
+
+
+@project_router.get("/{project_id}/backlog", response_model=list[TaskRead])
+async def list_project_backlog(
+    project_id: UUID,
+    session: DatabaseSession,
+    current_user: CurrentUser,
+) -> list[TaskRead]:
+    """List unfinished non-sprint tasks in project Backlog order."""
+    return await ProjectBacklogService(session).list(
+        project_id,
+        require_current_user_id(current_user.id),
+    )
+
+
+@project_router.put("/{project_id}/backlog/reorder", response_model=list[TaskRead])
+async def reorder_project_backlog(
+    project_id: UUID,
+    payload: ProjectBacklogReorder,
+    session: DatabaseSession,
+    current_user: CurrentUser,
+) -> list[TaskRead]:
+    """Persist a complete manual Backlog task order."""
+    return await ProjectBacklogService(session).reorder(
+        project_id,
+        require_current_user_id(current_user.id),
+        payload,
+    )
+
+
+@project_router.post(
+    "/{project_id}/backlog/tasks",
+    response_model=TaskRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_project_backlog_task(
+    project_id: UUID,
+    payload: TaskCreate,
+    session: DatabaseSession,
+    current_user: CurrentUser,
+) -> TaskRead:
+    """Create a task at the top of the project Backlog."""
+    return await ProjectBacklogService(session).create_task(
+        project_id,
+        require_current_user_id(current_user.id),
+        payload,
+    )
+
+
+@project_router.get(
+    "/{project_id}/sprints/active", response_model=ProjectSprintRead | None
+)
+async def get_active_project_sprint(
+    project_id: UUID,
+    session: DatabaseSession,
+    current_user: CurrentUser,
+) -> ProjectSprintRead | None:
+    """Get the active sprint for a project accessible to the current user."""
+    return await ProjectSprintService(session).get_active(
+        project_id,
+        require_current_user_id(current_user.id),
+    )
+
+
+@project_router.get(
+    "/{project_id}/sprints/history",
+    response_model=list[ProjectSprintHistoryRead],
+)
+async def list_project_sprint_history(
+    project_id: UUID,
+    session: DatabaseSession,
+    current_user: CurrentUser,
+) -> list[ProjectSprintHistoryRead]:
+    """List closed sprint history for a project participant."""
+    return await ProjectSprintService(session).list_history(
+        project_id,
+        require_current_user_id(current_user.id),
+    )
+
+
+@project_router.post(
+    "/{project_id}/sprints",
+    response_model=ProjectSprintRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_project_sprint(
+    project_id: UUID,
+    payload: ProjectSprintCreate,
+    session: DatabaseSession,
+    current_user: CurrentUser,
+) -> ProjectSprintRead:
+    """Create an empty active sprint for a project owned by the current user."""
+    return await ProjectSprintService(session).create(
+        project_id,
+        require_current_user_id(current_user.id),
+        planned_start_date=payload.planned_start_date,
+        planned_end_date=payload.planned_end_date,
+        goal=payload.goal,
+        task_ids=payload.task_ids,
+    )
+
+
+@project_router.post("/{project_id}/sprints/active/tasks", response_model=TaskRead)
+async def add_task_to_active_project_sprint(
+    project_id: UUID,
+    payload: ProjectSprintTaskAdd,
+    session: DatabaseSession,
+    current_user: CurrentUser,
+) -> TaskRead:
+    """Add an existing Backlog task to the active sprint."""
+    return await ProjectSprintService(session).add_task_to_active(
+        project_id,
+        require_current_user_id(current_user.id),
+        payload,
+    )
+
+
+@project_router.delete(
+    "/{project_id}/sprints/active/tasks/{task_id}",
+    response_model=TaskRead,
+)
+async def remove_task_from_active_project_sprint(
+    project_id: UUID,
+    task_id: UUID,
+    session: DatabaseSession,
+    current_user: CurrentUser,
+) -> TaskRead:
+    """Remove an active sprint task back to the project Backlog."""
+    return await ProjectSprintService(session).remove_task_from_active(
+        project_id,
+        require_current_user_id(current_user.id),
+        task_id,
+    )
+
+
+@project_router.get(
+    "/{project_id}/sprints/active/close-confirmation",
+    response_model=ProjectSprintClosePreviewRead,
+)
+async def get_active_project_sprint_close_confirmation(
+    project_id: UUID,
+    session: DatabaseSession,
+    current_user: CurrentUser,
+) -> ProjectSprintClosePreviewRead:
+    """Preview the irreversible active sprint close outcome."""
+    return await ProjectSprintService(session).close_confirmation(
+        project_id,
+        require_current_user_id(current_user.id),
+    )
+
+
+@project_router.post(
+    "/{project_id}/sprints/active/close",
+    response_model=ProjectSprintCloseRead,
+)
+async def close_active_project_sprint(
+    project_id: UUID,
+    session: DatabaseSession,
+    current_user: CurrentUser,
+) -> ProjectSprintCloseRead:
+    """Close the active sprint and create immutable task history."""
+    return await ProjectSprintService(session).close_active(
+        project_id,
+        require_current_user_id(current_user.id),
+    )
+
+
+@project_router.patch("/{project_id}/sprints/active", response_model=ProjectSprintRead)
+async def update_active_project_sprint(
+    project_id: UUID,
+    payload: ProjectSprintUpdate,
+    session: DatabaseSession,
+    current_user: CurrentUser,
+) -> ProjectSprintRead:
+    """Update active sprint metadata for a project owned by the current user."""
+    return await ProjectSprintService(session).update_active(
+        project_id,
+        require_current_user_id(current_user.id),
+        payload,
     )
 
 

@@ -16,14 +16,22 @@ import {
 	currentUserQueryOptions,
 	type Project,
 	type ProjectColumn,
+	type ProjectDoneColumn,
+	type ProjectSprint,
 	projectAccessUsersQueryKey,
+	projectActiveSprintQueryOptions,
+	projectBacklogQueryOptions,
 	projectChatMessagesQueryOptions,
 	projectColumnsQueryOptions,
+	projectDoneColumnQueryOptions,
 	projectQueryOptions,
+	projectSprintHistoryQueryOptions,
 	projectTasksQueryOptions,
 	type Task,
 	type UserProfile,
 } from "#/api/client";
+
+let projectSearch: { view?: "backlog" | "history" } = {};
 
 vi.mock("@tanstack/react-router", () => ({
 	Link: ({
@@ -35,7 +43,7 @@ vi.mock("@tanstack/react-router", () => ({
 	}: AnchorHTMLAttributes<HTMLAnchorElement> & {
 		children: ReactNode;
 		params?: { columnId?: string; projectId?: string; taskId?: string };
-		search?: Record<string, string>;
+		search?: Record<string, boolean | string>;
 		to: string;
 	}) => {
 		const href = params?.projectId
@@ -44,7 +52,13 @@ vi.mock("@tanstack/react-router", () => ({
 					.replace("$columnId", params.columnId ?? "")
 					.replace("$taskId", "taskId" in params ? String(params.taskId) : "")
 			: to;
-		const query = search ? `?${new URLSearchParams(search).toString()}` : "";
+		const query = search
+			? `?${new URLSearchParams(
+					Object.fromEntries(
+						Object.entries(search).map(([key, value]) => [key, String(value)]),
+					),
+				).toString()}`
+			: "";
 
 		return (
 			<a href={`${href}${query}`} {...props}>
@@ -53,16 +67,19 @@ vi.mock("@tanstack/react-router", () => ({
 		);
 	},
 	useParams: () => ({ projectId: "project-1" }),
+	useSearch: () => projectSearch,
 }));
 
 function task(overrides: Partial<Task>): Task {
 	return {
 		id: "task-1",
 		projectId: "project-1",
+		sprintId: "sprint-1",
 		title: "Task",
 		columnId: "column-todo",
 		priority: "medium",
 		rank: "U",
+		backlogRank: null,
 		assigneeId: null,
 		description: null,
 		acceptanceCriteria: null,
@@ -98,6 +115,33 @@ function project(overrides: Partial<Project> = {}): Project {
 		memberIds: [],
 		createdAt: null,
 		updatedAt: null,
+		...overrides,
+	};
+}
+
+function activeSprint(overrides: Partial<ProjectSprint> = {}): ProjectSprint {
+	return {
+		id: "sprint-1",
+		projectId: "project-1",
+		name: "Sprint 1",
+		lifecycleState: "active",
+		plannedStartDate: "2026-06-01",
+		plannedEndDate: "2026-06-14",
+		goal: null,
+		closedAt: null,
+		createdAt: null,
+		updatedAt: null,
+		...overrides,
+	};
+}
+
+function doneColumn(
+	overrides: Partial<ProjectDoneColumn> = {},
+): ProjectDoneColumn {
+	return {
+		projectId: "project-1",
+		doneColumnId: "column-done",
+		requiresDesignation: false,
 		...overrides,
 	};
 }
@@ -180,6 +224,37 @@ function renderWithQueryClient(
 	ui: ReactNode,
 	queryClient = createTestQueryClient(),
 ) {
+	if (
+		queryClient.getQueryData(
+			projectActiveSprintQueryOptions("project-1").queryKey,
+		) === undefined
+	) {
+		queryClient.setQueryData(
+			projectActiveSprintQueryOptions("project-1").queryKey,
+			activeSprint(),
+		);
+	}
+	if (
+		queryClient.getQueryData(
+			projectDoneColumnQueryOptions("project-1").queryKey,
+		) === undefined
+	) {
+		queryClient.setQueryData(
+			projectDoneColumnQueryOptions("project-1").queryKey,
+			doneColumn(),
+		);
+	}
+	if (
+		queryClient.getQueryData(
+			projectBacklogQueryOptions("project-1").queryKey,
+		) === undefined
+	) {
+		queryClient.setQueryData(
+			projectBacklogQueryOptions("project-1").queryKey,
+			[],
+		);
+	}
+
 	return render(
 		<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>,
 	);
@@ -246,6 +321,7 @@ describe("ProjectBoardPage", () => {
 	});
 
 	beforeEach(() => {
+		projectSearch = {};
 		FakeWebSocket.instances = [];
 		vi.stubGlobal("WebSocket", FakeWebSocket);
 	});
@@ -386,6 +462,12 @@ describe("ProjectBoardPage", () => {
 			task({ id: "doing-task", title: "API Doing", columnId: "column-doing" }),
 			task({ id: "done-task", title: "API Done", columnId: "column-done" }),
 			task({
+				id: "backlog-task",
+				title: "Backlog only",
+				sprintId: null,
+				columnId: "column-todo",
+			}),
+			task({
 				id: "other-task",
 				projectId: "project-2",
 				title: "Other Project",
@@ -415,7 +497,1017 @@ describe("ProjectBoardPage", () => {
 		expect(screen.getByRole("button", { name: "Filter" })).toBeTruthy();
 		expect(screen.getByRole("button", { name: "Invite" })).toBeTruthy();
 		expect(screen.queryByText("Other Project")).toBeNull();
+		expect(screen.queryByText("Backlog only")).toBeNull();
 		expect(screen.queryByText("Security Audit Phase 1")).toBeNull();
+	});
+
+	it("shows a no-active-sprint planning state and creates the first sprint", async () => {
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({ accessToken: "sprint-token" }),
+		);
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(currentUserQueryOptions().queryKey, {
+			id: "owner-1",
+		});
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project({ name: "API Board", ownerIds: ["owner-1"] }),
+		);
+		queryClient.setQueryData(
+			projectActiveSprintQueryOptions("project-1").queryKey,
+			null,
+		);
+		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
+			task({ id: "todo-task", title: "Hidden until sprint exists" }),
+		]);
+		queryClient.setQueryData(projectBacklogQueryOptions("project-1").queryKey, [
+			task({
+				id: "initial-task",
+				title: "Initial backlog task",
+				sprintId: null,
+				backlogRank: "F",
+			}),
+		]);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({ id: "column-todo", name: "Backlog", position: 0 }),
+		]);
+		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					id: "sprint-1",
+					project_id: "project-1",
+					name: "Sprint 1",
+					lifecycle_state: "active",
+					planned_start_date: "2026-06-01",
+					planned_end_date: "2026-06-14",
+					goal: "Planning goal",
+					closed_at: null,
+					created_at: null,
+					updated_at: null,
+				}),
+				{ headers: { "content-type": "application/json" }, status: 201 },
+			),
+		);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+
+		expect(screen.getByText("No active sprint")).toBeTruthy();
+		expect(screen.getByRole("link", { name: /view backlog/i })).toHaveProperty(
+			"href",
+			expect.stringContaining("/projects/project-1?view=backlog"),
+		);
+		expect(screen.queryByText("Hidden until sprint exists")).toBeNull();
+
+		fireEvent.change(screen.getByLabelText("Planned start"), {
+			target: { value: "2026-06-01" },
+		});
+		fireEvent.change(screen.getByLabelText("Planned end"), {
+			target: { value: "2026-06-14" },
+		});
+		fireEvent.change(screen.getByLabelText("Sprint goal"), {
+			target: { value: "Planning goal" },
+		});
+		fireEvent.click(screen.getByLabelText("Initial backlog task"));
+		fireEvent.click(
+			screen.getAllByRole("button", { name: "Create Sprint" })[1],
+		);
+
+		await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+		expect(fetchSpy.mock.calls[0][0]).toBe(
+			"https://api.example.test/projects/project-1/sprints",
+		);
+		expect(fetchSpy.mock.calls[0][1]?.method).toBe("POST");
+		expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toEqual({
+			planned_start_date: "2026-06-01",
+			planned_end_date: "2026-06-14",
+			goal: "Planning goal",
+			task_ids: ["initial-task"],
+		});
+		await waitFor(() => expect(screen.getByText("Sprint 1")).toBeTruthy());
+		expect(screen.getByText("Planning goal")).toBeTruthy();
+		expect(screen.getByText("Hidden until sprint exists")).toBeTruthy();
+	});
+
+	it("keeps sprint creation disabled for non-owner members without an active sprint", async () => {
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(currentUserQueryOptions().queryKey, {
+			id: "member-1",
+		});
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project({
+				name: "API Board",
+				ownerIds: ["owner-1"],
+				memberIds: ["member-1"],
+			}),
+		);
+		queryClient.setQueryData(
+			projectActiveSprintQueryOptions("project-1").queryKey,
+			null,
+		);
+		queryClient.setQueryData(
+			projectTasksQueryOptions("project-1").queryKey,
+			[],
+		);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({ id: "column-todo", name: "Backlog", position: 0 }),
+		]);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+
+		expect(screen.getByText("No active sprint")).toBeTruthy();
+		expect(
+			screen.getByText("Only project owners can create lifecycle sprints."),
+		).toBeTruthy();
+		for (const button of screen.getAllByRole("button", {
+			name: "Create Sprint",
+		})) {
+			expect(button).toHaveProperty("disabled", true);
+		}
+		expect(screen.getByRole("link", { name: /view backlog/i })).toBeTruthy();
+	});
+
+	it("suggests the next sprint dates from the latest closed planned timebox", async () => {
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(currentUserQueryOptions().queryKey, {
+			id: "owner-1",
+		});
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project({ name: "API Board", ownerIds: ["owner-1"] }),
+		);
+		queryClient.setQueryData(
+			projectActiveSprintQueryOptions("project-1").queryKey,
+			null,
+		);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({ id: "column-todo", name: "Backlog", position: 0 }),
+		]);
+		queryClient.setQueryData(
+			projectTasksQueryOptions("project-1").queryKey,
+			[],
+		);
+		queryClient.setQueryData(
+			projectBacklogQueryOptions("project-1").queryKey,
+			[],
+		);
+		queryClient.setQueryData(
+			projectSprintHistoryQueryOptions("project-1").queryKey,
+			[
+				{
+					sprint: activeSprint({
+						id: "closed-sprint",
+						lifecycleState: "closed",
+						plannedStartDate: "2026-06-01",
+						plannedEndDate: "2026-06-14",
+						closedAt: new Date("2026-06-30T20:00:00Z"),
+					}),
+					finishedCount: 0,
+					unfinishedCount: 0,
+					unfinishedTasks: [],
+					carryoverStatement:
+						"Unfinished tasks will move to the top of the Backlog.",
+					snapshots: [],
+				},
+			],
+		);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+
+		await waitFor(() =>
+			expect(screen.getByLabelText("Planned start")).toHaveProperty(
+				"value",
+				"2026-06-15",
+			),
+		);
+		expect(screen.getByLabelText("Planned end")).toHaveProperty(
+			"value",
+			"2026-06-28",
+		);
+	});
+
+	it("surfaces sprint overlap validation from the API", async () => {
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({ accessToken: "sprint-token" }),
+		);
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(currentUserQueryOptions().queryKey, {
+			id: "owner-1",
+		});
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project({ name: "API Board", ownerIds: ["owner-1"] }),
+		);
+		queryClient.setQueryData(
+			projectActiveSprintQueryOptions("project-1").queryKey,
+			null,
+		);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({ id: "column-todo", name: "Backlog", position: 0 }),
+		]);
+		queryClient.setQueryData(
+			projectTasksQueryOptions("project-1").queryKey,
+			[],
+		);
+		queryClient.setQueryData(
+			projectBacklogQueryOptions("project-1").queryKey,
+			[],
+		);
+		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					detail: "Sprint timebox overlaps an existing sprint",
+				}),
+				{ headers: { "content-type": "application/json" }, status: 422 },
+			),
+		);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+		fireEvent.click(
+			screen.getAllByRole("button", { name: "Create Sprint" })[1],
+		);
+
+		await waitFor(() =>
+			expect(
+				screen.getByText("Sprint timebox overlaps an existing sprint"),
+			).toBeTruthy(),
+		);
+	});
+
+	it("lets project owners edit the active sprint dates and goal", async () => {
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({ accessToken: "sprint-token" }),
+		);
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(currentUserQueryOptions().queryKey, {
+			id: "owner-1",
+		});
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project({ name: "API Board", ownerIds: ["owner-1"] }),
+		);
+		queryClient.setQueryData(
+			projectActiveSprintQueryOptions("project-1").queryKey,
+			activeSprint({ goal: "Initial goal" }),
+		);
+		queryClient.setQueryData(
+			projectTasksQueryOptions("project-1").queryKey,
+			[],
+		);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({ id: "column-todo", name: "Backlog", position: 0 }),
+		]);
+		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					id: "sprint-1",
+					project_id: "project-1",
+					name: "Sprint 1",
+					lifecycle_state: "active",
+					planned_start_date: "2026-06-02",
+					planned_end_date: "2026-06-15",
+					goal: "Updated goal",
+					closed_at: null,
+					created_at: null,
+					updated_at: null,
+				}),
+				{ headers: { "content-type": "application/json" }, status: 200 },
+			),
+		);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+
+		fireEvent.click(screen.getByRole("button", { name: /edit sprint/i }));
+		fireEvent.change(screen.getByLabelText("Planned start"), {
+			target: { value: "2026-06-02" },
+		});
+		fireEvent.change(screen.getByLabelText("Planned end"), {
+			target: { value: "2026-06-15" },
+		});
+		fireEvent.change(screen.getByLabelText("Sprint goal"), {
+			target: { value: "Updated goal" },
+		});
+		fireEvent.click(screen.getByRole("button", { name: /save sprint/i }));
+
+		await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+		expect(fetchSpy.mock.calls[0][0]).toBe(
+			"https://api.example.test/projects/project-1/sprints/active",
+		);
+		expect(fetchSpy.mock.calls[0][1]?.method).toBe("PATCH");
+		expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toEqual({
+			planned_start_date: "2026-06-02",
+			planned_end_date: "2026-06-15",
+			goal: "Updated goal",
+		});
+		await waitFor(() => expect(screen.getByText("Updated goal")).toBeTruthy());
+		expect(screen.queryByRole("form", { name: /edit sprint/i })).toBeNull();
+	});
+
+	it("shows close confirmation and closes the active sprint", async () => {
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({ accessToken: "sprint-token" }),
+		);
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(currentUserQueryOptions().queryKey, {
+			id: "owner-1",
+		});
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project({ name: "API Board", ownerIds: ["owner-1"] }),
+		);
+		queryClient.setQueryData(
+			projectActiveSprintQueryOptions("project-1").queryKey,
+			activeSprint({ id: "sprint-1", goal: "Close goal" }),
+		);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({ id: "column-todo", name: "To Do", position: 0 }),
+		]);
+		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
+			task({
+				id: "unfinished-task",
+				title: "Unfinished task",
+				columnId: "column-todo",
+				sprintId: "sprint-1",
+			}),
+		]);
+		queryClient.setQueryData(
+			projectBacklogQueryOptions("project-1").queryKey,
+			[],
+		);
+		const sprintJson = {
+			id: "sprint-1",
+			project_id: "project-1",
+			name: "Sprint 1",
+			lifecycle_state: "active",
+			planned_start_date: "2026-06-01",
+			planned_end_date: "2026-06-14",
+			goal: "Close goal",
+			closed_at: null,
+			created_at: null,
+			updated_at: null,
+		};
+		const taskJson = {
+			id: "unfinished-task",
+			project_id: "project-1",
+			sprint_id: "sprint-1",
+			title: "Unfinished task",
+			column_id: "column-todo",
+			priority: null,
+			rank: "U",
+			backlog_rank: null,
+			assignee_id: null,
+			description: null,
+			acceptance_criteria: null,
+			tag: null,
+			created_at: null,
+			updated_at: null,
+		};
+		const fetchSpy = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						sprint: sprintJson,
+						finished_count: 1,
+						unfinished_count: 1,
+						unfinished_tasks: [taskJson],
+						carryover_statement:
+							"Unfinished tasks will move to the top of the Backlog.",
+					}),
+					{ headers: { "content-type": "application/json" }, status: 200 },
+				),
+			)
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						sprint: {
+							...sprintJson,
+							lifecycle_state: "closed",
+							closed_at: "2026-06-09T20:00:00Z",
+						},
+						finished_count: 1,
+						unfinished_count: 1,
+						unfinished_tasks: [
+							{ ...taskJson, sprint_id: null, backlog_rank: "!" },
+						],
+						carryover_statement:
+							"Unfinished tasks will move to the top of the Backlog.",
+						snapshots: [],
+					}),
+					{ headers: { "content-type": "application/json" }, status: 200 },
+				),
+			)
+			.mockResolvedValueOnce(
+				new Response(JSON.stringify(null), {
+					headers: { "content-type": "application/json" },
+					status: 200,
+				}),
+			)
+			.mockResolvedValueOnce(
+				new Response(JSON.stringify([{ ...taskJson, sprint_id: null }]), {
+					headers: { "content-type": "application/json" },
+					status: 200,
+				}),
+			)
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify([{ ...taskJson, sprint_id: null, backlog_rank: "!" }]),
+					{ headers: { "content-type": "application/json" }, status: 200 },
+				),
+			);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+		fireEvent.click(screen.getByRole("button", { name: "Close sprint" }));
+
+		await waitFor(() => expect(screen.getByText("Confirm close")).toBeTruthy());
+		expect(screen.getByText("Unfinished task")).toBeTruthy();
+		expect(screen.getByText("Unfinished")).toBeTruthy();
+		fireEvent.click(screen.getByRole("button", { name: "Confirm close" }));
+
+		await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(5));
+		expect(fetchSpy.mock.calls[0][0]).toBe(
+			"https://api.example.test/projects/project-1/sprints/active/close-confirmation",
+		);
+		expect(fetchSpy.mock.calls[1][0]).toBe(
+			"https://api.example.test/projects/project-1/sprints/active/close",
+		);
+		expect(screen.getByText("No active sprint")).toBeTruthy();
+	});
+
+	it("renders active sprint metadata read-only for non-owner members", async () => {
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(currentUserQueryOptions().queryKey, {
+			id: "member-1",
+		});
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project({
+				name: "API Board",
+				ownerIds: ["owner-1"],
+				memberIds: ["member-1"],
+			}),
+		);
+		queryClient.setQueryData(
+			projectActiveSprintQueryOptions("project-1").queryKey,
+			activeSprint({ goal: "Member visible goal" }),
+		);
+		queryClient.setQueryData(
+			projectTasksQueryOptions("project-1").queryKey,
+			[],
+		);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({ id: "column-todo", name: "Backlog", position: 0 }),
+		]);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+
+		expect(screen.getByText("Sprint 1")).toBeTruthy();
+		expect(screen.getByText("Member visible goal")).toBeTruthy();
+		expect(screen.queryByRole("button", { name: /edit sprint/i })).toBeNull();
+	});
+
+	it("lets project owners choose the project Done Column", async () => {
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({ accessToken: "done-column-token" }),
+		);
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(currentUserQueryOptions().queryKey, {
+			id: "owner-1",
+		});
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project({ name: "API Board", ownerIds: ["owner-1"] }),
+		);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({ id: "column-todo", name: "To Do", position: 0 }),
+			column({ id: "column-done", name: "Done", position: 1 }),
+		]);
+		queryClient.setQueryData(
+			projectTasksQueryOptions("project-1").queryKey,
+			[],
+		);
+		queryClient.setQueryData(
+			projectDoneColumnQueryOptions("project-1").queryKey,
+			doneColumn({ doneColumnId: "column-done" }),
+		);
+		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					project_id: "project-1",
+					done_column_id: "column-todo",
+					requires_designation: false,
+				}),
+				{ headers: { "content-type": "application/json" }, status: 200 },
+			),
+		);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+
+		fireEvent.change(screen.getByLabelText("Done Column"), {
+			target: { value: "column-todo" },
+		});
+		fireEvent.click(screen.getByRole("button", { name: /save done column/i }));
+
+		await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+		expect(fetchSpy.mock.calls[0][0]).toBe(
+			"https://api.example.test/projects/project-1/done-column",
+		);
+		expect(fetchSpy.mock.calls[0][1]?.method).toBe("PATCH");
+		expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toEqual({
+			done_column_id: "column-todo",
+		});
+		await waitFor(() =>
+			expect(
+				queryClient.getQueryData(
+					projectDoneColumnQueryOptions("project-1").queryKey,
+				),
+			).toMatchObject({ doneColumnId: "column-todo" }),
+		);
+	});
+
+	it("prompts owners to designate a Done Column when none is configured", async () => {
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(currentUserQueryOptions().queryKey, {
+			id: "owner-1",
+		});
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project({ name: "API Board", ownerIds: ["owner-1"] }),
+		);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({ id: "column-todo", name: "To Do", position: 0 }),
+		]);
+		queryClient.setQueryData(
+			projectTasksQueryOptions("project-1").queryKey,
+			[],
+		);
+		queryClient.setQueryData(
+			projectDoneColumnQueryOptions("project-1").queryKey,
+			doneColumn({ doneColumnId: null, requiresDesignation: true }),
+		);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+
+		expect(screen.getByText("Designation required")).toBeTruthy();
+		expect(
+			screen.getByText(/Choose a Done Column before sprint close outcomes/i),
+		).toBeTruthy();
+		expect(
+			screen.getByRole("button", { name: /save done column/i }),
+		).toHaveProperty("disabled", true);
+	});
+
+	it("renders the shareable Backlog list view without workflow board cards", async () => {
+		projectSearch = { view: "backlog" };
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(currentUserQueryOptions().queryKey, {
+			id: "member-1",
+		});
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project({
+				name: "API Board",
+				ownerIds: ["owner-1"],
+				memberIds: ["member-1"],
+			}),
+		);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({ id: "column-todo", name: "To Do", position: 0 }),
+		]);
+		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
+			task({ id: "sprint-task", title: "Sprint task", sprintId: "sprint-1" }),
+		]);
+		queryClient.setQueryData(projectBacklogQueryOptions("project-1").queryKey, [
+			task({
+				id: "backlog-first",
+				title: "Backlog first",
+				sprintId: null,
+				backlogRank: "F",
+			}),
+			task({
+				id: "backlog-second",
+				title: "Backlog second",
+				sprintId: null,
+				backlogRank: "U",
+			}),
+		]);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+
+		expect(screen.getByText("Planning list")).toBeTruthy();
+		expect(screen.getByText("Backlog first")).toBeTruthy();
+		expect(screen.getByText("Backlog second")).toBeTruthy();
+		expect(screen.queryByText("Sprint task")).toBeNull();
+		expect(screen.queryByText("No tasks in to do.")).toBeNull();
+		expect(screen.getByRole("link", { name: "Current Sprint" })).toBeTruthy();
+	});
+
+	it("renders shareable Sprint History with grouped snapshots and live task links", async () => {
+		projectSearch = { view: "history" };
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(currentUserQueryOptions().queryKey, {
+			id: "member-1",
+		});
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project({
+				name: "API Board",
+				ownerIds: ["owner-1"],
+				memberIds: ["member-1"],
+			}),
+		);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({ id: "column-todo", name: "To Do", position: 0 }),
+		]);
+		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
+			task({ id: "sprint-task", title: "Sprint task", sprintId: "sprint-1" }),
+		]);
+		queryClient.setQueryData(
+			projectBacklogQueryOptions("project-1").queryKey,
+			[],
+		);
+		queryClient.setQueryData(
+			projectSprintHistoryQueryOptions("project-1").queryKey,
+			[
+				{
+					sprint: activeSprint({
+						id: "closed-sprint",
+						lifecycleState: "closed",
+						closedAt: new Date("2026-06-09T20:00:00Z"),
+						goal: "History goal",
+					}),
+					finishedCount: 1,
+					unfinishedCount: 1,
+					unfinishedTasks: [],
+					carryoverStatement:
+						"Unfinished tasks will move to the top of the Backlog.",
+					snapshots: [
+						{
+							id: "snapshot-finished",
+							sprintId: "closed-sprint",
+							taskId: "finished-task",
+							columnId: "column-done",
+							title: "Finished close-time title",
+							outcome: "finished",
+							priority: null,
+							rank: "U",
+							description: "Finished notes",
+							acceptanceCriteria: null,
+							tag: null,
+							liveTaskExists: true,
+							createdAt: null,
+						},
+						{
+							id: "snapshot-deleted",
+							sprintId: "closed-sprint",
+							taskId: "deleted-task",
+							columnId: "column-todo",
+							title: "Deleted close-time title",
+							outcome: "unfinished",
+							priority: null,
+							rank: "V",
+							description: null,
+							acceptanceCriteria: "Close-time criteria",
+							tag: null,
+							liveTaskExists: false,
+							createdAt: null,
+						},
+					],
+				},
+			],
+		);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+
+		expect(screen.getByText("Closed sprints")).toBeTruthy();
+		expect(screen.getByText("Sprint 1")).toBeTruthy();
+		expect(screen.getByText("History goal")).toBeTruthy();
+		expect(screen.getByText("1 finished")).toBeTruthy();
+		expect(screen.getByText("1 unfinished")).toBeTruthy();
+		expect(screen.getByText("Finished")).toBeTruthy();
+		expect(screen.getByText("Unfinished")).toBeTruthy();
+		expect(screen.getByText("Finished notes")).toBeTruthy();
+		expect(screen.getByText("Close-time criteria")).toBeTruthy();
+		expect(
+			screen.getByRole("link", { name: "Finished close-time title" }),
+		).toHaveProperty(
+			"href",
+			expect.stringContaining("/projects/project-1/tasks/finished-task"),
+		);
+		expect(screen.getByText("Deleted close-time title")).toBeTruthy();
+		expect(screen.getByText("Live task deleted")).toBeTruthy();
+		expect(screen.queryByText("Sprint task")).toBeNull();
+	});
+
+	it("creates backlog tasks and persists manual backlog reorder", async () => {
+		projectSearch = { view: "backlog" };
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({ accessToken: "backlog-token" }),
+		);
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(currentUserQueryOptions().queryKey, {
+			id: "owner-1",
+		});
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project({ name: "API Board", ownerIds: ["owner-1"] }),
+		);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({ id: "column-todo", name: "To Do", position: 0 }),
+		]);
+		queryClient.setQueryData(
+			projectTasksQueryOptions("project-1").queryKey,
+			[],
+		);
+		queryClient.setQueryData(projectBacklogQueryOptions("project-1").queryKey, [
+			task({ id: "first", title: "First", sprintId: null, backlogRank: "F" }),
+			task({ id: "second", title: "Second", sprintId: null, backlogRank: "U" }),
+		]);
+		const taskJson = (id: string, title: string, backlog_rank: string) => ({
+			id,
+			project_id: "project-1",
+			sprint_id: null,
+			title,
+			column_id: "column-todo",
+			priority: null,
+			rank: "U",
+			backlog_rank,
+			assignee_id: null,
+			description: null,
+			acceptance_criteria: null,
+			tag: null,
+			created_at: null,
+			updated_at: null,
+		});
+		const fetchSpy = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify(taskJson("created", "Created backlog task", "8")),
+					{ headers: { "content-type": "application/json" }, status: 201 },
+				),
+			)
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify([
+						taskJson("created", "Created backlog task", "8"),
+						taskJson("first", "First", "F"),
+						taskJson("second", "Second", "U"),
+					]),
+					{ headers: { "content-type": "application/json" }, status: 200 },
+				),
+			)
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify([
+						taskJson("second", "Second", "U"),
+						taskJson("first", "First", "j"),
+					]),
+					{ headers: { "content-type": "application/json" }, status: 200 },
+				),
+			);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+		fireEvent.change(screen.getByLabelText("Backlog task title"), {
+			target: { value: "Created backlog task" },
+		});
+		fireEvent.click(screen.getByRole("button", { name: /add to backlog/i }));
+
+		await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+		expect(fetchSpy.mock.calls[0][0]).toBe(
+			"https://api.example.test/projects/project-1/backlog/tasks",
+		);
+		expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toEqual({
+			title: "Created backlog task",
+		});
+
+		fireEvent.click(screen.getByRole("button", { name: "Move Second up" }));
+		await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(3));
+		expect(fetchSpy.mock.calls[2][0]).toBe(
+			"https://api.example.test/projects/project-1/backlog/reorder",
+		);
+		expect(JSON.parse(String(fetchSpy.mock.calls[2][1]?.body))).toEqual({
+			task_ids: ["second", "first"],
+		});
+	});
+
+	it("adds a backlog task to the active sprint from the Backlog view", async () => {
+		projectSearch = { view: "backlog" };
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({ accessToken: "sprint-token" }),
+		);
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(currentUserQueryOptions().queryKey, {
+			id: "member-1",
+		});
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project({
+				name: "API Board",
+				ownerIds: ["owner-1"],
+				memberIds: ["member-1"],
+			}),
+		);
+		queryClient.setQueryData(
+			projectActiveSprintQueryOptions("project-1").queryKey,
+			activeSprint({ id: "sprint-1" }),
+		);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({ id: "column-review", name: "Review", position: 1 }),
+		]);
+		queryClient.setQueryData(
+			projectTasksQueryOptions("project-1").queryKey,
+			[],
+		);
+		queryClient.setQueryData(projectBacklogQueryOptions("project-1").queryKey, [
+			task({
+				id: "backlog-task",
+				title: "Ready backlog task",
+				columnId: "column-review",
+				sprintId: null,
+				backlogRank: "F",
+			}),
+		]);
+		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					id: "backlog-task",
+					project_id: "project-1",
+					sprint_id: "sprint-1",
+					title: "Ready backlog task",
+					column_id: "column-review",
+					priority: null,
+					rank: "U",
+					backlog_rank: null,
+					assignee_id: null,
+					description: null,
+					acceptance_criteria: null,
+					tag: null,
+					created_at: null,
+					updated_at: null,
+				}),
+				{ headers: { "content-type": "application/json" }, status: 200 },
+			),
+		);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+		fireEvent.click(screen.getByRole("button", { name: /add to sprint/i }));
+
+		await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+		expect(fetchSpy.mock.calls[0][0]).toBe(
+			"https://api.example.test/projects/project-1/sprints/active/tasks",
+		);
+		expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toEqual({
+			task_id: "backlog-task",
+		});
+	});
+
+	it("removes an active sprint task back to Backlog from the board", async () => {
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({ accessToken: "sprint-token" }),
+		);
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(currentUserQueryOptions().queryKey, {
+			id: "member-1",
+		});
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project({
+				name: "API Board",
+				ownerIds: ["owner-1"],
+				memberIds: ["member-1"],
+			}),
+		);
+		queryClient.setQueryData(
+			projectActiveSprintQueryOptions("project-1").queryKey,
+			activeSprint({ id: "sprint-1" }),
+		);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({ id: "column-todo", name: "To Do", position: 0 }),
+		]);
+		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
+			task({
+				id: "sprint-task",
+				title: "Sprint task",
+				columnId: "column-todo",
+				sprintId: "sprint-1",
+			}),
+		]);
+		queryClient.setQueryData(
+			projectBacklogQueryOptions("project-1").queryKey,
+			[],
+		);
+		const removedTaskJson = {
+			id: "sprint-task",
+			project_id: "project-1",
+			sprint_id: null,
+			title: "Sprint task",
+			column_id: "column-todo",
+			priority: null,
+			rank: "U",
+			backlog_rank: "F",
+			assignee_id: null,
+			description: null,
+			acceptance_criteria: null,
+			tag: null,
+			created_at: null,
+			updated_at: null,
+		};
+		const fetchSpy = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(
+				new Response(JSON.stringify(removedTaskJson), {
+					headers: { "content-type": "application/json" },
+					status: 200,
+				}),
+			)
+			.mockResolvedValueOnce(
+				new Response(JSON.stringify([removedTaskJson]), {
+					headers: { "content-type": "application/json" },
+					status: 200,
+				}),
+			)
+			.mockResolvedValueOnce(
+				new Response(JSON.stringify([removedTaskJson]), {
+					headers: { "content-type": "application/json" },
+					status: 200,
+				}),
+			);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+		fireEvent.click(screen.getByRole("button", { name: "Backlog" }));
+
+		await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+		expect(fetchSpy.mock.calls[0][0]).toBe(
+			"https://api.example.test/projects/project-1/sprints/active/tasks/sprint-task",
+		);
+		expect(fetchSpy.mock.calls[0][1]?.method).toBe("DELETE");
 	});
 
 	it("renders selected task priorities as distinct colored board tags", async () => {
@@ -1776,10 +2868,10 @@ describe("ProjectBoardPage", () => {
 
 		const addTaskLinks = screen.getAllByRole("link", { name: /add a task/i });
 		expect((addTaskLinks[0] as HTMLAnchorElement).href).toContain(
-			"/projects/project-1/tasks/new?column_id=column-backlog",
+			"/projects/project-1/tasks/new?column_id=column-backlog&in_sprint=true",
 		);
 		expect((addTaskLinks[1] as HTMLAnchorElement).href).toContain(
-			"/projects/project-1/tasks/new?column_id=column-review",
+			"/projects/project-1/tasks/new?column_id=column-review&in_sprint=true",
 		);
 	});
 

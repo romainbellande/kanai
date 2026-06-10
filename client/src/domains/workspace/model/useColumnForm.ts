@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import {
 	type Project,
 	type ProjectColumn,
+	type ProjectDoneColumn,
 	type Task,
 	useKanaiApi,
 } from "#/api/client";
@@ -43,6 +44,7 @@ type EditColumnFormInput = {
 	columnId: string;
 	project?: Project;
 	columns?: readonly ProjectColumn[];
+	doneColumn?: ProjectDoneColumn;
 	tasks?: readonly Task[];
 	currentUserId?: string;
 	isProjectLoading?: boolean;
@@ -157,6 +159,10 @@ function getDeleteDisabledReason(
 
 	if ((input.columns?.length ?? 0) <= 1) {
 		return "You cannot delete the final project column.";
+	}
+
+	if (column && input.doneColumn?.doneColumnId === column.id) {
+		return "Designate another Done Column before deleting this column.";
 	}
 
 	if (column && input.tasks.some((task) => task.columnId === column.id)) {

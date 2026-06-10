@@ -152,7 +152,9 @@ class ProjectColumnService:
 
     async def delete(self, project_id: UUID, column_id: UUID, user_id: UUID) -> None:
         """Delete an empty workflow column from a project owned by the user."""
-        await self._access.require_project(project_id, user_id, role=ProjectRole.OWNER)
+        project = await self._access.require_project(
+            project_id, user_id, role=ProjectRole.OWNER
+        )
         columns = await self._repository.list_columns_by_project(project_id)
         column = next((column for column in columns if column.id == column_id), None)
         if column is None:
@@ -165,6 +167,11 @@ class ProjectColumnService:
             )
         if column.id is None:
             self._raise_column_not_found()
+        if project.done_column_id == column.id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Designate another Done Column before deleting this column",
+            )
         tasks = await self._task_repository.list_by_project_and_column(
             project_id, column.id
         )

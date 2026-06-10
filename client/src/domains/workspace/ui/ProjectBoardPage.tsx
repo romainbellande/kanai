@@ -9,9 +9,12 @@ import {
 	extractClosestEdge,
 } from "@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useParams } from "@tanstack/react-router";
+import { Link, useParams, useSearch } from "@tanstack/react-router";
 import {
+	ArrowDown,
+	ArrowUp,
 	Bell,
+	CalendarDays,
 	ChevronRight,
 	CircleHelp,
 	Filter,
@@ -46,6 +49,10 @@ import {
 	getUserDisplayLabel,
 	getUserInitials,
 	type Project,
+	ProjectColumnRequestError,
+	type ProjectSprint,
+	type ProjectSprintClosePreview,
+	type ProjectSprintCloseResult,
 	type Task,
 	type UserProfile,
 	useCurrentUserQuery,
@@ -82,6 +89,7 @@ const sidebarItems: SidebarItem[] = [
 ];
 
 const PROJECT_DESCRIPTION_FALLBACK = "No project description yet.";
+const SPRINT_GOAL_LIMIT = 4_000;
 
 type CardDropTargetData = {
 	type: "card";
@@ -136,6 +144,66 @@ function normalizeBoardPriority(priority: string | null): string | null {
 		return null;
 	}
 	return normalizedPriority === "urgent" ? "critical" : normalizedPriority;
+}
+
+function formatDateInputValue(date: Date): string {
+	const year = date.getFullYear();
+	const month = String(date.getMonth() + 1).padStart(2, "0");
+	const day = String(date.getDate()).padStart(2, "0");
+	return `${year}-${month}-${day}`;
+}
+
+function dateFromInputValue(dateValue: string): Date {
+	const [year, month, day] = dateValue.split("-").map(Number);
+	return new Date(year, month - 1, day);
+}
+
+function getSuggestedSprintDates(today = new Date()) {
+	const startDate = new Date(
+		today.getFullYear(),
+		today.getMonth(),
+		today.getDate(),
+	);
+	const endDate = new Date(startDate);
+	endDate.setDate(startDate.getDate() + 13);
+
+	return {
+		plannedStartDate: formatDateInputValue(startDate),
+		plannedEndDate: formatDateInputValue(endDate),
+	};
+}
+
+function getSuggestedSprintDatesFromHistory(
+	history: ProjectSprintCloseResult[] | undefined,
+) {
+	if (!history || history.length === 0) {
+		return null;
+	}
+	const latestPlannedEndDate = history
+		.map((entry) => entry.sprint.plannedEndDate)
+		.sort()
+		.at(-1);
+	if (!latestPlannedEndDate) {
+		return null;
+	}
+	const nextStartDate = dateFromInputValue(latestPlannedEndDate);
+	nextStartDate.setDate(nextStartDate.getDate() + 1);
+	return getSuggestedSprintDates(nextStartDate);
+}
+
+function sprintMutationErrorMessage(error: unknown, fallback: string): string {
+	return error instanceof ProjectColumnRequestError && error.detail
+		? error.detail
+		: fallback;
+}
+
+function formatSprintDateLabel(dateValue: string): string {
+	const [year, month, day] = dateValue.split("-").map(Number);
+	return new Intl.DateTimeFormat(undefined, {
+		month: "short",
+		day: "numeric",
+		year: "numeric",
+	}).format(new Date(year, month - 1, day));
 }
 
 export function getDestinationIndex({
@@ -231,15 +299,19 @@ function BoardTaskCard({
 	columnId,
 	isDragging,
 	isDragDisabled,
+	isRemovingFromSprint,
 	dropIndicatorEdge,
 	onDragStateChange,
+	onRemoveFromSprint,
 }: {
 	card: Task;
 	columnId: ColumnId;
 	isDragging: boolean;
 	isDragDisabled: boolean;
+	isRemovingFromSprint: boolean;
 	dropIndicatorEdge: "top" | "bottom" | null;
 	onDragStateChange: (taskId: string | null) => void;
+	onRemoveFromSprint: (taskId: string) => void;
 }) {
 	const ref = useRef<HTMLElement | null>(null);
 	const dragHandleRef = useRef<HTMLButtonElement | null>(null);
@@ -356,6 +428,16 @@ function BoardTaskCard({
 						{card.description}
 					</p>
 				) : null}
+			</div>
+			<div className="relative z-20 mt-3 flex justify-end">
+				<button
+					type="button"
+					disabled={isDragDisabled || isRemovingFromSprint}
+					onClick={() => onRemoveFromSprint(card.id)}
+					className="pointer-events-auto rounded-xl border border-[var(--outline-variant)] bg-[var(--surface-container)] px-3 py-1.5 text-xs font-bold text-[var(--on-surface-variant)] transition hover:bg-[var(--surface-container-high)] disabled:cursor-not-allowed disabled:opacity-45"
+				>
+					{isRemovingFromSprint ? "Removing..." : "Backlog"}
+				</button>
 			</div>
 		</article>
 	);
@@ -602,7 +684,7 @@ function BoardColumnView({
 			<Link
 				to="/projects/$projectId/tasks/new"
 				params={{ projectId }}
-				search={{ column_id: column.id }}
+				search={{ column_id: column.id, in_sprint: true }}
 				className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-4 py-3 text-sm font-semibold text-[var(--on-surface-variant)] hover:bg-[var(--surface-bright)]"
 			>
 				<Plus className="h-4 w-4" />
@@ -645,6 +727,847 @@ function InvalidTasksView({ tasks }: { tasks: InvalidBoardTask[] }) {
 				))}
 			</div>
 		</section>
+	);
+}
+
+function ActiveSprintSummary({
+	projectId,
+	name,
+	plannedStartDate,
+	plannedEndDate,
+	goal,
+	isProjectOwner,
+	isEditing,
+	editPlannedStartDate,
+	editPlannedEndDate,
+	editGoal,
+	isSaving,
+	error,
+	onEdit,
+	onCancel,
+	onSave,
+	onCloseSprint,
+	onEditPlannedStartDateChange,
+	onEditPlannedEndDateChange,
+	onEditGoalChange,
+}: {
+	projectId: string;
+	name: string;
+	plannedStartDate: string;
+	plannedEndDate: string;
+	goal: string | null;
+	isProjectOwner: boolean;
+	isEditing: boolean;
+	editPlannedStartDate: string;
+	editPlannedEndDate: string;
+	editGoal: string;
+	isSaving: boolean;
+	error: string | null;
+	onEdit: () => void;
+	onCancel: () => void;
+	onSave: () => void;
+	onCloseSprint: () => void;
+	onEditPlannedStartDateChange: (value: string) => void;
+	onEditPlannedEndDateChange: (value: string) => void;
+	onEditGoalChange: (value: string) => void;
+}) {
+	return (
+		<section className="mb-4 min-w-[1100px] rounded-[1.5rem] border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-5 shadow-sm">
+			<div className="flex flex-wrap items-start justify-between gap-4">
+				<div>
+					<p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-[var(--on-surface-variant)]">
+						<CalendarDays className="h-4 w-4" />
+						Current Sprint
+					</p>
+					<h3 className="mt-2 font-display text-2xl font-bold text-[var(--on-surface)]">
+						{name}
+					</h3>
+					<p className="mt-1 text-sm font-semibold text-[var(--on-surface-variant)]">
+						{formatSprintDateLabel(plannedStartDate)} to{" "}
+						{formatSprintDateLabel(plannedEndDate)}
+					</p>
+				</div>
+				<div className="flex max-w-xl flex-1 flex-col items-end gap-3">
+					{goal ? (
+						<p className="w-full whitespace-pre-wrap rounded-2xl bg-[var(--surface-container-low)] px-4 py-3 text-sm leading-6 text-[var(--on-surface)]">
+							{goal}
+						</p>
+					) : null}
+					{!isEditing ? (
+						<div className="flex flex-wrap justify-end gap-2">
+							<Link
+								to="/projects/$projectId/tasks/new"
+								params={{ projectId }}
+								search={{ in_sprint: true }}
+								className="inline-flex items-center gap-2 rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-bold text-[var(--on-primary)] no-underline transition hover:brightness-105"
+							>
+								<Plus className="h-4 w-4" />
+								Add sprint task
+							</Link>
+							{isProjectOwner ? (
+								<>
+									<button
+										type="button"
+										onClick={onEdit}
+										className="inline-flex items-center gap-2 rounded-full border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-4 py-2 text-sm font-semibold hover:bg-[var(--surface-bright)]"
+									>
+										<Pencil className="h-4 w-4" />
+										Edit sprint
+									</button>
+									<button
+										type="button"
+										onClick={onCloseSprint}
+										className="inline-flex items-center gap-2 rounded-full border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-4 py-2 text-sm font-semibold text-[var(--error)] hover:bg-[var(--surface-bright)]"
+									>
+										Close sprint
+									</button>
+								</>
+							) : null}
+						</div>
+					) : null}
+				</div>
+			</div>
+			{isEditing ? (
+				<form
+					aria-label="Edit sprint"
+					className="mt-5 rounded-[1.25rem] border border-[var(--outline-variant)] bg-[var(--surface-container-low)] p-4"
+					onSubmit={(event) => {
+						event.preventDefault();
+						onSave();
+					}}
+				>
+					<div className="grid gap-4 sm:grid-cols-2">
+						<label className="grid gap-2 text-sm font-semibold">
+							Planned start
+							<input
+								type="date"
+								value={editPlannedStartDate}
+								onChange={(event) =>
+									onEditPlannedStartDateChange(event.currentTarget.value)
+								}
+								disabled={isSaving}
+								className="rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-4 py-3 text-sm outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-60"
+							/>
+						</label>
+						<label className="grid gap-2 text-sm font-semibold">
+							Planned end
+							<input
+								type="date"
+								value={editPlannedEndDate}
+								onChange={(event) =>
+									onEditPlannedEndDateChange(event.currentTarget.value)
+								}
+								disabled={isSaving}
+								className="rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-4 py-3 text-sm outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-60"
+							/>
+						</label>
+					</div>
+					<label className="mt-4 grid gap-2 text-sm font-semibold">
+						Sprint goal
+						<textarea
+							value={editGoal}
+							maxLength={SPRINT_GOAL_LIMIT}
+							onChange={(event) => onEditGoalChange(event.currentTarget.value)}
+							disabled={isSaving}
+							placeholder="Optional"
+							className="min-h-28 resize-y rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-4 py-3 text-sm leading-6 outline-none placeholder:text-[var(--on-surface-variant)] focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-60"
+						/>
+					</label>
+					{error ? (
+						<p className="mt-3 text-sm font-semibold text-[var(--error)]">
+							{error}
+						</p>
+					) : null}
+					<div className="mt-4 flex flex-wrap justify-end gap-3">
+						<button
+							type="button"
+							onClick={onCancel}
+							disabled={isSaving}
+							className="rounded-full border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-5 py-2 text-sm font-bold hover:bg-[var(--surface-bright)] disabled:cursor-not-allowed disabled:opacity-50"
+						>
+							Cancel
+						</button>
+						<button
+							type="submit"
+							disabled={isSaving}
+							className="rounded-full bg-[var(--primary)] px-5 py-2 text-sm font-bold text-[var(--on-primary)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+						>
+							{isSaving ? "Saving..." : "Save sprint"}
+						</button>
+					</div>
+				</form>
+			) : null}
+		</section>
+	);
+}
+
+function SprintCloseConfirmationPanel({
+	preview,
+	isClosing,
+	error,
+	onCancel,
+	onConfirm,
+}: {
+	preview: ProjectSprintClosePreview;
+	isClosing: boolean;
+	error: string | null;
+	onCancel: () => void;
+	onConfirm: () => void;
+}) {
+	return (
+		<section className="mb-4 min-w-[1100px] rounded-[1.5rem] border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-5 shadow-sm">
+			<div className="flex flex-wrap items-start justify-between gap-4">
+				<div>
+					<p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--on-surface-variant)]">
+						Close sprint
+					</p>
+					<h3 className="mt-2 text-xl font-bold">{preview.sprint.name}</h3>
+					<p className="mt-1 text-sm font-semibold text-[var(--on-surface-variant)]">
+						{formatSprintDateLabel(preview.sprint.plannedStartDate)} to{" "}
+						{formatSprintDateLabel(preview.sprint.plannedEndDate)}
+					</p>
+				</div>
+				<div className="grid min-w-64 grid-cols-2 gap-3 text-center">
+					<div className="rounded-2xl bg-[var(--surface-container-low)] px-4 py-3">
+						<p className="text-2xl font-bold">{preview.finishedCount}</p>
+						<p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--on-surface-variant)]">
+							Finished
+						</p>
+					</div>
+					<div className="rounded-2xl bg-[var(--surface-container-low)] px-4 py-3">
+						<p className="text-2xl font-bold">{preview.unfinishedCount}</p>
+						<p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--on-surface-variant)]">
+							Unfinished
+						</p>
+					</div>
+				</div>
+			</div>
+			{preview.unfinishedTasks.length > 0 ? (
+				<ul className="mt-4 divide-y divide-[var(--outline-variant)] rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-low)]">
+					{preview.unfinishedTasks.map((task) => (
+						<li key={task.id} className="px-4 py-3 text-sm font-semibold">
+							{task.title}
+						</li>
+					))}
+				</ul>
+			) : null}
+			<p className="mt-4 rounded-2xl bg-[var(--surface-container-low)] px-4 py-3 text-sm font-semibold text-[var(--on-surface-variant)]">
+				{preview.carryoverStatement}
+			</p>
+			{error ? (
+				<p className="mt-4 rounded-xl bg-[var(--error-container)] px-4 py-3 text-sm font-semibold text-[var(--on-error-container)]">
+					{error}
+				</p>
+			) : null}
+			<div className="mt-4 flex justify-end gap-3">
+				<button
+					type="button"
+					onClick={onCancel}
+					disabled={isClosing}
+					className="rounded-full border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-5 py-2 text-sm font-bold hover:bg-[var(--surface-bright)] disabled:cursor-not-allowed disabled:opacity-50"
+				>
+					Cancel
+				</button>
+				<button
+					type="button"
+					onClick={onConfirm}
+					disabled={isClosing}
+					className="rounded-full bg-[var(--error)] px-5 py-2 text-sm font-bold text-[var(--on-error)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+				>
+					{isClosing ? "Closing..." : "Confirm close"}
+				</button>
+			</div>
+		</section>
+	);
+}
+
+function NoActiveSprintState({
+	projectId,
+	isProjectOwner,
+	plannedStartDate,
+	plannedEndDate,
+	goal,
+	backlogTasks,
+	selectedTaskIds,
+	isCreating,
+	error,
+	onPlannedStartDateChange,
+	onPlannedEndDateChange,
+	onGoalChange,
+	onSelectedTaskIdsChange,
+	onCreateSprint,
+}: {
+	projectId: string;
+	isProjectOwner: boolean;
+	plannedStartDate: string;
+	plannedEndDate: string;
+	goal: string;
+	backlogTasks: Task[];
+	selectedTaskIds: string[];
+	isCreating: boolean;
+	error: string | null;
+	onPlannedStartDateChange: (value: string) => void;
+	onPlannedEndDateChange: (value: string) => void;
+	onGoalChange: (value: string) => void;
+	onSelectedTaskIdsChange: (taskIds: string[]) => void;
+	onCreateSprint: () => void;
+}) {
+	const selectedTaskIdSet = new Set(selectedTaskIds);
+
+	return (
+		<section className="min-w-[1100px] rounded-[1.5rem] border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-6 shadow-sm">
+			<div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(24rem,32rem)]">
+				<div>
+					<p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-[var(--on-surface-variant)]">
+						<CalendarDays className="h-4 w-4" />
+						Current Sprint
+					</p>
+					<h3 className="mt-3 font-display text-2xl font-bold text-[var(--on-surface)]">
+						No active sprint
+					</h3>
+					<p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--on-surface-variant)]">
+						Create a sprint to make this project open to Current Sprint by
+						default.
+					</p>
+					<div className="mt-5 flex flex-wrap gap-3">
+						<button
+							type="button"
+							disabled={!isProjectOwner || isCreating}
+							onClick={onCreateSprint}
+							className="inline-flex items-center gap-2 rounded-full bg-[var(--primary)] px-5 py-2.5 text-sm font-bold text-[var(--on-primary)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+						>
+							<Plus className="h-4 w-4" />
+							Create Sprint
+						</button>
+						<Link
+							to="/projects/$projectId"
+							params={{ projectId }}
+							search={{ view: "backlog" }}
+							className="inline-flex items-center gap-2 rounded-full border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-5 py-2.5 text-sm font-bold text-[var(--on-surface)] no-underline hover:bg-[var(--surface-bright)]"
+						>
+							View Backlog
+						</Link>
+					</div>
+					{!isProjectOwner ? (
+						<p className="mt-4 text-sm font-semibold text-[var(--on-surface-variant)]">
+							Only project owners can create lifecycle sprints.
+						</p>
+					) : null}
+					{error ? (
+						<p className="mt-4 rounded-xl bg-[var(--error-container)] px-4 py-3 text-sm font-semibold text-[var(--on-error-container)]">
+							{error}
+						</p>
+					) : null}
+				</div>
+				<form
+					aria-label="Create sprint"
+					className="rounded-[1.25rem] border border-[var(--outline-variant)] bg-[var(--surface-container-low)] p-4"
+					onSubmit={(event) => {
+						event.preventDefault();
+						onCreateSprint();
+					}}
+				>
+					<div className="grid gap-4 sm:grid-cols-2">
+						<label className="grid gap-2 text-sm font-semibold">
+							Planned start
+							<input
+								type="date"
+								value={plannedStartDate}
+								onChange={(event) =>
+									onPlannedStartDateChange(event.currentTarget.value)
+								}
+								disabled={!isProjectOwner || isCreating}
+								className="rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-4 py-3 text-sm outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-60"
+							/>
+						</label>
+						<label className="grid gap-2 text-sm font-semibold">
+							Planned end
+							<input
+								type="date"
+								value={plannedEndDate}
+								onChange={(event) =>
+									onPlannedEndDateChange(event.currentTarget.value)
+								}
+								disabled={!isProjectOwner || isCreating}
+								className="rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-4 py-3 text-sm outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-60"
+							/>
+						</label>
+					</div>
+					<label className="mt-4 grid gap-2 text-sm font-semibold">
+						Sprint goal
+						<textarea
+							value={goal}
+							maxLength={SPRINT_GOAL_LIMIT}
+							onChange={(event) => onGoalChange(event.currentTarget.value)}
+							disabled={!isProjectOwner || isCreating}
+							placeholder="Optional"
+							className="min-h-28 resize-y rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-4 py-3 text-sm leading-6 outline-none placeholder:text-[var(--on-surface-variant)] focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-60"
+						/>
+					</label>
+					{backlogTasks.length > 0 ? (
+						<fieldset className="mt-4 rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-3">
+							<legend className="px-1 text-sm font-bold">
+								Initial sprint tasks
+							</legend>
+							<div className="mt-2 grid gap-2">
+								{backlogTasks.map((task) => (
+									<label
+										key={task.id}
+										className="flex items-center gap-3 rounded-xl px-2 py-2 text-sm font-semibold hover:bg-[var(--surface-container-low)]"
+									>
+										<input
+											type="checkbox"
+											checked={selectedTaskIdSet.has(task.id)}
+											disabled={!isProjectOwner || isCreating}
+											onChange={(event) => {
+												if (event.currentTarget.checked) {
+													onSelectedTaskIdsChange([
+														...selectedTaskIds,
+														task.id,
+													]);
+												} else {
+													onSelectedTaskIdsChange(
+														selectedTaskIds.filter(
+															(selectedTaskId) => selectedTaskId !== task.id,
+														),
+													);
+												}
+											}}
+											className="h-4 w-4 accent-[var(--primary)]"
+										/>
+										<span className="min-w-0 truncate">{task.title}</span>
+									</label>
+								))}
+							</div>
+						</fieldset>
+					) : null}
+					<div className="mt-4 flex justify-end">
+						<button
+							type="submit"
+							disabled={!isProjectOwner || isCreating}
+							className="rounded-full bg-[var(--primary)] px-5 py-2 text-sm font-bold text-[var(--on-primary)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+						>
+							{isCreating ? "Creating..." : "Create Sprint"}
+						</button>
+					</div>
+				</form>
+			</div>
+		</section>
+	);
+}
+
+function DoneColumnSettings({
+	columns,
+	doneColumnId,
+	requiresDesignation,
+	isProjectOwner,
+	selectedColumnId,
+	isSaving,
+	error,
+	onSelectedColumnIdChange,
+	onSave,
+}: {
+	columns: BoardColumn[];
+	doneColumnId: string | null;
+	requiresDesignation: boolean;
+	isProjectOwner: boolean;
+	selectedColumnId: string;
+	isSaving: boolean;
+	error: string | null;
+	onSelectedColumnIdChange: (value: string) => void;
+	onSave: () => void;
+}) {
+	const currentColumn = columns.find((column) => column.id === doneColumnId);
+
+	return (
+		<section className="mb-4 min-w-[1100px] rounded-[1.5rem] border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-5 shadow-sm">
+			<div className="flex flex-wrap items-start justify-between gap-4">
+				<div>
+					<p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--on-surface-variant)]">
+						Done Column
+					</p>
+					<h3 className="mt-2 text-lg font-bold text-[var(--on-surface)]">
+						{currentColumn ? currentColumn.title : "Designation required"}
+					</h3>
+					<p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--on-surface-variant)]">
+						Kanai uses this workflow column to classify finished sprint work.
+					</p>
+					{requiresDesignation ? (
+						<p className="mt-3 rounded-xl bg-[var(--error-container)] px-4 py-3 text-sm font-semibold text-[var(--on-error-container)]">
+							Choose a Done Column before sprint close outcomes can be
+							classified.
+						</p>
+					) : null}
+				</div>
+				{isProjectOwner ? (
+					<form
+						aria-label="Choose Done Column"
+						className="flex min-w-80 flex-wrap items-end gap-3"
+						onSubmit={(event) => {
+							event.preventDefault();
+							onSave();
+						}}
+					>
+						<label className="grid flex-1 gap-2 text-sm font-semibold">
+							Done Column
+							<select
+								value={selectedColumnId}
+								onChange={(event) =>
+									onSelectedColumnIdChange(event.currentTarget.value)
+								}
+								disabled={isSaving}
+								className="rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-low)] px-4 py-3 text-sm outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-60"
+							>
+								<option value="">Select column</option>
+								{columns.map((column) => (
+									<option key={column.id} value={column.id}>
+										{column.title}
+									</option>
+								))}
+							</select>
+						</label>
+						<button
+							type="submit"
+							disabled={
+								isSaving ||
+								selectedColumnId === "" ||
+								selectedColumnId === doneColumnId
+							}
+							className="rounded-full bg-[var(--primary)] px-5 py-2.5 text-sm font-bold text-[var(--on-primary)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+						>
+							{isSaving ? "Saving..." : "Save Done Column"}
+						</button>
+						{error ? (
+							<p className="basis-full text-sm font-semibold text-[var(--error)]">
+								{error}
+							</p>
+						) : null}
+					</form>
+				) : null}
+			</div>
+		</section>
+	);
+}
+
+function ProjectBacklogView({
+	projectId,
+	tasks,
+	isLoading,
+	isError,
+	isCreating,
+	isReordering,
+	activeSprint,
+	addingTaskId,
+	error,
+	draftTitle,
+	onDraftTitleChange,
+	onCreateTask,
+	onMoveTask,
+	onAddToSprint,
+	onRetry,
+}: {
+	projectId: string;
+	tasks: Task[];
+	isLoading: boolean;
+	isError: boolean;
+	isCreating: boolean;
+	isReordering: boolean;
+	activeSprint: ProjectSprint | null;
+	addingTaskId: string | null;
+	error: string | null;
+	draftTitle: string;
+	onDraftTitleChange: (value: string) => void;
+	onCreateTask: () => void;
+	onMoveTask: (taskId: string, direction: "up" | "down") => void;
+	onAddToSprint: (taskId: string) => void;
+	onRetry: () => void;
+}) {
+	return (
+		<section className="min-w-[1100px] rounded-[1.5rem] border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-6 shadow-sm">
+			<div className="flex flex-wrap items-start justify-between gap-4">
+				<div>
+					<p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--on-surface-variant)]">
+						Backlog
+					</p>
+					<h3 className="mt-2 font-display text-2xl font-bold">
+						Planning list
+					</h3>
+				</div>
+				<Link
+					to="/projects/$projectId"
+					params={{ projectId }}
+					className="rounded-full border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-4 py-2 text-sm font-bold text-[var(--on-surface)] no-underline hover:bg-[var(--surface-bright)]"
+				>
+					Current Sprint
+				</Link>
+			</div>
+			<form
+				aria-label="Create backlog task"
+				className="mt-5 flex gap-3"
+				onSubmit={(event) => {
+					event.preventDefault();
+					onCreateTask();
+				}}
+			>
+				<label className="sr-only" htmlFor="backlog-task-title">
+					Backlog task title
+				</label>
+				<input
+					id="backlog-task-title"
+					value={draftTitle}
+					onChange={(event) => onDraftTitleChange(event.currentTarget.value)}
+					placeholder="Add backlog task"
+					className="min-w-0 flex-1 rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-low)] px-4 py-3 text-sm outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)]"
+				/>
+				<button
+					type="submit"
+					disabled={isCreating || draftTitle.trim() === ""}
+					className="rounded-full bg-[var(--primary)] px-5 py-2 text-sm font-bold text-[var(--on-primary)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+				>
+					{isCreating ? "Creating..." : "Add to Backlog"}
+				</button>
+			</form>
+			{error ? (
+				<p className="mt-4 rounded-xl bg-[var(--error-container)] px-4 py-3 text-sm font-semibold text-[var(--on-error-container)]">
+					{error}
+				</p>
+			) : null}
+			{isLoading ? (
+				<p className="mt-5 rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-low)] p-4 text-sm text-[var(--on-surface-variant)]">
+					Loading backlog...
+				</p>
+			) : null}
+			{isError ? (
+				<p className="mt-5 rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-low)] p-4 text-sm text-[var(--on-surface-variant)]">
+					Backlog could not be loaded.
+					<button
+						type="button"
+						onClick={onRetry}
+						className="ml-3 rounded-full bg-[var(--primary)] px-3 py-1.5 text-xs font-semibold text-[var(--on-primary)]"
+					>
+						Retry
+					</button>
+				</p>
+			) : null}
+			{!isLoading && !isError && tasks.length === 0 ? (
+				<p className="mt-5 rounded-2xl border border-dashed border-[var(--outline-variant)] bg-[var(--surface-container-low)] p-4 text-sm text-[var(--on-surface-variant)]">
+					No backlog tasks.
+				</p>
+			) : null}
+			{tasks.length > 0 ? (
+				<ol className="mt-5 divide-y divide-[var(--outline-variant)] rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-low)]">
+					{tasks.map((task, index) => (
+						<li
+							key={task.id}
+							className="flex items-center justify-between gap-4 px-4 py-3"
+						>
+							<Link
+								to="/projects/$projectId/tasks/$taskId"
+								params={{ projectId, taskId: task.id }}
+								className="min-w-0 flex-1 text-sm font-semibold text-[var(--on-surface)] no-underline hover:text-[var(--primary)]"
+							>
+								{task.title}
+							</Link>
+							<div className="flex gap-2">
+								{activeSprint ? (
+									<button
+										type="button"
+										disabled={addingTaskId !== null}
+										onClick={() => onAddToSprint(task.id)}
+										className="rounded-xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-3 py-2 text-xs font-bold text-[var(--on-surface)] hover:bg-[var(--surface-bright)] disabled:cursor-not-allowed disabled:opacity-45"
+									>
+										{addingTaskId === task.id ? "Adding..." : "Add to sprint"}
+									</button>
+								) : null}
+								<button
+									type="button"
+									aria-label={`Move ${task.title} up`}
+									disabled={index === 0 || isReordering}
+									onClick={() => onMoveTask(task.id, "up")}
+									className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] text-[var(--on-surface-variant)] hover:bg-[var(--surface-bright)] disabled:cursor-not-allowed disabled:opacity-45"
+								>
+									<ArrowUp className="h-4 w-4" />
+								</button>
+								<button
+									type="button"
+									aria-label={`Move ${task.title} down`}
+									disabled={index === tasks.length - 1 || isReordering}
+									onClick={() => onMoveTask(task.id, "down")}
+									className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] text-[var(--on-surface-variant)] hover:bg-[var(--surface-bright)] disabled:cursor-not-allowed disabled:opacity-45"
+								>
+									<ArrowDown className="h-4 w-4" />
+								</button>
+							</div>
+						</li>
+					))}
+				</ol>
+			) : null}
+		</section>
+	);
+}
+
+function ProjectSprintHistoryView({
+	projectId,
+	history,
+	isLoading,
+	isError,
+	onRetry,
+}: {
+	projectId: string;
+	history: ProjectSprintCloseResult[];
+	isLoading: boolean;
+	isError: boolean;
+	onRetry: () => void;
+}) {
+	return (
+		<section className="min-w-[1100px] rounded-[1.5rem] border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-6 shadow-sm">
+			<div className="flex flex-wrap items-start justify-between gap-4">
+				<div>
+					<p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--on-surface-variant)]">
+						Sprint History
+					</p>
+					<h3 className="mt-2 font-display text-2xl font-bold">
+						Closed sprints
+					</h3>
+				</div>
+				<Link
+					to="/projects/$projectId"
+					params={{ projectId }}
+					className="rounded-full border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-4 py-2 text-sm font-bold text-[var(--on-surface)] no-underline hover:bg-[var(--surface-bright)]"
+				>
+					Current Sprint
+				</Link>
+			</div>
+			{isLoading ? (
+				<p className="mt-5 rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-low)] p-4 text-sm text-[var(--on-surface-variant)]">
+					Loading sprint history...
+				</p>
+			) : null}
+			{isError ? (
+				<p className="mt-5 rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-low)] p-4 text-sm text-[var(--on-surface-variant)]">
+					Sprint history could not be loaded.
+					<button
+						type="button"
+						onClick={onRetry}
+						className="ml-3 rounded-full bg-[var(--primary)] px-3 py-1.5 text-xs font-semibold text-[var(--on-primary)]"
+					>
+						Retry
+					</button>
+				</p>
+			) : null}
+			{!isLoading && !isError && history.length === 0 ? (
+				<p className="mt-5 rounded-2xl border border-dashed border-[var(--outline-variant)] bg-[var(--surface-container-low)] p-4 text-sm text-[var(--on-surface-variant)]">
+					No closed sprints.
+				</p>
+			) : null}
+			<div className="mt-5 grid gap-4">
+				{history.map((entry) => {
+					const finished = entry.snapshots.filter(
+						(snapshot) => snapshot.outcome === "finished",
+					);
+					const unfinished = entry.snapshots.filter(
+						(snapshot) => snapshot.outcome === "unfinished",
+					);
+					return (
+						<article
+							key={entry.sprint.id}
+							className="rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-low)] p-4"
+						>
+							<div className="flex flex-wrap items-start justify-between gap-4">
+								<div>
+									<h4 className="text-lg font-bold">{entry.sprint.name}</h4>
+									<p className="mt-1 text-sm font-semibold text-[var(--on-surface-variant)]">
+										{formatSprintDateLabel(entry.sprint.plannedStartDate)} to{" "}
+										{formatSprintDateLabel(entry.sprint.plannedEndDate)}
+									</p>
+									{entry.sprint.goal ? (
+										<p className="mt-2 whitespace-pre-wrap text-sm leading-6">
+											{entry.sprint.goal}
+										</p>
+									) : null}
+								</div>
+								<div className="flex gap-2 text-sm font-bold">
+									<span className="rounded-full bg-[var(--surface-container-lowest)] px-3 py-1.5">
+										{entry.finishedCount} finished
+									</span>
+									<span className="rounded-full bg-[var(--surface-container-lowest)] px-3 py-1.5">
+										{entry.unfinishedCount} unfinished
+									</span>
+								</div>
+							</div>
+							<div className="mt-4 grid gap-4 md:grid-cols-2">
+								<HistoricalTaskGroup
+									projectId={projectId}
+									title="Finished"
+									snapshots={finished}
+								/>
+								<HistoricalTaskGroup
+									projectId={projectId}
+									title="Unfinished"
+									snapshots={unfinished}
+								/>
+							</div>
+						</article>
+					);
+				})}
+			</div>
+		</section>
+	);
+}
+
+function HistoricalTaskGroup({
+	projectId,
+	title,
+	snapshots,
+}: {
+	projectId: string;
+	title: string;
+	snapshots: ProjectSprintCloseResult["snapshots"];
+}) {
+	return (
+		<div>
+			<h5 className="text-sm font-bold">{title}</h5>
+			{snapshots.length === 0 ? (
+				<p className="mt-2 rounded-xl border border-dashed border-[var(--outline-variant)] p-3 text-sm text-[var(--on-surface-variant)]">
+					No tasks.
+				</p>
+			) : (
+				<ul className="mt-2 divide-y divide-[var(--outline-variant)] rounded-xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)]">
+					{snapshots.map((snapshot) => (
+						<li key={snapshot.id} className="px-3 py-3">
+							{snapshot.liveTaskExists && snapshot.taskId ? (
+								<Link
+									to="/projects/$projectId/tasks/$taskId"
+									params={{ projectId, taskId: snapshot.taskId }}
+									className="text-sm font-bold text-[var(--on-surface)] no-underline hover:text-[var(--primary)]"
+								>
+									{snapshot.title}
+								</Link>
+							) : (
+								<p className="text-sm font-bold text-[var(--on-surface)]">
+									{snapshot.title}
+								</p>
+							)}
+							{!snapshot.liveTaskExists ? (
+								<p className="mt-1 text-xs font-semibold text-[var(--on-surface-variant)]">
+									Live task deleted
+								</p>
+							) : null}
+							{snapshot.description ? (
+								<p className="mt-2 text-xs leading-5 text-[var(--on-surface-variant)]">
+									{snapshot.description}
+								</p>
+							) : null}
+							{snapshot.acceptanceCriteria ? (
+								<p className="mt-2 text-xs leading-5 text-[var(--on-surface-variant)]">
+									{snapshot.acceptanceCriteria}
+								</p>
+							) : null}
+						</li>
+					))}
+				</ul>
+			)}
+		</div>
 	);
 }
 
@@ -1380,10 +2303,19 @@ function ChatComposer({ chat }: { chat: ReturnType<typeof useProjectChat> }) {
 export function ProjectBoardPage() {
 	const auth = useAuthBoundary();
 	const { projectId } = useParams({ from: "/projects/$projectId" });
+	const { view } = useSearch({ from: "/projects/$projectId" });
 	const api = useKanaiApi();
+	const suggestedSprintDates = getSuggestedSprintDates();
 	const { data: currentUser } = useCurrentUserQuery();
 	const projectQuery = useQuery(api.projects.get(projectId));
-	const board = useProjectTaskBoard(projectId);
+	const activeSprintQuery = useQuery(api.sprints.active(projectId));
+	const sprintHistoryQuery = useQuery(api.sprints.history(projectId));
+	const doneColumnQuery = useQuery(api.doneColumn.get(projectId));
+	const backlogQuery = useQuery(api.backlog.list(projectId));
+	const board = useProjectTaskBoard(
+		projectId,
+		activeSprintQuery.data?.id ?? null,
+	);
 	const { columnsQuery, tasksQuery } = board;
 	const { draggingTaskId, activeDropColumnId } = board.dragState;
 	const { isMovePending, moveError } = board.moveState;
@@ -1406,6 +2338,45 @@ export function ProjectBoardPage() {
 	const [metadataError, setMetadataError] = useState<string | null>(null);
 	const [metadataSuccess, setMetadataSuccess] = useState<string | null>(null);
 	const [isMetadataSaving, setIsMetadataSaving] = useState(false);
+	const [plannedStartDate, setPlannedStartDate] = useState(
+		suggestedSprintDates.plannedStartDate,
+	);
+	const [plannedEndDate, setPlannedEndDate] = useState(
+		suggestedSprintDates.plannedEndDate,
+	);
+	const [hasEditedSprintDates, setHasEditedSprintDates] = useState(false);
+	const [sprintGoal, setSprintGoal] = useState("");
+	const [createSprintError, setCreateSprintError] = useState<string | null>(
+		null,
+	);
+	const [isCreatingSprint, setIsCreatingSprint] = useState(false);
+	const [isSprintEditing, setIsSprintEditing] = useState(false);
+	const [editSprintStartDate, setEditSprintStartDate] = useState("");
+	const [editSprintEndDate, setEditSprintEndDate] = useState("");
+	const [editSprintGoal, setEditSprintGoal] = useState("");
+	const [editSprintError, setEditSprintError] = useState<string | null>(null);
+	const [isSavingSprint, setIsSavingSprint] = useState(false);
+	const [closePreview, setClosePreview] =
+		useState<ProjectSprintClosePreview | null>(null);
+	const [closeSprintError, setCloseSprintError] = useState<string | null>(null);
+	const [isLoadingClosePreview, setIsLoadingClosePreview] = useState(false);
+	const [isClosingSprint, setIsClosingSprint] = useState(false);
+	const [selectedDoneColumnId, setSelectedDoneColumnId] = useState("");
+	const [doneColumnError, setDoneColumnError] = useState<string | null>(null);
+	const [isSavingDoneColumn, setIsSavingDoneColumn] = useState(false);
+	const [backlogDraftTitle, setBacklogDraftTitle] = useState("");
+	const [backlogError, setBacklogError] = useState<string | null>(null);
+	const [isCreatingBacklogTask, setIsCreatingBacklogTask] = useState(false);
+	const [isReorderingBacklog, setIsReorderingBacklog] = useState(false);
+	const [initialSprintTaskIds, setInitialSprintTaskIds] = useState<string[]>(
+		[],
+	);
+	const [addingBacklogTaskId, setAddingBacklogTaskId] = useState<string | null>(
+		null,
+	);
+	const [removingSprintTaskId, setRemovingSprintTaskId] = useState<
+		string | null
+	>(null);
 	const metadataSuccessTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
 		null,
 	);
@@ -1425,8 +2396,13 @@ export function ProjectBoardPage() {
 	const isProjectAuthError = projectQuery.error instanceof CurrentUserAuthError;
 	const isTasksAuthError = tasksQuery.error instanceof CurrentUserAuthError;
 	const isColumnsAuthError = columnsQuery.error instanceof CurrentUserAuthError;
+	const isSprintAuthError =
+		activeSprintQuery.error instanceof CurrentUserAuthError;
 	const accountInitials = getCurrentUserInitials(currentUser);
-	const isBoardMutationPending = isMovePending || isColumnReorderPending;
+	const isBoardMutationPending =
+		isMovePending || isColumnReorderPending || removingSprintTaskId !== null;
+	const activeSprint = activeSprintQuery.data ?? null;
+	const doneColumn = doneColumnQuery.data;
 
 	useEffect(() => {
 		return () => {
@@ -1435,6 +2411,20 @@ export function ProjectBoardPage() {
 			}
 		};
 	}, []);
+
+	useEffect(() => {
+		if (activeSprint !== null || hasEditedSprintDates) {
+			return;
+		}
+		const historicalSuggestion = getSuggestedSprintDatesFromHistory(
+			sprintHistoryQuery.data,
+		);
+		if (!historicalSuggestion) {
+			return;
+		}
+		setPlannedStartDate(historicalSuggestion.plannedStartDate);
+		setPlannedEndDate(historicalSuggestion.plannedEndDate);
+	}, [activeSprint, hasEditedSprintDates, sprintHistoryQuery.data]);
 
 	useEffect(() => {
 		return monitorForElements({
@@ -1575,6 +2565,12 @@ export function ProjectBoardPage() {
 		});
 	}, [board, isBoardMutationPending]);
 
+	useEffect(() => {
+		if (doneColumn?.doneColumnId) {
+			setSelectedDoneColumnId(doneColumn.doneColumnId);
+		}
+	}, [doneColumn?.doneColumnId]);
+
 	function handleLogout() {
 		auth.logout();
 	}
@@ -1637,7 +2633,230 @@ export function ProjectBoardPage() {
 		await api.projects.addMember(projectId, userId);
 	}
 
+	async function handleCreateSprint() {
+		if (!isProjectOwner || isCreatingSprint) {
+			return;
+		}
+		if (!plannedStartDate || !plannedEndDate) {
+			setCreateSprintError("Planned start and end dates are required.");
+			return;
+		}
+		if (plannedEndDate < plannedStartDate) {
+			setCreateSprintError("Sprint end date must be on or after start date.");
+			return;
+		}
+
+		setIsCreatingSprint(true);
+		setCreateSprintError(null);
+		try {
+			await api.sprints.create(projectId, {
+				plannedStartDate,
+				plannedEndDate,
+				goal: sprintGoal.trim() === "" ? null : sprintGoal,
+				taskIds: initialSprintTaskIds,
+			});
+			setInitialSprintTaskIds([]);
+		} catch (error) {
+			setCreateSprintError(
+				sprintMutationErrorMessage(error, "Sprint could not be created."),
+			);
+		} finally {
+			setIsCreatingSprint(false);
+		}
+	}
+
+	async function handleAddBacklogTaskToSprint(taskId: string) {
+		if (!activeSprint || addingBacklogTaskId !== null) {
+			return;
+		}
+
+		setAddingBacklogTaskId(taskId);
+		setBacklogError(null);
+		try {
+			await api.backlog.addToActiveSprint(projectId, taskId);
+			await backlogQuery.refetch();
+		} catch {
+			setBacklogError("Backlog task could not be added to the sprint.");
+		} finally {
+			setAddingBacklogTaskId(null);
+		}
+	}
+
+	async function handleRemoveSprintTaskToBacklog(taskId: string) {
+		if (!activeSprint || removingSprintTaskId !== null) {
+			return;
+		}
+
+		setRemovingSprintTaskId(taskId);
+		setBacklogError(null);
+		try {
+			await api.backlog.removeFromActiveSprint(projectId, taskId);
+			await tasksQuery.refetch();
+			await backlogQuery.refetch();
+		} catch {
+			setBacklogError("Sprint task could not be moved back to Backlog.");
+		} finally {
+			setRemovingSprintTaskId(null);
+		}
+	}
+
+	function handleEditSprint() {
+		if (!isProjectOwner || !activeSprint) {
+			return;
+		}
+
+		setEditSprintStartDate(activeSprint.plannedStartDate);
+		setEditSprintEndDate(activeSprint.plannedEndDate);
+		setEditSprintGoal(activeSprint.goal ?? "");
+		setEditSprintError(null);
+		setIsSprintEditing(true);
+	}
+
+	function handleCancelSprintEdit() {
+		setIsSprintEditing(false);
+		setEditSprintError(null);
+	}
+
+	async function handleSaveSprint() {
+		if (!isProjectOwner || !activeSprint || isSavingSprint) {
+			return;
+		}
+		if (!editSprintStartDate || !editSprintEndDate) {
+			setEditSprintError("Planned start and end dates are required.");
+			return;
+		}
+		if (editSprintEndDate < editSprintStartDate) {
+			setEditSprintError("Sprint end date must be on or after start date.");
+			return;
+		}
+
+		setIsSavingSprint(true);
+		setEditSprintError(null);
+		try {
+			await api.sprints.updateActive(projectId, {
+				plannedStartDate: editSprintStartDate,
+				plannedEndDate: editSprintEndDate,
+				goal: editSprintGoal.trim() === "" ? null : editSprintGoal,
+			});
+			setIsSprintEditing(false);
+		} catch (error) {
+			setEditSprintError(
+				sprintMutationErrorMessage(error, "Sprint could not be saved."),
+			);
+		} finally {
+			setIsSavingSprint(false);
+		}
+	}
+
+	async function handleOpenCloseConfirmation() {
+		if (!isProjectOwner || !activeSprint || isLoadingClosePreview) {
+			return;
+		}
+
+		setIsLoadingClosePreview(true);
+		setCloseSprintError(null);
+		try {
+			setClosePreview(await api.sprints.closeConfirmation(projectId));
+		} catch {
+			setCloseSprintError("Sprint close confirmation could not be loaded.");
+		} finally {
+			setIsLoadingClosePreview(false);
+		}
+	}
+
+	async function handleConfirmCloseSprint() {
+		if (!isProjectOwner || !activeSprint || isClosingSprint) {
+			return;
+		}
+
+		setIsClosingSprint(true);
+		setCloseSprintError(null);
+		try {
+			await api.sprints.closeActive(projectId);
+			setClosePreview(null);
+			await activeSprintQuery.refetch();
+			await tasksQuery.refetch();
+			await backlogQuery.refetch();
+		} catch {
+			setCloseSprintError("Sprint could not be closed.");
+		} finally {
+			setIsClosingSprint(false);
+		}
+	}
+
+	async function handleSaveDoneColumn() {
+		if (!isProjectOwner || selectedDoneColumnId === "" || isSavingDoneColumn) {
+			return;
+		}
+
+		setIsSavingDoneColumn(true);
+		setDoneColumnError(null);
+		try {
+			await api.doneColumn.update(projectId, {
+				doneColumnId: selectedDoneColumnId,
+			});
+		} catch {
+			setDoneColumnError("Done Column could not be saved.");
+		} finally {
+			setIsSavingDoneColumn(false);
+		}
+	}
+
+	async function handleCreateBacklogTask() {
+		const title = backlogDraftTitle.trim();
+		if (title === "" || isCreatingBacklogTask) {
+			return;
+		}
+
+		setIsCreatingBacklogTask(true);
+		setBacklogError(null);
+		try {
+			await api.backlog.createTask(projectId, { title });
+			setBacklogDraftTitle("");
+			await backlogQuery.refetch();
+		} catch {
+			setBacklogError("Backlog task could not be created.");
+		} finally {
+			setIsCreatingBacklogTask(false);
+		}
+	}
+
+	async function handleMoveBacklogTask(
+		taskId: string,
+		direction: "up" | "down",
+	) {
+		const backlogTasks = backlogQuery.data ?? [];
+		const sourceIndex = backlogTasks.findIndex((task) => task.id === taskId);
+		if (sourceIndex === -1 || isReorderingBacklog) {
+			return;
+		}
+		const destinationIndex =
+			direction === "up" ? sourceIndex - 1 : sourceIndex + 1;
+		if (destinationIndex < 0 || destinationIndex >= backlogTasks.length) {
+			return;
+		}
+
+		const reorderedTasks = [...backlogTasks];
+		const [movedTask] = reorderedTasks.splice(sourceIndex, 1);
+		reorderedTasks.splice(destinationIndex, 0, movedTask);
+
+		setIsReorderingBacklog(true);
+		setBacklogError(null);
+		try {
+			await api.backlog.reorder(projectId, {
+				taskIds: reorderedTasks.map((task) => task.id),
+			});
+		} catch {
+			setBacklogError("Backlog order could not be saved.");
+		} finally {
+			setIsReorderingBacklog(false);
+		}
+	}
+
 	const isColumnReorderAvailable = columns.length > 1;
+	const shouldShowBoard = Boolean(activeSprint);
+	const isBacklogView = view === "backlog";
+	const isHistoryView = view === "history";
 
 	return (
 		<main className="min-h-screen overflow-hidden bg-[var(--background)] text-[var(--on-surface)]">
@@ -1910,87 +3129,258 @@ export function ProjectBoardPage() {
 								{moveError ?? columnReorderError}
 							</div>
 						) : null}
+						{activeSprintQuery.isPending ? (
+							<div className="mb-4 min-w-[1100px] rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-4 text-sm text-[var(--on-surface-variant)]">
+								Loading current sprint...
+							</div>
+						) : null}
+						{activeSprintQuery.isError ? (
+							<div className="mb-4 min-w-[1100px] rounded-xl border border-[var(--outline-variant)] bg-[var(--surface-container-low)] p-4 text-sm text-[var(--on-surface-variant)]">
+								{isSprintAuthError
+									? "Sign in again to load the current sprint."
+									: "Current sprint could not be loaded."}
+								<button
+									type="button"
+									onClick={() => void activeSprintQuery.refetch()}
+									className="ml-3 rounded-full bg-[var(--primary)] px-3 py-1.5 text-xs font-semibold text-[var(--on-primary)]"
+								>
+									Retry
+								</button>
+							</div>
+						) : null}
+						{!activeSprintQuery.isPending &&
+						!activeSprintQuery.isError &&
+						!isBacklogView &&
+						!isHistoryView &&
+						activeSprint === null ? (
+							<NoActiveSprintState
+								projectId={projectId}
+								isProjectOwner={isProjectOwner}
+								plannedStartDate={plannedStartDate}
+								plannedEndDate={plannedEndDate}
+								goal={sprintGoal}
+								backlogTasks={backlogQuery.data ?? []}
+								selectedTaskIds={initialSprintTaskIds}
+								isCreating={isCreatingSprint}
+								error={createSprintError}
+								onPlannedStartDateChange={(value) => {
+									setHasEditedSprintDates(true);
+									setPlannedStartDate(value);
+								}}
+								onPlannedEndDateChange={(value) => {
+									setHasEditedSprintDates(true);
+									setPlannedEndDate(value);
+								}}
+								onGoalChange={setSprintGoal}
+								onSelectedTaskIdsChange={setInitialSprintTaskIds}
+								onCreateSprint={() => void handleCreateSprint()}
+							/>
+						) : null}
+						{activeSprint ? (
+							<ActiveSprintSummary
+								projectId={projectId}
+								name={activeSprint.name}
+								plannedStartDate={activeSprint.plannedStartDate}
+								plannedEndDate={activeSprint.plannedEndDate}
+								goal={activeSprint.goal}
+								isProjectOwner={isProjectOwner}
+								isEditing={isSprintEditing}
+								editPlannedStartDate={editSprintStartDate}
+								editPlannedEndDate={editSprintEndDate}
+								editGoal={editSprintGoal}
+								isSaving={isSavingSprint}
+								error={editSprintError}
+								onEdit={handleEditSprint}
+								onCancel={handleCancelSprintEdit}
+								onSave={() => void handleSaveSprint()}
+								onCloseSprint={() => void handleOpenCloseConfirmation()}
+								onEditPlannedStartDateChange={setEditSprintStartDate}
+								onEditPlannedEndDateChange={setEditSprintEndDate}
+								onEditGoalChange={setEditSprintGoal}
+							/>
+						) : null}
+						{closeSprintError && closePreview === null ? (
+							<p className="mb-4 min-w-[1100px] rounded-xl bg-[var(--error-container)] px-4 py-3 text-sm font-semibold text-[var(--on-error-container)]">
+								{closeSprintError}
+							</p>
+						) : null}
+						{isLoadingClosePreview ? (
+							<p className="mb-4 min-w-[1100px] rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-4 text-sm text-[var(--on-surface-variant)]">
+								Loading close confirmation...
+							</p>
+						) : null}
+						{closePreview ? (
+							<SprintCloseConfirmationPanel
+								preview={closePreview}
+								isClosing={isClosingSprint}
+								error={closeSprintError}
+								onCancel={() => {
+									setClosePreview(null);
+									setCloseSprintError(null);
+								}}
+								onConfirm={() => void handleConfirmCloseSprint()}
+							/>
+						) : null}
+						{!isBacklogView && !isHistoryView && activeSprint ? (
+							<div className="mb-4 min-w-[1100px]">
+								<Link
+									to="/projects/$projectId"
+									params={{ projectId }}
+									search={{ view: "backlog" }}
+									className="inline-flex rounded-full border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-4 py-2 text-sm font-bold text-[var(--on-surface)] no-underline hover:bg-[var(--surface-bright)]"
+								>
+									View Backlog
+								</Link>
+								<Link
+									to="/projects/$projectId"
+									params={{ projectId }}
+									search={{ view: "history" }}
+									className="ml-3 inline-flex rounded-full border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-4 py-2 text-sm font-bold text-[var(--on-surface)] no-underline hover:bg-[var(--surface-bright)]"
+								>
+									View Sprint History
+								</Link>
+							</div>
+						) : null}
 						{!columnsQuery.isPending &&
+						!columnsQuery.isError &&
+						doneColumn &&
+						columns.length > 0 ? (
+							<DoneColumnSettings
+								columns={columns}
+								doneColumnId={doneColumn.doneColumnId}
+								requiresDesignation={doneColumn.requiresDesignation}
+								isProjectOwner={isProjectOwner}
+								selectedColumnId={selectedDoneColumnId}
+								isSaving={isSavingDoneColumn}
+								error={doneColumnError}
+								onSelectedColumnIdChange={setSelectedDoneColumnId}
+								onSave={() => void handleSaveDoneColumn()}
+							/>
+						) : null}
+						{isBacklogView ? (
+							<ProjectBacklogView
+								projectId={projectId}
+								tasks={backlogQuery.data ?? []}
+								isLoading={backlogQuery.isPending}
+								isError={backlogQuery.isError}
+								isCreating={isCreatingBacklogTask}
+								isReordering={isReorderingBacklog}
+								activeSprint={activeSprint}
+								addingTaskId={addingBacklogTaskId}
+								error={backlogError}
+								draftTitle={backlogDraftTitle}
+								onDraftTitleChange={setBacklogDraftTitle}
+								onCreateTask={() => void handleCreateBacklogTask()}
+								onMoveTask={(taskId, direction) =>
+									void handleMoveBacklogTask(taskId, direction)
+								}
+								onAddToSprint={(taskId) =>
+									void handleAddBacklogTaskToSprint(taskId)
+								}
+								onRetry={() => void backlogQuery.refetch()}
+							/>
+						) : null}
+						{isHistoryView ? (
+							<ProjectSprintHistoryView
+								projectId={projectId}
+								history={sprintHistoryQuery.data ?? []}
+								isLoading={sprintHistoryQuery.isPending}
+								isError={sprintHistoryQuery.isError}
+								onRetry={() => void sprintHistoryQuery.refetch()}
+							/>
+						) : null}
+						{shouldShowBoard &&
+						!isBacklogView &&
+						!isHistoryView &&
+						!columnsQuery.isPending &&
 						!columnsQuery.isError &&
 						!tasksQuery.isPending &&
 						!tasksQuery.isError ? (
 							<InvalidTasksView tasks={invalidTasks} />
 						) : null}
-						<div className="flex min-w-[1100px] gap-6">
-							{columnsQuery.isPending ? (
-								<p className="rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-4 text-sm text-[var(--on-surface-variant)]">
-									Loading columns...
-								</p>
-							) : null}
-							{!columnsQuery.isError &&
-								columns.map((column) => (
-									<BoardColumnView
-										key={column.id}
-										column={column}
-										projectId={projectId}
-										isActiveDropTarget={activeDropColumnId === column.id}
-										isAppendDropTarget={
-											columnAppendDropIndicator?.columnId === column.id
-										}
-										isDropDisabled={isBoardMutationPending}
-										isProjectOwner={isProjectOwner}
-										isColumnReorderAvailable={isColumnReorderAvailable}
-										isColumnDragging={draggingColumnId === column.id}
-										columnInsertionEdge={
-											columnInsertionIndicator?.columnId === column.id
-												? columnInsertionIndicator.edge
-												: null
-										}
-										isColumnMoveDisabled={isBoardMutationPending}
-									>
-										{tasksQuery.isPending ? (
-											<p className="rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-4 text-sm text-[var(--on-surface-variant)]">
-												Loading tasks...
-											</p>
-										) : null}
-										{!tasksQuery.isPending &&
-										!tasksQuery.isError &&
-										column.cards.length === 0 ? (
-											<p
-												className={[
-													"rounded-2xl border border-dashed p-4 text-sm transition",
-													columnAppendDropIndicator?.columnId === column.id
-														? "border-[var(--primary)] bg-[var(--primary-container)] text-[var(--on-primary-container)]"
-														: "border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] text-[var(--on-surface-variant)]",
-												].join(" ")}
-											>
-												No tasks in {column.title.toLowerCase()}.
-											</p>
-										) : null}
-										{column.cards.map((card) => (
-											<BoardTaskCard
-												key={card.id}
-												card={card}
-												columnId={column.id}
-												isDragging={draggingTaskId === card.id}
-												isDragDisabled={isBoardMutationPending}
-												dropIndicatorEdge={
-													cardDropIndicator?.taskId === card.id
-														? cardDropIndicator.closestEdge
-														: null
-												}
-												onDragStateChange={board.dragState.setDraggingTaskId}
-											/>
-										))}
-									</BoardColumnView>
-								))}
+						{shouldShowBoard && !isBacklogView && !isHistoryView ? (
+							<div className="flex min-w-[1100px] gap-6">
+								{columnsQuery.isPending ? (
+									<p className="rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-4 text-sm text-[var(--on-surface-variant)]">
+										Loading columns...
+									</p>
+								) : null}
+								{!columnsQuery.isError &&
+									columns.map((column) => (
+										<BoardColumnView
+											key={column.id}
+											column={column}
+											projectId={projectId}
+											isActiveDropTarget={activeDropColumnId === column.id}
+											isAppendDropTarget={
+												columnAppendDropIndicator?.columnId === column.id
+											}
+											isDropDisabled={isBoardMutationPending}
+											isProjectOwner={isProjectOwner}
+											isColumnReorderAvailable={isColumnReorderAvailable}
+											isColumnDragging={draggingColumnId === column.id}
+											columnInsertionEdge={
+												columnInsertionIndicator?.columnId === column.id
+													? columnInsertionIndicator.edge
+													: null
+											}
+											isColumnMoveDisabled={isBoardMutationPending}
+										>
+											{tasksQuery.isPending ? (
+												<p className="rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-4 text-sm text-[var(--on-surface-variant)]">
+													Loading tasks...
+												</p>
+											) : null}
+											{!tasksQuery.isPending &&
+											!tasksQuery.isError &&
+											column.cards.length === 0 ? (
+												<p
+													className={[
+														"rounded-2xl border border-dashed p-4 text-sm transition",
+														columnAppendDropIndicator?.columnId === column.id
+															? "border-[var(--primary)] bg-[var(--primary-container)] text-[var(--on-primary-container)]"
+															: "border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] text-[var(--on-surface-variant)]",
+													].join(" ")}
+												>
+													No tasks in {column.title.toLowerCase()}.
+												</p>
+											) : null}
+											{column.cards.map((card) => (
+												<BoardTaskCard
+													key={card.id}
+													card={card}
+													columnId={column.id}
+													isDragging={draggingTaskId === card.id}
+													isDragDisabled={isBoardMutationPending}
+													isRemovingFromSprint={
+														removingSprintTaskId === card.id
+													}
+													dropIndicatorEdge={
+														cardDropIndicator?.taskId === card.id
+															? cardDropIndicator.closestEdge
+															: null
+													}
+													onDragStateChange={board.dragState.setDraggingTaskId}
+													onRemoveFromSprint={(taskId) =>
+														void handleRemoveSprintTaskToBacklog(taskId)
+													}
+												/>
+											))}
+										</BoardColumnView>
+									))}
 
-							{isProjectOwner ? (
-								<Link
-									to="/projects/$projectId/columns/new"
-									params={{ projectId }}
-									className="flex min-h-32 w-[340px] flex-shrink-0 items-center justify-center gap-2 rounded-[1.5rem] border border-dashed border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-4 py-3 text-sm font-semibold text-[var(--on-surface-variant)] no-underline hover:bg-[var(--surface-bright)]"
-								>
-									<Plus className="h-4 w-4" />
-									Add another list
-								</Link>
-							) : null}
-						</div>
+								{isProjectOwner ? (
+									<Link
+										to="/projects/$projectId/columns/new"
+										params={{ projectId }}
+										className="flex min-h-32 w-[340px] flex-shrink-0 items-center justify-center gap-2 rounded-[1.5rem] border border-dashed border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-4 py-3 text-sm font-semibold text-[var(--on-surface-variant)] no-underline hover:bg-[var(--surface-bright)]"
+									>
+										<Plus className="h-4 w-4" />
+										Add another list
+									</Link>
+								) : null}
+							</div>
+						) : null}
 					</div>
 				</section>
 			</div>

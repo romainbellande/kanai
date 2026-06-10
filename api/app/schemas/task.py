@@ -37,6 +37,7 @@ class TaskCreate(BaseModel):
     Parameters:
         title: Task title.
         column_id: Optional workflow column ID. Defaults to the first project column.
+        include_in_active_sprint: Whether the new task belongs to the active sprint.
         priority: Optional priority level for the task.
         assignee_id: Optional user ID assigned to the task.
         description: Optional task details.
@@ -48,6 +49,7 @@ class TaskCreate(BaseModel):
 
     title: str
     column_id: UUID | None = None
+    include_in_active_sprint: bool = False
     priority: str | None = None
     assignee_id: UUID | None = None
     description: str | None = None
@@ -147,10 +149,12 @@ class TaskRead(BaseModel):
     Parameters:
         id: Task ID.
         project_id: ID of the project that owns the task.
+        sprint_id: Optional active or historical sprint membership ID.
         title: Task title.
         column_id: Workflow column ID for the task.
         priority: Optional priority level for the task.
         rank: Sortable LexoRank-style position within the task column.
+        backlog_rank: Optional manual rank within the project backlog.
         assignee_id: Optional user ID assigned to the task.
         description: Optional task details.
         acceptance_criteria: Optional criteria required to complete the task.
@@ -163,10 +167,12 @@ class TaskRead(BaseModel):
 
     id: UUID
     project_id: UUID
+    sprint_id: UUID | None
     column_id: UUID
     title: str
     priority: str | None
     rank: str
+    backlog_rank: str | None
     assignee_id: UUID | None
     description: str | None
     acceptance_criteria: str | None

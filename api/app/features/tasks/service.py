@@ -1,5 +1,7 @@
 """Task feature workflows."""
 
+from __future__ import annotations
+
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -41,16 +43,35 @@ class TaskService:
         payload: TaskCreate,
     ) -> TaskRead:
         """Create a task in a project accessible to a user."""
-        await self._project_access.require_project(project_id, user_id)
+        project = await self._project_access.require_project(project_id, user_id)
         if payload.assignee_id is not None:
             await self._project_access.validate_users_exist({payload.assignee_id})
 
-        column_id = (await self._resolve_column(project_id, payload.column_id)).id
+        active_sprint = None
+        if payload.include_in_active_sprint:
+            active_sprint = await self._project_repository.get_active_sprint(
+                project_id
+            )
+            if active_sprint is None or active_sprint.id is None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Project has no active sprint",
+                )
+
+        column_id = (
+            await self._resolve_column(
+                project_id,
+                payload.column_id,
+                use_first_non_done=payload.include_in_active_sprint,
+                done_column_id=project.done_column_id,
+            )
+        ).id
         if column_id is None:
             raise RuntimeError("Project column ID is missing")
 
         task = Task(
             project_id=project_id,
+            sprint_id=active_sprint.id if active_sprint else None,
             column_id=column_id,
             title=payload.title,
             priority=task_priority_to_storage(payload.priority),
@@ -66,6 +87,22 @@ class TaskService:
         """List tasks for a project accessible to a user."""
         await self._project_access.require_project(project_id, user_id)
         tasks = await self._repository.list_by_project(project_id)
+        return [task_to_read(task) for task in tasks]
+
+    async def list_active_sprint(
+        self, *, project_id: UUID, user_id: UUID
+    ) -> list[TaskRead]:
+        """List tasks selected into a project's active sprint."""
+        await self._project_access.require_project(project_id, user_id)
+        active_sprint = await self._project_repository.get_active_sprint(project_id)
+        if active_sprint is None or active_sprint.id is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Active sprint not found",
+            )
+        tasks = await self._repository.list_by_project_and_sprint(
+            project_id, active_sprint.id
+        )
         return [task_to_read(task) for task in tasks]
 
     async def get(self, *, project_id: UUID, task_id: UUID, user_id: UUID) -> TaskRead:
@@ -167,7 +204,12 @@ class TaskService:
         await self._repository.delete(task)
 
     async def _resolve_column(
-        self, project_id: UUID, column_id: UUID | None
+        self,
+        project_id: UUID,
+        column_id: UUID | None,
+        *,
+        use_first_non_done: bool = False,
+        done_column_id: UUID | None = None,
     ) -> ProjectColumn:
         columns = await self._project_repository.list_columns_by_project(project_id)
         if column_id is None:
@@ -176,7 +218,11 @@ class TaskService:
                     status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                     detail="Project has no columns",
                 )
-            column = columns[0]
+            column = (
+                self._first_non_done_column(columns, done_column_id)
+                if use_first_non_done
+                else columns[0]
+            )
         else:
             column = next(
                 (column for column in columns if column.id == column_id), None
@@ -189,6 +235,22 @@ class TaskService:
             )
 
         return column
+
+    def _first_non_done_column(
+        self,
+        columns: list[ProjectColumn],
+        done_column_id: UUID | None,
+    ) -> ProjectColumn:
+        non_done_column = next(
+            (column for column in columns if column.id != done_column_id),
+            None,
+        )
+        if non_done_column is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Project has no non-Done columns",
+            )
+        return non_done_column
 
 
 def rank_between(before: str | None, after: str | None) -> str:
@@ -235,10 +297,12 @@ def task_to_read(task: Task) -> TaskRead:
     return TaskRead(
         id=task.id,
         project_id=task.project_id,
+        sprint_id=task.sprint_id,
         column_id=task.column_id,
         title=task.title,
         priority=normalize_task_priority(task.priority),
         rank=task.rank,
+        backlog_rank=task.backlog_rank,
         assignee_id=task.assignee_id,
         description=task.description,
         acceptance_criteria=task.acceptance_criteria,

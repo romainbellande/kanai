@@ -232,7 +232,10 @@ function isSamePosition(sourceTask: Task, cards: Task[], input: MoveTaskInput) {
 	);
 }
 
-export function useProjectTaskBoard(projectId: string) {
+export function useProjectTaskBoard(
+	projectId: string,
+	sprintId?: string | null,
+) {
 	const api = useKanaiApi();
 	const tasksQuery = useQuery(api.tasks.list(projectId));
 	const columnsQuery = useQuery(api.projectColumns.list(projectId));
@@ -255,13 +258,17 @@ export function useProjectTaskBoard(projectId: string) {
 	const [activeDropColumnId, setActiveDropColumnId] = useState<ColumnId | null>(
 		null,
 	);
+	const visibleTasks =
+		sprintId === undefined
+			? (tasksQuery.data ?? [])
+			: (tasksQuery.data ?? []).filter((task) => task.sprintId === sprintId);
 	const columns = groupTasksByColumn(
-		tasksQuery.data ?? [],
+		visibleTasks,
 		projectId,
 		columnsQuery.data ?? [],
 	);
 	const invalidTasks = getTasksWithMissingColumns(
-		tasksQuery.data ?? [],
+		visibleTasks,
 		projectId,
 		columnsQuery.data ?? [],
 	);

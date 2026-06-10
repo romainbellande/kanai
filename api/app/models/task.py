@@ -23,6 +23,15 @@ class Task(SQLModel, table=True):
             nullable=False,
         ),
     )
+    sprint_id: UUID | None = Field(
+        default=None,
+        sa_column=Column(
+            Uuid(),
+            ForeignKey("project_sprints.id", ondelete="SET NULL"),
+            nullable=True,
+            index=True,
+        ),
+    )
     column_id: UUID = Field(
         sa_column=Column(
             Uuid(),
@@ -35,6 +44,10 @@ class Task(SQLModel, table=True):
     rank: str = Field(
         default="U",
         sa_column=Column("task_rank", String(), nullable=False, server_default="U"),
+    )
+    backlog_rank: str | None = Field(
+        default=None,
+        sa_column=Column(String(), nullable=True, index=True),
     )
     assignee_id: UUID | None = Field(
         default=None,

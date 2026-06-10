@@ -53,6 +53,8 @@ function task(overrides: Partial<Task> = {}): Task {
 	return {
 		id: "task-1",
 		projectId: "project-1",
+		sprintId: null,
+		backlogRank: null,
 		title: "Task",
 		columnId: "column-todo",
 		priority: "medium",

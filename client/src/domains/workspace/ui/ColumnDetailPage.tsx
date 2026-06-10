@@ -15,6 +15,7 @@ export function ColumnDetailPage() {
 	const api = useKanaiApi();
 	const projectQuery = useQuery(api.projects.get(projectId));
 	const columnsQuery = useQuery(api.projectColumns.list(projectId));
+	const doneColumnQuery = useQuery(api.doneColumn.get(projectId));
 	const tasksQuery = useQuery(api.tasks.list(projectId));
 	const currentUserQuery = useCurrentUserQuery();
 	const form = useColumnForm({
@@ -22,6 +23,7 @@ export function ColumnDetailPage() {
 		columnId,
 		project: projectQuery.data,
 		columns: columnsQuery.data,
+		doneColumn: doneColumnQuery.data,
 		tasks: tasksQuery.data,
 		currentUserId: currentUserQuery.data?.id,
 		isProjectLoading: projectQuery.isPending,

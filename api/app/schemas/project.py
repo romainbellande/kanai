@@ -1,11 +1,13 @@
 """Pydantic schemas for project API request and response payloads."""
 
-from datetime import datetime
+from datetime import date, datetime
 from uuid import UUID
 
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from app.schemas.task import TaskRead
 
 NULLABLE_UPDATE_FIELD = "nullable_update_field"
 
@@ -161,6 +163,141 @@ class ProjectColumnReorder(BaseModel):
     """Request payload for reordering all project workflow columns."""
 
     column_ids: list[UUID]
+
+
+class ProjectSprintCreate(BaseModel):
+    """Request payload for creating a project sprint."""
+
+    planned_start_date: date
+    planned_end_date: date
+    goal: str | None = Field(default=None, max_length=4_000)
+    task_ids: list[UUID] = Field(default_factory=list)
+
+    @field_validator("goal")
+    @classmethod
+    def trim_blank_goal(cls, goal: str | None) -> str | None:
+        """Trim sprint goals and persist blank values as absent."""
+        if goal is None:
+            return None
+
+        trimmed_goal = goal.strip()
+        return trimmed_goal or None
+
+
+class ProjectSprintUpdate(BaseModel):
+    """Request payload for updating active project sprint metadata."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    planned_start_date: date | None = None
+    planned_end_date: date | None = None
+    goal: str | None = Field(
+        default=None,
+        max_length=4_000,
+        json_schema_extra={NULLABLE_UPDATE_FIELD: True},
+    )
+
+    @field_validator("goal")
+    @classmethod
+    def trim_goal(cls, goal: str | None) -> str | None:
+        """Trim sprint goals while preserving explicit null clears."""
+        if goal is None:
+            return None
+
+        trimmed_goal = goal.strip()
+        return trimmed_goal or None
+
+    def update_values(self) -> dict[str, object]:
+        """Return fields submitted by the client, preserving explicit nulls."""
+        return self.model_dump(exclude_unset=True)
+
+
+class ProjectSprintRead(BaseModel):
+    """Defines a project sprint response payload."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    project_id: UUID
+    name: str
+    lifecycle_state: str
+    planned_start_date: date
+    planned_end_date: date
+    goal: str | None
+    closed_at: datetime | None
+    created_at: datetime | None
+    updated_at: datetime | None
+
+
+class ProjectSprintTaskSnapshotRead(BaseModel):
+    """Historical task snapshot captured when a sprint closes."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    sprint_id: UUID
+    task_id: UUID | None
+    column_id: UUID
+    title: str
+    outcome: str
+    priority: str | None
+    rank: str
+    description: str | None
+    acceptance_criteria: str | None
+    tag: str | None
+    live_task_exists: bool = False
+    created_at: datetime | None
+
+
+class ProjectSprintClosePreviewRead(BaseModel):
+    """Confirmation payload for closing an active sprint."""
+
+    sprint: ProjectSprintRead
+    finished_count: int
+    unfinished_count: int
+    unfinished_tasks: list[TaskRead]
+    carryover_statement: str
+
+
+class ProjectSprintCloseRead(ProjectSprintClosePreviewRead):
+    """Response payload after a sprint has been closed."""
+
+    snapshots: list[ProjectSprintTaskSnapshotRead]
+
+
+class ProjectSprintHistoryRead(BaseModel):
+    """Closed sprint summary and historical task detail."""
+
+    sprint: ProjectSprintRead
+    finished_count: int
+    unfinished_count: int
+    snapshots: list[ProjectSprintTaskSnapshotRead]
+
+
+class ProjectSprintTaskAdd(BaseModel):
+    """Request payload for adding an existing task to the active sprint."""
+
+    task_id: UUID
+
+
+class ProjectDoneColumnRead(BaseModel):
+    """Response payload for project Done Column configuration."""
+
+    project_id: UUID
+    done_column_id: UUID | None
+    requires_designation: bool
+
+
+class ProjectDoneColumnUpdate(BaseModel):
+    """Request payload for changing a project's Done Column."""
+
+    done_column_id: UUID
+
+
+class ProjectBacklogReorder(BaseModel):
+    """Request payload for rewriting project Backlog order."""
+
+    task_ids: list[UUID]
 
 
 class ProjectMemberCreate(BaseModel):
