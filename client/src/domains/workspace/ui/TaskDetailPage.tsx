@@ -7,7 +7,11 @@ import { useKanaiApi } from "#/api/client";
 import { useTaskForm } from "#/domains/workspace/model/useTaskForm";
 import { WorkspaceLayout } from "#/domains/workspace/ui/templates/WorkspaceLayout";
 
-export function TaskDetailPage() {
+export function TaskDetailPage({
+	fromBacklog = false,
+}: {
+	fromBacklog?: boolean;
+}) {
 	const { projectId, taskId } = useParams({
 		from: "/projects_/$projectId/tasks/$taskId",
 	});
@@ -30,6 +34,8 @@ export function TaskDetailPage() {
 	const workflowMessage = columnsQuery.isError
 		? "Project workflow columns could not be loaded."
 		: form.workflowState.message;
+	const returnSearch = fromBacklog ? { view: "backlog" as const } : undefined;
+	const returnLabel = fromBacklog ? "Back to the Backlog" : "Back to Board";
 
 	function updateField(field: keyof typeof form.values, value: string) {
 		form.setField(field, value);
@@ -92,9 +98,10 @@ export function TaskDetailPage() {
 						<Link
 							to="/projects/$projectId"
 							params={{ projectId }}
+							search={returnSearch}
 							className="ml-3 font-semibold text-[var(--primary)] no-underline hover:underline"
 						>
-							Back to board
+							{returnLabel}
 						</Link>
 					</div>
 				) : null}
@@ -279,9 +286,10 @@ export function TaskDetailPage() {
 							<Link
 								to="/projects/$projectId"
 								params={{ projectId }}
+								search={returnSearch}
 								className="inline-flex items-center justify-center rounded-full border border-transparent px-5 py-2.5 text-sm font-semibold text-[var(--on-surface-variant)] no-underline transition hover:border-[var(--outline-variant)] hover:bg-[var(--surface-bright)]"
 							>
-								Back to Board
+								{returnLabel}
 							</Link>
 							<button
 								disabled={

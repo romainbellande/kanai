@@ -20,6 +20,8 @@ type TaskFormWorkflowInput = {
 	columns: readonly TaskFormWorkflowColumn[] | undefined;
 	defaultColumnId?: string;
 	isLoading: boolean;
+	requireDefaultColumn?: boolean;
+	defaultColumnMissingMessage?: string;
 	selectedColumnId: string;
 	requireSelectedColumn?: boolean;
 };
@@ -35,8 +37,11 @@ type UseTaskFormInput =
 			projectId: string;
 			mode: "create";
 			includeInActiveSprint?: boolean;
+			createInBacklog?: boolean;
 			initialColumnId?: string;
 			defaultColumnId?: string;
+			requireDefaultColumn?: boolean;
+			defaultColumnMissingMessage?: string;
 			workflowColumns?: readonly TaskFormWorkflowColumn[];
 			isWorkflowLoading?: boolean;
 			onSaved?: (task: Task) => void;
@@ -54,6 +59,8 @@ export function getTaskFormWorkflowState({
 	columns,
 	defaultColumnId,
 	isLoading,
+	requireDefaultColumn,
+	defaultColumnMissingMessage,
 	requireSelectedColumn,
 	selectedColumnId,
 }: TaskFormWorkflowInput): TaskFormWorkflowState {
@@ -83,6 +90,17 @@ export function getTaskFormWorkflowState({
 	}
 
 	const selectedColumn = columns.find(({ id }) => id === selectedColumnId);
+	const defaultColumn = columns.find((column) => column.id === defaultColumnId);
+
+	if (requireDefaultColumn && !defaultColumn) {
+		return {
+			selectedColumnId: defaultColumnId ?? "",
+			isBlocked: true,
+			message:
+				defaultColumnMissingMessage ??
+				"A valid workflow column is required before creating tasks.",
+		};
+	}
 
 	if (!selectedColumn && selectedColumnId && requireSelectedColumn) {
 		return {
@@ -94,10 +112,7 @@ export function getTaskFormWorkflowState({
 	}
 
 	return {
-		selectedColumnId:
-			selectedColumn?.id ??
-			columns.find((column) => column.id === defaultColumnId)?.id ??
-			columns[0].id,
+		selectedColumnId: selectedColumn?.id ?? defaultColumn?.id ?? columns[0].id,
 		isBlocked: false,
 		message: null,
 	};
@@ -156,6 +171,8 @@ export function useTaskForm(input: UseTaskFormInput) {
 					columns: input.workflowColumns,
 					defaultColumnId: input.defaultColumnId,
 					isLoading: input.isWorkflowLoading ?? false,
+					requireDefaultColumn: input.requireDefaultColumn,
+					defaultColumnMissingMessage: input.defaultColumnMissingMessage,
 					selectedColumnId: values.status,
 				})
 			: getTaskFormWorkflowState({
@@ -166,7 +183,9 @@ export function useTaskForm(input: UseTaskFormInput) {
 				});
 	const createTaskMutation = useMutation({
 		mutationFn: (payload: Parameters<typeof api.tasks.create>[1]) =>
-			api.tasks.create(input.projectId, payload),
+			input.mode === "create" && input.createInBacklog
+				? api.backlog.createTask(input.projectId, payload)
+				: api.tasks.create(input.projectId, payload),
 	});
 	const updateTaskMutation = useMutation({
 		mutationFn: (payload: Parameters<typeof api.tasks.update>[1]) =>
@@ -249,7 +268,9 @@ export function useTaskForm(input: UseTaskFormInput) {
 			const task = await createTaskMutation.mutateAsync({
 				title,
 				columnId: workflowState.selectedColumnId,
-				includeInActiveSprint: input.includeInActiveSprint,
+				...(!input.createInBacklog && input.includeInActiveSprint
+					? { includeInActiveSprint: true }
+					: {}),
 				priority: priority || undefined,
 				description: description || undefined,
 				acceptanceCriteria: acceptanceCriteria || undefined,

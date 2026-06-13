@@ -15,6 +15,7 @@ import {
 	currentUserQueryOptions,
 	type ProjectColumn,
 	projectColumnsQueryOptions,
+	projectDoneColumnQueryOptions,
 	projectQueryOptions,
 } from "#/api/client";
 
@@ -31,6 +32,7 @@ vi.mock("@tanstack/react-router", () => ({
 	}: AnchorHTMLAttributes<HTMLAnchorElement> & {
 		children: ReactNode;
 		params?: { projectId?: string };
+		search?: Record<string, boolean | string>;
 		to: string;
 	}) => (
 		<a
@@ -98,6 +100,14 @@ function renderWithQueryClient(
 		createdAt: null,
 		updatedAt: null,
 	});
+	queryClient.setQueryData(
+		projectDoneColumnQueryOptions("project-1").queryKey,
+		{
+			projectId: "project-1",
+			doneColumnId: "column-done",
+			requiresDesignation: false,
+		},
+	);
 	if (columns !== null) {
 		queryClient.setQueryData(
 			projectColumnsQueryOptions("project-1").queryKey,
@@ -392,5 +402,117 @@ describe("CreateTaskPage", () => {
 		).toBeTruthy();
 		expect(titleInput.value).toBe("Failed Task");
 		expect(routerMocks.navigate).not.toHaveBeenCalled();
+	});
+
+	it("creates Backlog tasks with full details through the Backlog API", async () => {
+		const { CreateTaskPage } = await import(
+			"#/domains/workspace/ui/CreateTaskPage"
+		);
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					id: "task-1",
+					project_id: "project-1",
+					title: "Backlog task",
+					column_id: "column-todo",
+					priority: "high",
+					rank: "0|hzzzzz:",
+					backlog_rank: "F",
+					assignee_id: null,
+					description: "Backlog notes",
+					acceptance_criteria: "Backlog criteria",
+					tag: "UX",
+					created_at: null,
+					updated_at: null,
+				}),
+				{ headers: { "content-type": "application/json" }, status: 201 },
+			),
+		);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		renderWithQueryClient(<CreateTaskPage createInBacklog />, [
+			column({ id: "column-todo", name: "To Do", position: 0 }),
+			column({ id: "column-done", name: "Done", position: 1 }),
+		]);
+
+		expect(screen.getByText("Destination")).toBeTruthy();
+		expect(screen.getByText("Backlog")).toBeTruthy();
+		expect(screen.queryByLabelText(/workflow/i)).toBeNull();
+		fireEvent.change(screen.getByLabelText(/task title/i), {
+			target: { value: "Backlog task" },
+		});
+		fireEvent.change(screen.getByLabelText(/priority/i), {
+			target: { value: "high" },
+		});
+		fireEvent.change(screen.getByLabelText(/description/i), {
+			target: { value: "Backlog notes" },
+		});
+		fireEvent.change(screen.getByLabelText(/acceptance criteria/i), {
+			target: { value: "Backlog criteria" },
+		});
+		fireEvent.change(screen.getByLabelText(/tag/i), {
+			target: { value: "UX" },
+		});
+		fireEvent.submit(getCreateTaskForm());
+
+		await waitFor(() =>
+			expect(
+				fetchSpy.mock.calls.some(
+					([url, init]) =>
+						String(url).endsWith("/projects/project-1/backlog/tasks") &&
+						init?.method === "POST",
+				),
+			).toBe(true),
+		);
+		const [, init] = fetchSpy.mock.calls.find(
+			([url, init]) =>
+				String(url).endsWith("/projects/project-1/backlog/tasks") &&
+				init?.method === "POST",
+		) ?? [null, undefined];
+		expect(JSON.parse(String(init?.body))).toEqual({
+			title: "Backlog task",
+			column_id: "column-todo",
+			priority: "high",
+			description: "Backlog notes",
+			acceptance_criteria: "Backlog criteria",
+			tag: "UX",
+		});
+		expect(routerMocks.navigate).toHaveBeenCalledWith({
+			to: "/projects/$projectId",
+			params: { projectId: "project-1" },
+			search: { view: "backlog" },
+		});
+	});
+
+	it("blocks Backlog task creation when no non-Done workflow column exists", async () => {
+		const { CreateTaskPage } = await import(
+			"#/domains/workspace/ui/CreateTaskPage"
+		);
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		const fetchSpy = vi.fn<typeof fetch>();
+		vi.stubGlobal("fetch", fetchSpy);
+
+		renderWithQueryClient(<CreateTaskPage createInBacklog />, [
+			column({ id: "column-done", name: "Done", position: 0 }),
+		]);
+
+		expect(
+			screen.getByText(
+				"A non-Done workflow column is required before creating Backlog tasks.",
+			),
+		).toBeTruthy();
+		expect(
+			screen.getByRole<HTMLButtonElement>("button", { name: /create task/i })
+				.disabled,
+		).toBe(true);
+		fireEvent.submit(getCreateTaskForm());
+		expect(
+			fetchSpy.mock.calls.some(
+				([url, init]) =>
+					String(url).endsWith("/projects/project-1/backlog/tasks") &&
+					init?.method === "POST",
+			),
+		).toBe(false);
 	});
 });

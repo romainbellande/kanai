@@ -12,7 +12,11 @@ import {
 } from "#/api/client";
 
 const routeMocks = vi.hoisted(() => ({
-	search: { column_id: undefined as string | undefined },
+	search: {
+		backlog: undefined as boolean | undefined,
+		column_id: undefined as string | undefined,
+		in_sprint: undefined as boolean | undefined,
+	},
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -28,7 +32,11 @@ vi.mock("@tanstack/react-router", () => ({
 
 type TestRoute = {
 	component: ComponentType;
-	validateSearch: (search: Record<string, unknown>) => { column_id?: string };
+	validateSearch: (search: Record<string, unknown>) => {
+		backlog?: boolean;
+		column_id?: string;
+		in_sprint?: boolean;
+	};
 };
 
 function createQueryClient() {
@@ -78,15 +86,21 @@ function createQueryClient() {
 }
 
 describe("new task route", () => {
-	it("accepts only column_id for workflow preselection", async () => {
+	it("accepts explicit Backlog context and column_id workflow preselection", async () => {
 		const { Route } = await import("#/routes/projects_.$projectId.tasks.new");
 		const route = Route as unknown as TestRoute;
 
 		expect(
-			route.validateSearch({ column_id: "column-review", status: "todo" }),
-		).toEqual({ column_id: "column-review" });
+			route.validateSearch({
+				backlog: "true",
+				column_id: "column-review",
+				status: "todo",
+			}),
+		).toEqual({ backlog: true, column_id: "column-review", in_sprint: false });
 		expect(route.validateSearch({ status: "todo" })).toEqual({
+			backlog: false,
 			column_id: undefined,
+			in_sprint: false,
 		});
 	});
 
@@ -94,7 +108,11 @@ describe("new task route", () => {
 		const { Route } = await import("#/routes/projects_.$projectId.tasks.new");
 		const route = Route as unknown as TestRoute;
 		const RouteComponent = route.component;
-		routeMocks.search = { column_id: "column-review" };
+		routeMocks.search = {
+			backlog: false,
+			column_id: "column-review",
+			in_sprint: false,
+		};
 
 		render(
 			<QueryClientProvider client={createQueryClient()}>

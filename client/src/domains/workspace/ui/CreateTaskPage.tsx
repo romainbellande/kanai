@@ -8,9 +8,11 @@ import { useTaskForm } from "#/domains/workspace/model/useTaskForm";
 import { WorkspaceLayout } from "#/domains/workspace/ui/templates/WorkspaceLayout";
 
 export function CreateTaskPage({
+	createInBacklog = false,
 	includeInActiveSprint = false,
 	initialColumnId,
 }: {
+	createInBacklog?: boolean;
 	includeInActiveSprint?: boolean;
 	initialColumnId?: string;
 }) {
@@ -20,28 +22,45 @@ export function CreateTaskPage({
 	const projectQuery = useQuery(api.projects.get(projectId));
 	const columnsQuery = useQuery(api.projectColumns.list(projectId));
 	const doneColumnQuery = useQuery(api.doneColumn.get(projectId));
+	const needsNonDoneDefaultColumn = createInBacklog || includeInActiveSprint;
+	const doneColumnId = doneColumnQuery.data?.doneColumnId;
 	const defaultColumnId =
-		includeInActiveSprint && !initialColumnId
-			? columnsQuery.data?.find(
-					(column) => column.id !== doneColumnQuery.data?.doneColumnId,
-				)?.id
+		needsNonDoneDefaultColumn && !initialColumnId && doneColumnId
+			? columnsQuery.data?.find((column) => column.id !== doneColumnId)?.id
 			: undefined;
+	const workflowColumnsUnavailable =
+		columnsQuery.isError || (createInBacklog && doneColumnQuery.isError);
 	const form = useTaskForm({
 		projectId,
 		mode: "create",
+		createInBacklog,
 		includeInActiveSprint,
 		initialColumnId,
 		defaultColumnId,
-		workflowColumns: columnsQuery.data,
-		isWorkflowLoading: columnsQuery.isLoading,
+		requireDefaultColumn: createInBacklog,
+		defaultColumnMissingMessage:
+			"A non-Done workflow column is required before creating Backlog tasks.",
+		workflowColumns: workflowColumnsUnavailable ? undefined : columnsQuery.data,
+		isWorkflowLoading:
+			columnsQuery.isLoading ||
+			(needsNonDoneDefaultColumn && doneColumnQuery.isLoading),
 		onSaved: () => {
-			void navigate({ to: "/projects/$projectId", params: { projectId } });
+			void navigate({
+				to: "/projects/$projectId",
+				params: { projectId },
+				...(createInBacklog ? { search: { view: "backlog" as const } } : {}),
+			});
 		},
 	});
 	const projectName = projectQuery.data?.name ?? "Project";
-	const workflowMessage = columnsQuery.isError
+	const workflowMessage = workflowColumnsUnavailable
 		? "Project workflow columns could not be loaded."
 		: form.workflowState.message;
+	const pageTitle = createInBacklog
+		? "Create Backlog Task"
+		: includeInActiveSprint
+			? "Create Current Sprint Task"
+			: "Create New Task";
 
 	async function handleSubmit(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
@@ -62,9 +81,7 @@ export function CreateTaskPage({
 			contentContainerClassName="mx-auto flex w-full max-w-[760px] flex-col gap-8"
 			contentClassName="px-4 py-8 pb-12 sm:px-6 lg:px-8"
 			pageDescription="Capture the work item and assign the details needed to move it forward."
-			pageTitle={
-				includeInActiveSprint ? "Create Current Sprint Task" : "Create New Task"
-			}
+			pageTitle={pageTitle}
 			sectionClassName="lg:min-h-screen"
 		>
 			<section className="rise-in rounded-[1.75rem] border border-[color:color-mix(in_srgb,var(--outline-variant)_50%,transparent)] bg-[var(--surface-container-lowest)] p-6 shadow-[0_18px_42px_rgba(25,28,30,0.04)] sm:p-10">
@@ -118,37 +135,53 @@ export function CreateTaskPage({
 								</p>
 							</div>
 
-							<div>
-								<label
-									className="mb-2 block text-sm font-semibold text-[var(--on-surface)]"
-									htmlFor="taskStatus"
-								>
-									Workflow
-								</label>
-								<select
-									className="w-full rounded-lg border border-[var(--outline-variant)] bg-[var(--surface)] px-4 py-3 text-base text-[var(--on-surface)] outline-none transition focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]"
-									id="taskStatus"
-									name="taskStatus"
-									disabled={
-										form.workflowState.isBlocked || columnsQuery.isError
-									}
-									value={form.values.status}
-									onChange={(event) =>
-										form.setField("status", event.target.value)
-									}
-								>
-									{columnsQuery.data?.map((column) => (
-										<option key={column.id} value={column.id}>
-											{column.name}
-										</option>
-									))}
-								</select>
-								{workflowMessage ? (
-									<p className="mt-2 text-sm font-medium text-[var(--on-surface-variant)]">
-										{workflowMessage}
+							{createInBacklog ? (
+								<div>
+									<p className="mb-2 block text-sm font-semibold text-[var(--on-surface)]">
+										Destination
 									</p>
-								) : null}
-							</div>
+									<div className="rounded-lg border border-[var(--outline-variant)] bg-[var(--surface)] px-4 py-3 text-base font-semibold text-[var(--on-surface)]">
+										Backlog
+									</div>
+									{workflowMessage ? (
+										<p className="mt-2 text-sm font-medium text-[var(--on-surface-variant)]">
+											{workflowMessage}
+										</p>
+									) : null}
+								</div>
+							) : (
+								<div>
+									<label
+										className="mb-2 block text-sm font-semibold text-[var(--on-surface)]"
+										htmlFor="taskStatus"
+									>
+										Workflow
+									</label>
+									<select
+										className="w-full rounded-lg border border-[var(--outline-variant)] bg-[var(--surface)] px-4 py-3 text-base text-[var(--on-surface)] outline-none transition focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]"
+										id="taskStatus"
+										name="taskStatus"
+										disabled={
+											form.workflowState.isBlocked || columnsQuery.isError
+										}
+										value={form.values.status}
+										onChange={(event) =>
+											form.setField("status", event.target.value)
+										}
+									>
+										{columnsQuery.data?.map((column) => (
+											<option key={column.id} value={column.id}>
+												{column.name}
+											</option>
+										))}
+									</select>
+									{workflowMessage ? (
+										<p className="mt-2 text-sm font-medium text-[var(--on-surface-variant)]">
+											{workflowMessage}
+										</p>
+									) : null}
+								</div>
+							)}
 
 							<div>
 								<label
@@ -172,6 +205,24 @@ export function CreateTaskPage({
 									<option value="high">High</option>
 									<option value="critical">Critical</option>
 								</select>
+							</div>
+
+							<div className="sm:col-span-2">
+								<label
+									className="mb-2 block text-sm font-semibold text-[var(--on-surface)]"
+									htmlFor="taskTag"
+								>
+									Tag
+								</label>
+								<input
+									className="w-full rounded-lg border border-[var(--outline-variant)] bg-[var(--surface)] px-4 py-3 text-base text-[var(--on-surface)] outline-none transition placeholder:text-[var(--outline)] focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]"
+									id="taskTag"
+									name="taskTag"
+									placeholder="Optional label shown on the card"
+									type="text"
+									value={form.values.tag}
+									onChange={(event) => form.setField("tag", event.target.value)}
+								/>
 							</div>
 
 							<div className="sm:col-span-2 rounded-2xl border border-dashed border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-4 text-sm leading-6 text-[var(--on-surface-variant)]">
@@ -243,6 +294,7 @@ export function CreateTaskPage({
 						<Link
 							to="/projects/$projectId"
 							params={{ projectId }}
+							search={createInBacklog ? { view: "backlog" } : undefined}
 							className="inline-flex items-center justify-center rounded-full border border-transparent px-5 py-2.5 text-sm font-semibold text-[var(--on-surface-variant)] no-underline transition hover:border-[var(--outline-variant)] hover:bg-[var(--surface-bright)]"
 						>
 							Cancel
@@ -251,7 +303,7 @@ export function CreateTaskPage({
 							disabled={
 								form.isSaving ||
 								form.workflowState.isBlocked ||
-								columnsQuery.isError
+								workflowColumnsUnavailable
 							}
 							type="submit"
 							className="inline-flex items-center justify-center gap-2 rounded-full bg-[var(--primary)] px-5 py-2.5 text-sm font-semibold text-[color:var(--on-primary)] shadow-[0_12px_28px_rgba(0,61,155,0.18)] transition hover:bg-[var(--primary-container)]"

@@ -1145,6 +1145,19 @@ describe("ProjectBoardPage", () => {
 		expect(screen.queryByText("Sprint task")).toBeNull();
 		expect(screen.queryByText("No tasks in to do.")).toBeNull();
 		expect(screen.getByRole("link", { name: "Current Sprint" })).toBeTruthy();
+		expect(screen.queryByLabelText("Backlog task title")).toBeNull();
+		expect(
+			screen.getByRole("link", { name: "Add Backlog Task" }),
+		).toHaveProperty(
+			"href",
+			expect.stringContaining("/projects/project-1/tasks/new?backlog=true"),
+		);
+		expect(screen.getByRole("link", { name: "Backlog first" })).toHaveProperty(
+			"href",
+			expect.stringContaining(
+				"/projects/project-1/tasks/backlog-first?backlog=true",
+			),
+		);
 	});
 
 	it("renders shareable Sprint History with grouped snapshots and live task links", async () => {
@@ -1247,7 +1260,7 @@ describe("ProjectBoardPage", () => {
 		expect(screen.queryByText("Sprint task")).toBeNull();
 	});
 
-	it("creates backlog tasks and persists manual backlog reorder", async () => {
+	it("persists manual Backlog reorder", async () => {
 		projectSearch = { view: "backlog" };
 		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
 		window.sessionStorage.setItem(
@@ -1276,6 +1289,10 @@ describe("ProjectBoardPage", () => {
 			task({ id: "first", title: "First", sprintId: null, backlogRank: "F" }),
 			task({ id: "second", title: "Second", sprintId: null, backlogRank: "U" }),
 		]);
+		queryClient.setQueryData(
+			projectSprintHistoryQueryOptions("project-1").queryKey,
+			[],
+		);
 		const taskJson = (id: string, title: string, backlog_rank: string) => ({
 			id,
 			project_id: "project-1",
@@ -1296,22 +1313,6 @@ describe("ProjectBoardPage", () => {
 			.fn<typeof fetch>()
 			.mockResolvedValueOnce(
 				new Response(
-					JSON.stringify(taskJson("created", "Created backlog task", "8")),
-					{ headers: { "content-type": "application/json" }, status: 201 },
-				),
-			)
-			.mockResolvedValueOnce(
-				new Response(
-					JSON.stringify([
-						taskJson("created", "Created backlog task", "8"),
-						taskJson("first", "First", "F"),
-						taskJson("second", "Second", "U"),
-					]),
-					{ headers: { "content-type": "application/json" }, status: 200 },
-				),
-			)
-			.mockResolvedValueOnce(
-				new Response(
 					JSON.stringify([
 						taskJson("second", "Second", "U"),
 						taskJson("first", "First", "j"),
@@ -1322,25 +1323,21 @@ describe("ProjectBoardPage", () => {
 		vi.stubGlobal("fetch", fetchSpy);
 
 		renderWithQueryClient(<ProjectBoardPage />, queryClient);
-		fireEvent.change(screen.getByLabelText("Backlog task title"), {
-			target: { value: "Created backlog task" },
-		});
-		fireEvent.click(screen.getByRole("button", { name: /add to backlog/i }));
-
-		await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
-		expect(fetchSpy.mock.calls[0][0]).toBe(
-			"https://api.example.test/projects/project-1/backlog/tasks",
-		);
-		expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toEqual({
-			title: "Created backlog task",
-		});
-
 		fireEvent.click(screen.getByRole("button", { name: "Move Second up" }));
-		await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(3));
-		expect(fetchSpy.mock.calls[2][0]).toBe(
-			"https://api.example.test/projects/project-1/backlog/reorder",
+		await waitFor(() =>
+			expect(
+				fetchSpy.mock.calls.some(
+					([url]) =>
+						url ===
+						"https://api.example.test/projects/project-1/backlog/reorder",
+				),
+			).toBe(true),
 		);
-		expect(JSON.parse(String(fetchSpy.mock.calls[2][1]?.body))).toEqual({
+		const [, init] = fetchSpy.mock.calls.find(
+			([url]) =>
+				url === "https://api.example.test/projects/project-1/backlog/reorder",
+		) ?? [null, undefined];
+		expect(JSON.parse(String(init?.body))).toEqual({
 			task_ids: ["second", "first"],
 		});
 	});
@@ -1387,6 +1384,10 @@ describe("ProjectBoardPage", () => {
 				backlogRank: "F",
 			}),
 		]);
+		queryClient.setQueryData(
+			projectSprintHistoryQueryOptions("project-1").queryKey,
+			[],
+		);
 		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
 			new Response(
 				JSON.stringify({
@@ -1413,11 +1414,21 @@ describe("ProjectBoardPage", () => {
 		renderWithQueryClient(<ProjectBoardPage />, queryClient);
 		fireEvent.click(screen.getByRole("button", { name: /add to sprint/i }));
 
-		await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
-		expect(fetchSpy.mock.calls[0][0]).toBe(
-			"https://api.example.test/projects/project-1/sprints/active/tasks",
+		await waitFor(() =>
+			expect(
+				fetchSpy.mock.calls.some(
+					([url]) =>
+						url ===
+						"https://api.example.test/projects/project-1/sprints/active/tasks",
+				),
+			).toBe(true),
 		);
-		expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toEqual({
+		const [, init] = fetchSpy.mock.calls.find(
+			([url]) =>
+				url ===
+				"https://api.example.test/projects/project-1/sprints/active/tasks",
+		) ?? [null, undefined];
+		expect(JSON.parse(String(init?.body))).toEqual({
 			task_id: "backlog-task",
 		});
 	});
@@ -1462,6 +1473,10 @@ describe("ProjectBoardPage", () => {
 			projectBacklogQueryOptions("project-1").queryKey,
 			[],
 		);
+		queryClient.setQueryData(
+			projectSprintHistoryQueryOptions("project-1").queryKey,
+			[],
+		);
 		const removedTaskJson = {
 			id: "sprint-task",
 			project_id: "project-1",
@@ -1503,11 +1518,21 @@ describe("ProjectBoardPage", () => {
 		renderWithQueryClient(<ProjectBoardPage />, queryClient);
 		fireEvent.click(screen.getByRole("button", { name: "Backlog" }));
 
-		await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
-		expect(fetchSpy.mock.calls[0][0]).toBe(
-			"https://api.example.test/projects/project-1/sprints/active/tasks/sprint-task",
+		await waitFor(() =>
+			expect(
+				fetchSpy.mock.calls.some(
+					([url]) =>
+						url ===
+						"https://api.example.test/projects/project-1/sprints/active/tasks/sprint-task",
+				),
+			).toBe(true),
 		);
-		expect(fetchSpy.mock.calls[0][1]?.method).toBe("DELETE");
+		const [, init] = fetchSpy.mock.calls.find(
+			([url]) =>
+				url ===
+				"https://api.example.test/projects/project-1/sprints/active/tasks/sprint-task",
+		) ?? [null, undefined];
+		expect(init?.method).toBe("DELETE");
 	});
 
 	it("renders selected task priorities as distinct colored board tags", async () => {

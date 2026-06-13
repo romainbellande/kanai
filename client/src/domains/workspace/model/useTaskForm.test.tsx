@@ -149,6 +149,26 @@ describe("getTaskFormWorkflowState", () => {
 			selectedColumnId: "missing-column",
 		});
 	});
+
+	it("blocks when a required default workflow column is missing", () => {
+		expect(
+			getTaskFormWorkflowState({
+				columns: [
+					{ id: "column-done", name: "Done" },
+					{ id: "column-review", name: "Review" },
+				],
+				defaultColumnId: "column-todo",
+				defaultColumnMissingMessage: "A non-Done workflow column is required.",
+				isLoading: false,
+				requireDefaultColumn: true,
+				selectedColumnId: "",
+			}),
+		).toEqual({
+			isBlocked: true,
+			message: "A non-Done workflow column is required.",
+			selectedColumnId: "column-todo",
+		});
+	});
 });
 
 describe("useTaskForm create mode", () => {
@@ -399,6 +419,62 @@ describe("useTaskForm create mode", () => {
 			title: "Sprint task",
 			column_id: "column-todo",
 			include_in_active_sprint: true,
+		});
+	});
+
+	it("creates Backlog tasks through the Backlog API without sprint membership", async () => {
+		const queryClient = createTestQueryClient();
+		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(
+				JSON.stringify(
+					createdTask({
+						title: "Backlog task",
+						column_id: "column-todo",
+						backlog_rank: "F",
+						tag: "UX",
+					}),
+				),
+				{ headers: { "content-type": "application/json" }, status: 201 },
+			),
+		);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		const { result } = renderHook(
+			() =>
+				useTaskForm({
+					projectId: "project-1",
+					mode: "create",
+					createInBacklog: true,
+					defaultColumnId: "column-todo",
+					requireDefaultColumn: true,
+					workflowColumns: [
+						{ id: "column-todo", name: "To Do" },
+						{ id: "column-done", name: "Done" },
+					],
+				}),
+			{ wrapper: createWrapper(queryClient) },
+		);
+
+		await waitFor(() =>
+			expect(result.current.values.status).toBe("column-todo"),
+		);
+
+		act(() => {
+			result.current.setField("title", "Backlog task");
+			result.current.setField("tag", "UX");
+		});
+
+		await act(async () => {
+			await result.current.submit();
+		});
+
+		expect(fetchSpy.mock.calls[0][0]).toBe(
+			"https://api.example.test/projects/project-1/backlog/tasks",
+		);
+		expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toEqual({
+			title: "Backlog task",
+			column_id: "column-todo",
+			tag: "UX",
 		});
 	});
 });

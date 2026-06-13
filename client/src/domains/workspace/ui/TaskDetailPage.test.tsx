@@ -26,20 +26,32 @@ vi.mock("@tanstack/react-router", () => ({
 	Link: ({
 		children,
 		params,
+		search,
 		to,
 		...props
 	}: AnchorHTMLAttributes<HTMLAnchorElement> & {
 		children: ReactNode;
 		params?: { projectId?: string };
+		search?: Record<string, boolean | string>;
 		to: string;
-	}) => (
-		<a
-			href={params?.projectId ? to.replace("$projectId", params.projectId) : to}
-			{...props}
-		>
-			{children}
-		</a>
-	),
+	}) => {
+		const href = params?.projectId
+			? to.replace("$projectId", params.projectId)
+			: to;
+		const query = search
+			? `?${new URLSearchParams(
+					Object.fromEntries(
+						Object.entries(search).map(([key, value]) => [key, String(value)]),
+					),
+				).toString()}`
+			: "";
+
+		return (
+			<a href={`${href}${query}`} {...props}>
+				{children}
+			</a>
+		);
+	},
 	useParams: () => ({ projectId: "project-1", taskId: "task-1" }),
 }));
 
@@ -282,6 +294,34 @@ describe("TaskDetailPage", () => {
 		expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toEqual(
 			expect.objectContaining({ priority: null }),
 		);
+	});
+
+	it("returns to Backlog when opened from Backlog context", async () => {
+		const { TaskDetailPage } = await import(
+			"#/domains/workspace/ui/TaskDetailPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project(),
+		);
+		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
+			task(),
+		]);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column(),
+		]);
+		vi.stubGlobal("fetch", vi.fn<typeof fetch>());
+
+		renderTaskDetailPage(<TaskDetailPage fromBacklog />, queryClient);
+
+		expect(
+			screen.getByRole("link", { name: "Back to the Backlog" }),
+		).toHaveProperty(
+			"href",
+			expect.stringContaining("/projects/project-1?view=backlog"),
+		);
+		expect(screen.queryByRole("link", { name: "Back to Board" })).toBeNull();
 	});
 
 	it("keeps unsaved edits visible when saving fails", async () => {

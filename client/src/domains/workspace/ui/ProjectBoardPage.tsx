@@ -1254,14 +1254,10 @@ function ProjectBacklogView({
 	tasks,
 	isLoading,
 	isError,
-	isCreating,
 	isReordering,
 	activeSprint,
 	addingTaskId,
 	error,
-	draftTitle,
-	onDraftTitleChange,
-	onCreateTask,
 	onMoveTask,
 	onAddToSprint,
 	onRetry,
@@ -1270,14 +1266,10 @@ function ProjectBacklogView({
 	tasks: Task[];
 	isLoading: boolean;
 	isError: boolean;
-	isCreating: boolean;
 	isReordering: boolean;
 	activeSprint: ProjectSprint | null;
 	addingTaskId: string | null;
 	error: string | null;
-	draftTitle: string;
-	onDraftTitleChange: (value: string) => void;
-	onCreateTask: () => void;
 	onMoveTask: (taskId: string, direction: "up" | "down") => void;
 	onAddToSprint: (taskId: string) => void;
 	onRetry: () => void;
@@ -1294,39 +1286,21 @@ function ProjectBacklogView({
 					</h3>
 				</div>
 				<Link
-					to="/projects/$projectId"
+					to="/projects/$projectId/tasks/new"
 					params={{ projectId }}
+					search={{ backlog: true }}
 					className="rounded-full border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-4 py-2 text-sm font-bold text-[var(--on-surface)] no-underline hover:bg-[var(--surface-bright)]"
 				>
-					Current Sprint
+					Add Backlog Task
 				</Link>
 			</div>
-			<form
-				aria-label="Create backlog task"
-				className="mt-5 flex gap-3"
-				onSubmit={(event) => {
-					event.preventDefault();
-					onCreateTask();
-				}}
+			<Link
+				to="/projects/$projectId"
+				params={{ projectId }}
+				className="mt-5 inline-flex rounded-full border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-4 py-2 text-sm font-bold text-[var(--on-surface)] no-underline hover:bg-[var(--surface-bright)]"
 			>
-				<label className="sr-only" htmlFor="backlog-task-title">
-					Backlog task title
-				</label>
-				<input
-					id="backlog-task-title"
-					value={draftTitle}
-					onChange={(event) => onDraftTitleChange(event.currentTarget.value)}
-					placeholder="Add backlog task"
-					className="min-w-0 flex-1 rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-low)] px-4 py-3 text-sm outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)]"
-				/>
-				<button
-					type="submit"
-					disabled={isCreating || draftTitle.trim() === ""}
-					className="rounded-full bg-[var(--primary)] px-5 py-2 text-sm font-bold text-[color:var(--on-primary)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
-				>
-					{isCreating ? "Creating..." : "Add to Backlog"}
-				</button>
-			</form>
+				Current Sprint
+			</Link>
 			{error ? (
 				<p className="mt-4 rounded-xl bg-[var(--error-container)] px-4 py-3 text-sm font-semibold text-[var(--on-error-container)]">
 					{error}
@@ -1364,6 +1338,7 @@ function ProjectBacklogView({
 							<Link
 								to="/projects/$projectId/tasks/$taskId"
 								params={{ projectId, taskId: task.id }}
+								search={{ backlog: true }}
 								className="min-w-0 flex-1 text-sm font-semibold text-[var(--on-surface)] no-underline hover:text-[var(--primary)]"
 							>
 								{task.title}
@@ -2364,9 +2339,7 @@ export function ProjectBoardPage() {
 	const [selectedDoneColumnId, setSelectedDoneColumnId] = useState("");
 	const [doneColumnError, setDoneColumnError] = useState<string | null>(null);
 	const [isSavingDoneColumn, setIsSavingDoneColumn] = useState(false);
-	const [backlogDraftTitle, setBacklogDraftTitle] = useState("");
 	const [backlogError, setBacklogError] = useState<string | null>(null);
-	const [isCreatingBacklogTask, setIsCreatingBacklogTask] = useState(false);
 	const [isReorderingBacklog, setIsReorderingBacklog] = useState(false);
 	const [initialSprintTaskIds, setInitialSprintTaskIds] = useState<string[]>(
 		[],
@@ -2799,25 +2772,6 @@ export function ProjectBoardPage() {
 			setDoneColumnError("Done Column could not be saved.");
 		} finally {
 			setIsSavingDoneColumn(false);
-		}
-	}
-
-	async function handleCreateBacklogTask() {
-		const title = backlogDraftTitle.trim();
-		if (title === "" || isCreatingBacklogTask) {
-			return;
-		}
-
-		setIsCreatingBacklogTask(true);
-		setBacklogError(null);
-		try {
-			await api.backlog.createTask(projectId, { title });
-			setBacklogDraftTitle("");
-			await backlogQuery.refetch();
-		} catch {
-			setBacklogError("Backlog task could not be created.");
-		} finally {
-			setIsCreatingBacklogTask(false);
 		}
 	}
 
@@ -3263,14 +3217,10 @@ export function ProjectBoardPage() {
 								tasks={backlogQuery.data ?? []}
 								isLoading={backlogQuery.isPending}
 								isError={backlogQuery.isError}
-								isCreating={isCreatingBacklogTask}
 								isReordering={isReorderingBacklog}
 								activeSprint={activeSprint}
 								addingTaskId={addingBacklogTaskId}
 								error={backlogError}
-								draftTitle={backlogDraftTitle}
-								onDraftTitleChange={setBacklogDraftTitle}
-								onCreateTask={() => void handleCreateBacklogTask()}
 								onMoveTask={(taskId, direction) =>
 									void handleMoveBacklogTask(taskId, direction)
 								}

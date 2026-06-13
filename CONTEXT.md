@@ -12,6 +12,10 @@ _Avoid_: Workspace, team
 A Project participant responsible for project-level planning and configuration.
 _Avoid_: Admin, manager
 
+**Project Status**:
+A descriptive Project lifecycle label with one of four values: Active, Paused, Blocked, or Done.
+_Avoid_: Project phase, project health
+
 **Project Member**:
 A Project participant who can work with project tasks and Sprint Membership.
 _Avoid_: Contributor, teammate
@@ -59,6 +63,10 @@ _Avoid_: Icebox, unscheduled work, workflow column, backlog column
 **Backlog Order**:
 The manual priority order of Backlog Tasks in a Project.
 _Avoid_: Queue order, backlog rank
+
+**Story Points**:
+An optional Task sizing value for planning work, using the point scale 1, 2, 3, 5, 8, or 13.
+_Avoid_: Task points, effort points
 
 **Sprint Board**:
 A Project task board view limited to Sprint Tasks.
