@@ -113,6 +113,7 @@ class ProjectBacklogService:
             column_id=column.id,
             title=payload.title,
             priority=task_priority_to_storage(payload.priority),
+            story_points=payload.story_points,
             rank=await self._next_task_rank(project_id, column.id),
             backlog_rank=rank_between(None, first_backlog_task.backlog_rank)
             if first_backlog_task and first_backlog_task.backlog_rank
@@ -156,6 +157,7 @@ def task_to_read(task: Task) -> TaskRead:
         title=task.title,
         priority=normalize_task_priority(task.priority),
         rank=task.rank,
+        story_points=task.story_points,
         backlog_rank=task.backlog_rank,
         assignee_id=task.assignee_id,
         description=task.description,

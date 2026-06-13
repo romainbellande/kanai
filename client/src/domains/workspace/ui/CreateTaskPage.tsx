@@ -4,7 +4,18 @@ import { CirclePlus } from "lucide-react";
 import type { FormEvent } from "react";
 
 import { useKanaiApi } from "#/api/client";
-import { useTaskForm } from "#/domains/workspace/model/useTaskForm";
+import { Button } from "#/components/ui/button";
+import { Field, FieldDescription, FieldLabel } from "#/components/ui/field";
+import { Input } from "#/components/ui/input";
+import {
+	NativeSelect,
+	NativeSelectOption,
+} from "#/components/ui/native-select";
+import { Textarea } from "#/components/ui/textarea";
+import {
+	STORY_POINT_OPTIONS,
+	useTaskForm,
+} from "#/domains/workspace/model/useTaskForm";
 import { WorkspaceLayout } from "#/domains/workspace/ui/templates/WorkspaceLayout";
 
 export function CreateTaskPage({
@@ -46,9 +57,10 @@ export function CreateTaskPage({
 			(needsNonDoneDefaultColumn && doneColumnQuery.isLoading),
 		onSaved: () => {
 			void navigate({
-				to: "/projects/$projectId",
+				to: createInBacklog
+					? "/projects/$projectId/backlog"
+					: "/projects/$projectId",
 				params: { projectId },
-				...(createInBacklog ? { search: { view: "backlog" as const } } : {}),
 			});
 		},
 	});
@@ -103,15 +115,14 @@ export function CreateTaskPage({
 								</p>
 							</div>
 
-							<div className="sm:col-span-2">
-								<label
-									className="mb-2 block text-sm font-semibold text-[var(--on-surface)]"
+							<Field className="sm:col-span-2">
+								<FieldLabel
+									className="text-sm font-semibold text-[var(--on-surface)]"
 									htmlFor="taskTitle"
 								>
 									Task Title
-								</label>
-								<input
-									className="w-full rounded-lg border border-[var(--outline-variant)] bg-[var(--surface)] px-4 py-3 text-base text-[var(--on-surface)] outline-none transition placeholder:text-[var(--outline)] focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]"
+								</FieldLabel>
+								<Input
 									id="taskTitle"
 									name="taskTitle"
 									placeholder="e.g., Finalize launch readiness checklist"
@@ -122,7 +133,7 @@ export function CreateTaskPage({
 										form.setField("title", event.target.value)
 									}
 								/>
-							</div>
+							</Field>
 						</section>
 
 						<section className="grid grid-cols-1 gap-5 rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-low)] p-4 sm:grid-cols-2 sm:p-5">
@@ -136,7 +147,7 @@ export function CreateTaskPage({
 							</div>
 
 							{createInBacklog ? (
-								<div>
+								<Field>
 									<p className="mb-2 block text-sm font-semibold text-[var(--on-surface)]">
 										Destination
 									</p>
@@ -144,21 +155,20 @@ export function CreateTaskPage({
 										Backlog
 									</div>
 									{workflowMessage ? (
-										<p className="mt-2 text-sm font-medium text-[var(--on-surface-variant)]">
+										<FieldDescription className="text-sm font-medium text-[var(--on-surface-variant)]">
 											{workflowMessage}
-										</p>
+										</FieldDescription>
 									) : null}
-								</div>
+								</Field>
 							) : (
-								<div>
-									<label
-										className="mb-2 block text-sm font-semibold text-[var(--on-surface)]"
+								<Field>
+									<FieldLabel
+										className="text-sm font-semibold text-[var(--on-surface)]"
 										htmlFor="taskStatus"
 									>
 										Workflow
-									</label>
-									<select
-										className="w-full rounded-lg border border-[var(--outline-variant)] bg-[var(--surface)] px-4 py-3 text-base text-[var(--on-surface)] outline-none transition focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]"
+									</FieldLabel>
+									<NativeSelect
 										id="taskStatus"
 										name="taskStatus"
 										disabled={
@@ -170,28 +180,27 @@ export function CreateTaskPage({
 										}
 									>
 										{columnsQuery.data?.map((column) => (
-											<option key={column.id} value={column.id}>
+											<NativeSelectOption key={column.id} value={column.id}>
 												{column.name}
-											</option>
+											</NativeSelectOption>
 										))}
-									</select>
+									</NativeSelect>
 									{workflowMessage ? (
-										<p className="mt-2 text-sm font-medium text-[var(--on-surface-variant)]">
+										<FieldDescription className="text-sm font-medium text-[var(--on-surface-variant)]">
 											{workflowMessage}
-										</p>
+										</FieldDescription>
 									) : null}
-								</div>
+								</Field>
 							)}
 
-							<div>
-								<label
-									className="mb-2 block text-sm font-semibold text-[var(--on-surface)]"
+							<Field>
+								<FieldLabel
+									className="text-sm font-semibold text-[var(--on-surface)]"
 									htmlFor="taskPriority"
 								>
 									Priority
-								</label>
-								<select
-									className="w-full rounded-lg border border-[var(--outline-variant)] bg-[var(--surface)] px-4 py-3 text-base text-[var(--on-surface)] outline-none transition focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]"
+								</FieldLabel>
+								<NativeSelect
 									id="taskPriority"
 									name="taskPriority"
 									value={form.values.priority}
@@ -199,23 +208,50 @@ export function CreateTaskPage({
 										form.setField("priority", event.target.value)
 									}
 								>
-									<option value="">No priority</option>
-									<option value="low">Low</option>
-									<option value="medium">Medium</option>
-									<option value="high">High</option>
-									<option value="critical">Critical</option>
-								</select>
-							</div>
+									<NativeSelectOption value="">No priority</NativeSelectOption>
+									<NativeSelectOption value="low">Low</NativeSelectOption>
+									<NativeSelectOption value="medium">Medium</NativeSelectOption>
+									<NativeSelectOption value="high">High</NativeSelectOption>
+									<NativeSelectOption value="critical">
+										Critical
+									</NativeSelectOption>
+								</NativeSelect>
+							</Field>
 
-							<div className="sm:col-span-2">
-								<label
-									className="mb-2 block text-sm font-semibold text-[var(--on-surface)]"
+							<Field>
+								<FieldLabel
+									className="text-sm font-semibold text-[var(--on-surface)]"
+									htmlFor="taskStoryPoints"
+								>
+									Story Points
+								</FieldLabel>
+								<NativeSelect
+									id="taskStoryPoints"
+									name="taskStoryPoints"
+									value={form.values.storyPoints}
+									onChange={(event) =>
+										form.setField("storyPoints", event.target.value)
+									}
+								>
+									<NativeSelectOption value="">
+										No estimation
+									</NativeSelectOption>
+									{STORY_POINT_OPTIONS.map((points) => (
+										<NativeSelectOption key={points} value={points.toString()}>
+											{points}
+										</NativeSelectOption>
+									))}
+								</NativeSelect>
+							</Field>
+
+							<Field className="sm:col-span-2">
+								<FieldLabel
+									className="text-sm font-semibold text-[var(--on-surface)]"
 									htmlFor="taskTag"
 								>
 									Tag
-								</label>
-								<input
-									className="w-full rounded-lg border border-[var(--outline-variant)] bg-[var(--surface)] px-4 py-3 text-base text-[var(--on-surface)] outline-none transition placeholder:text-[var(--outline)] focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]"
+								</FieldLabel>
+								<Input
 									id="taskTag"
 									name="taskTag"
 									placeholder="Optional label shown on the card"
@@ -223,7 +259,7 @@ export function CreateTaskPage({
 									value={form.values.tag}
 									onChange={(event) => form.setField("tag", event.target.value)}
 								/>
-							</div>
+							</Field>
 
 							<div className="sm:col-span-2 rounded-2xl border border-dashed border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-4 text-sm leading-6 text-[var(--on-surface-variant)]">
 								Assignees are not editable until the user directory API is
@@ -242,15 +278,14 @@ export function CreateTaskPage({
 								</p>
 							</div>
 
-							<div>
-								<label
-									className="mb-2 block text-sm font-semibold text-[var(--on-surface)]"
+							<Field>
+								<FieldLabel
+									className="text-sm font-semibold text-[var(--on-surface)]"
 									htmlFor="taskDescription"
 								>
 									Description
-								</label>
-								<textarea
-									className="w-full resize-none rounded-lg border border-[var(--outline-variant)] bg-[var(--surface)] px-4 py-3 text-base text-[var(--on-surface)] outline-none transition placeholder:text-[var(--outline)] focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]"
+								</FieldLabel>
+								<Textarea
 									id="taskDescription"
 									name="taskDescription"
 									placeholder="Add context, background, or handoff notes..."
@@ -260,17 +295,16 @@ export function CreateTaskPage({
 										form.setField("description", event.target.value)
 									}
 								/>
-							</div>
+							</Field>
 
-							<div>
-								<label
-									className="mb-2 block text-sm font-semibold text-[var(--on-surface)]"
+							<Field>
+								<FieldLabel
+									className="text-sm font-semibold text-[var(--on-surface)]"
 									htmlFor="taskAcceptanceCriteria"
 								>
 									Acceptance Criteria
-								</label>
-								<textarea
-									className="w-full resize-none rounded-lg border border-[var(--outline-variant)] bg-[var(--surface)] px-4 py-3 text-base text-[var(--on-surface)] outline-none transition placeholder:text-[var(--outline)] focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]"
+								</FieldLabel>
+								<Textarea
 									id="taskAcceptanceCriteria"
 									name="taskAcceptanceCriteria"
 									placeholder="List the conditions that must be met for this task to be complete..."
@@ -280,7 +314,7 @@ export function CreateTaskPage({
 										form.setField("acceptanceCriteria", event.target.value)
 									}
 								/>
-							</div>
+							</Field>
 						</section>
 					</div>
 
@@ -292,25 +326,28 @@ export function CreateTaskPage({
 
 					<div className="flex flex-col-reverse gap-3 border-t border-[var(--outline-variant)] pt-6 sm:flex-row sm:items-center sm:justify-end">
 						<Link
-							to="/projects/$projectId"
+							to={
+								createInBacklog
+									? "/projects/$projectId/backlog"
+									: "/projects/$projectId"
+							}
 							params={{ projectId }}
-							search={createInBacklog ? { view: "backlog" } : undefined}
 							className="inline-flex items-center justify-center rounded-full border border-transparent px-5 py-2.5 text-sm font-semibold text-[var(--on-surface-variant)] no-underline transition hover:border-[var(--outline-variant)] hover:bg-[var(--surface-bright)]"
 						>
 							Cancel
 						</Link>
-						<button
+						<Button
 							disabled={
 								form.isSaving ||
 								form.workflowState.isBlocked ||
 								workflowColumnsUnavailable
 							}
 							type="submit"
-							className="inline-flex items-center justify-center gap-2 rounded-full bg-[var(--primary)] px-5 py-2.5 text-sm font-semibold text-[color:var(--on-primary)] shadow-[0_12px_28px_rgba(0,61,155,0.18)] transition hover:bg-[var(--primary-container)]"
+							className="h-auto rounded-full bg-[var(--primary)] px-5 py-2.5 text-sm font-semibold text-[color:var(--on-primary)] shadow-[0_12px_28px_rgba(0,61,155,0.18)] transition hover:bg-[var(--primary-container)]"
 						>
-							<CirclePlus className="h-4 w-4" />
+							<CirclePlus data-icon="inline-start" />
 							{form.isSaving ? "Creating..." : "Create Task"}
-						</button>
+						</Button>
 					</div>
 				</form>
 			</section>

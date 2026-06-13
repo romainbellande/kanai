@@ -1,6 +1,7 @@
 """Service functions for project workflows."""
 
 from collections.abc import Iterable
+from typing import cast
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -10,9 +11,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.project import Project
 from app.repositories.project_repository import ProjectRepository
 from app.repositories.task_repository import TaskRepository
-from app.schemas.project import ProjectRead, ProjectUpdate
+from app.schemas.project import (
+    DEFAULT_PROJECT_STATUS,
+    ProjectRead,
+    ProjectStatus,
+    ProjectUpdate,
+)
 from app.services.project_access import ProjectAccess, ProjectRole
 from app.services.project_column_service import ProjectColumnService
+
+
+LEGACY_PROJECT_PRIORITY = "medium"
+VALID_PROJECT_STATUSES = {"active", "paused", "blocked", "done"}
+
+
+def project_status_to_read(status_value: str | None) -> ProjectStatus:
+    """Normalize persisted project status to the public fixed lifecycle set."""
+    normalized_status = status_value.strip().lower() if status_value else ""
+    if normalized_status in VALID_PROJECT_STATUSES:
+        return cast("ProjectStatus", normalized_status)
+    return DEFAULT_PROJECT_STATUS
 
 
 def require_current_user_id(user_id: UUID | None) -> UUID:
@@ -71,9 +89,8 @@ async def project_to_read(session: AsyncSession, project: Project) -> ProjectRea
         id=project.id,
         name=project.name,
         code=project.code,
-        priority=project.priority,
         description=project.description,
-        status=project.status,
+        status=project_status_to_read(project.status),
         owner_ids=[owner.user_id for owner in owners],
         member_ids=[member.user_id for member in members],
         created_at=project.created_at,
@@ -87,9 +104,8 @@ async def create_project(
     creator_user_id: UUID,
     name: str,
     code: str,
-    priority: str,
     description: str | None = None,
-    status: str | None = None,
+    status: str = DEFAULT_PROJECT_STATUS,
     owner_ids: Iterable[UUID] = (),
     member_ids: Iterable[UUID] = (),
 ) -> Project:
@@ -98,7 +114,7 @@ async def create_project(
     project = Project(
         name=name,
         code=code,
-        priority=priority,
+        priority=LEGACY_PROJECT_PRIORITY,
         description=description,
         status=status,
     )
@@ -124,9 +140,8 @@ async def create_project_for_user(
     creator_user_id: UUID,
     name: str,
     code: str,
-    priority: str,
     description: str | None = None,
-    status_value: str | None = None,
+    status_value: str = DEFAULT_PROJECT_STATUS,
     owner_ids: Iterable[UUID] = (),
     member_ids: Iterable[UUID] = (),
 ) -> ProjectRead:
@@ -140,7 +155,6 @@ async def create_project_for_user(
             creator_user_id=creator_user_id,
             name=name,
             code=code,
-            priority=priority,
             description=description,
             status=status_value,
             owner_ids=owner_ids,
@@ -199,7 +213,7 @@ async def update_project_for_user(
     repository = ProjectRepository(session)
     project = await require_project_owner(session, project_id, user_id)
     for field_name, value in payload.update_values().items():
-        if field_name not in {"name", "code", "priority", "description", "status"}:
+        if field_name not in {"name", "code", "description", "status"}:
             continue
         setattr(project, field_name, value)
 

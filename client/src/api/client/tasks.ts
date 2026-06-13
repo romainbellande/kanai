@@ -15,6 +15,7 @@ export type Task = {
 	title: string;
 	columnId: string;
 	priority: string | null;
+	storyPoints: number | null;
 	rank: string;
 	backlogRank: string | null;
 	assigneeId: string | null;
@@ -45,6 +46,7 @@ type TaskJson = {
 	title: string;
 	column_id: string;
 	priority: string | null;
+	story_points?: number | null;
 	rank: string;
 	backlog_rank?: string | null;
 	assignee_id: string | null;
@@ -75,6 +77,7 @@ function mapTask(task: TaskJson): Task {
 		title: task.title,
 		columnId: task.column_id,
 		priority: normalizeTaskPriority(task.priority),
+		storyPoints: task.story_points ?? null,
 		rank: task.rank,
 		backlogRank: task.backlog_rank ?? null,
 		assigneeId: task.assignee_id,
@@ -105,6 +108,7 @@ function taskInputToJson(values: CreateProjectTaskInput | UpdateTaskInput) {
 				? values.includeInActiveSprint
 				: undefined,
 		priority: values.priority,
+		story_points: values.storyPoints,
 		assignee_id: values.assigneeId,
 		description: values.description,
 		acceptance_criteria: values.acceptanceCriteria,

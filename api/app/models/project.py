@@ -222,6 +222,10 @@ class ProjectSprintTaskSnapshot(SQLModel, table=True):
     priority: str | None = Field(
         default=None, sa_column=Column(String(), nullable=True)
     )
+    story_points: int | None = Field(
+        default=None,
+        sa_column=Column(Integer(), nullable=True),
+    )
     rank: str = Field(sa_column=Column(String(length=64), nullable=False))
     description: str | None = Field(
         default=None, sa_column=Column(Text(), nullable=True)

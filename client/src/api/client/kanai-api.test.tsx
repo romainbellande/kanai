@@ -37,6 +37,7 @@ function task(overrides: Partial<Task> = {}): Task {
 		title: "Task",
 		columnId: "column-todo",
 		priority: "medium",
+		storyPoints: null,
 		rank: "U",
 		assigneeId: null,
 		description: null,

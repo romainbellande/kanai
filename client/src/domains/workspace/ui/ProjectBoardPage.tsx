@@ -59,6 +59,13 @@ import {
 	useKanaiApi,
 	userSearchQueryOptions,
 } from "#/api/client";
+import { Field, FieldLabel } from "#/components/ui/field";
+import { Input } from "#/components/ui/input";
+import {
+	NativeSelect,
+	NativeSelectOption,
+} from "#/components/ui/native-select";
+import { Textarea } from "#/components/ui/textarea";
 import { useAuthBoundary } from "#/domains/auth/model/auth-boundary";
 import { useProjectChat } from "#/domains/workspace/model/useProjectChat";
 import {
@@ -90,6 +97,13 @@ const sidebarItems: SidebarItem[] = [
 
 const PROJECT_DESCRIPTION_FALLBACK = "No project description yet.";
 const SPRINT_GOAL_LIMIT = 4_000;
+const PROJECT_STATUS_LABELS = {
+	active: "Active",
+	paused: "Paused",
+	blocked: "Blocked",
+	done: "Done",
+} as const;
+type ProjectStatusValue = keyof typeof PROJECT_STATUS_LABELS;
 
 type CardDropTargetData = {
 	type: "card";
@@ -138,12 +152,165 @@ function getPriorityLabel(priority: string): string {
 	return priority.charAt(0).toUpperCase() + priority.slice(1);
 }
 
+function getStoryPointLabel(storyPoints: number | null | undefined): string {
+	return typeof storyPoints === "number"
+		? `${storyPoints} pts`
+		: "No estimation";
+}
+
+type StoryPointSummary = {
+	estimatedPoints: number;
+	unestimatedCount: number;
+};
+
+type SprintPointSummary = StoryPointSummary & {
+	donePoints: number;
+	remainingPoints: number;
+};
+
+type HistoricalPointSummary = StoryPointSummary & {
+	finishedPoints: number;
+	unfinishedPoints: number;
+};
+
+function getStoryPointSummary(tasks: Task[]): StoryPointSummary {
+	return tasks.reduce<StoryPointSummary>(
+		(summary, task) => {
+			if (typeof task.storyPoints === "number") {
+				summary.estimatedPoints += task.storyPoints;
+				return summary;
+			}
+
+			summary.unestimatedCount += 1;
+			return summary;
+		},
+		{ estimatedPoints: 0, unestimatedCount: 0 },
+	);
+}
+
+function getSprintPointSummary(
+	tasks: Task[],
+	doneColumnId: string | null | undefined,
+): SprintPointSummary {
+	const summary = getStoryPointSummary(tasks);
+	const donePoints = doneColumnId
+		? tasks.reduce(
+				(total, task) =>
+					task.columnId === doneColumnId && typeof task.storyPoints === "number"
+						? total + task.storyPoints
+						: total,
+				0,
+			)
+		: 0;
+
+	return {
+		...summary,
+		donePoints,
+		remainingPoints: summary.estimatedPoints - donePoints,
+	};
+}
+
+function getHistoricalPointSummary(
+	snapshots: ProjectSprintCloseResult["snapshots"],
+): HistoricalPointSummary {
+	return snapshots.reduce<HistoricalPointSummary>(
+		(summary, snapshot) => {
+			if (typeof snapshot.storyPoints !== "number") {
+				summary.unestimatedCount += 1;
+				return summary;
+			}
+
+			summary.estimatedPoints += snapshot.storyPoints;
+			if (snapshot.outcome === "finished") {
+				summary.finishedPoints += snapshot.storyPoints;
+			} else {
+				summary.unfinishedPoints += snapshot.storyPoints;
+			}
+			return summary;
+		},
+		{
+			estimatedPoints: 0,
+			finishedPoints: 0,
+			unfinishedPoints: 0,
+			unestimatedCount: 0,
+		},
+	);
+}
+
+function PointSummaryChip({ children }: { children: ReactNode }) {
+	return (
+		<span className="inline-flex rounded-full border border-[var(--outline-variant)] bg-[var(--surface-container-high)] px-3 py-1 text-xs font-bold text-[var(--on-surface-variant)]">
+			{children}
+		</span>
+	);
+}
+
+function SprintProgressBar({
+	label = "Current Sprint Story Point progress",
+	value,
+}: {
+	label?: string;
+	value: number;
+}) {
+	return (
+		<div
+			aria-label={label}
+			aria-valuemax={100}
+			aria-valuemin={0}
+			aria-valuenow={value}
+			className="h-3 overflow-hidden rounded-full bg-[var(--surface-container-high)]"
+			role="progressbar"
+		>
+			<div
+				className="h-full rounded-full bg-[var(--primary)] transition-[width]"
+				style={{ width: `${value}%` }}
+			/>
+		</div>
+	);
+}
+
+function StoryPointBadge({
+	storyPoints,
+}: {
+	storyPoints: number | null | undefined;
+}) {
+	const hasEstimate = typeof storyPoints === "number";
+
+	return (
+		<span
+			className={[
+				"inline-flex rounded-full px-2 py-1 text-xs font-semibold",
+				hasEstimate
+					? "border border-[var(--outline-variant)] bg-[var(--surface-container-high)] text-[var(--on-surface-variant)]"
+					: "border border-[color:color-mix(in_srgb,var(--tertiary-container)_30%,var(--outline-variant))] bg-[color:color-mix(in_srgb,var(--tertiary-container)_12%,var(--surface-container-lowest))] text-[var(--on-surface-variant)]",
+			].join(" ")}
+		>
+			{getStoryPointLabel(storyPoints)}
+		</span>
+	);
+}
+
 function normalizeBoardPriority(priority: string | null): string | null {
 	const normalizedPriority = priority?.trim().toLowerCase() ?? "";
 	if (!normalizedPriority) {
 		return null;
 	}
 	return normalizedPriority === "urgent" ? "critical" : normalizedPriority;
+}
+
+function normalizeProjectStatus(
+	status: string | null | undefined,
+): ProjectStatusValue {
+	const normalizedStatus = status?.trim().toLowerCase();
+	return normalizedStatus === "paused" ||
+		normalizedStatus === "blocked" ||
+		normalizedStatus === "done"
+		? normalizedStatus
+		: "active";
+}
+
+function getProjectStatusLabel(status: string | null | undefined): string {
+	return PROJECT_STATUS_LABELS[normalizeProjectStatus(status)];
 }
 
 function formatDateInputValue(date: Date): string {
@@ -316,7 +483,6 @@ function BoardTaskCard({
 	const ref = useRef<HTMLElement | null>(null);
 	const dragHandleRef = useRef<HTMLButtonElement | null>(null);
 	const priority = normalizeBoardPriority(card.priority);
-	const hasTags = Boolean(priority || card.tag);
 
 	useEffect(() => {
 		const element = ref.current;
@@ -384,45 +550,31 @@ function BoardTaskCard({
 				className="absolute inset-0 z-0 rounded-2xl text-inherit no-underline"
 			/>
 			<div className="pointer-events-none relative z-10">
-				{hasTags ? (
-					<div className="flex items-start justify-between gap-3">
-						<div className="flex flex-wrap gap-2">
-							{priority ? (
-								<span
-									className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${getPriorityTagClass(priority)}`}
-								>
-									{getPriorityLabel(priority)}
-								</span>
-							) : null}
-							{card.tag ? (
-								<span className="inline-flex rounded-full bg-[var(--surface-container-high)] px-2 py-1 text-xs font-semibold text-[var(--on-surface-variant)]">
-									{card.tag}
-								</span>
-							) : null}
-						</div>
-						<TaskDragHandle
-							ref={dragHandleRef}
-							disabled={isDragDisabled}
-							isDragging={isDragging}
-						/>
+				<div className="flex items-start justify-between gap-3">
+					<div className="flex flex-wrap gap-2">
+						{priority ? (
+							<span
+								className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${getPriorityTagClass(priority)}`}
+							>
+								{getPriorityLabel(priority)}
+							</span>
+						) : null}
+						{card.tag ? (
+							<span className="inline-flex rounded-full bg-[var(--surface-container-high)] px-2 py-1 text-xs font-semibold text-[var(--on-surface-variant)]">
+								{card.tag}
+							</span>
+						) : null}
+						<StoryPointBadge storyPoints={card.storyPoints} />
 					</div>
-				) : null}
-				{hasTags ? (
-					<p className="mt-3 text-sm leading-6 text-[var(--on-surface)]">
-						{card.title}
-					</p>
-				) : (
-					<div className="flex items-start justify-between gap-3">
-						<p className="text-sm leading-6 text-[var(--on-surface)]">
-							{card.title}
-						</p>
-						<TaskDragHandle
-							ref={dragHandleRef}
-							disabled={isDragDisabled}
-							isDragging={isDragging}
-						/>
-					</div>
-				)}
+					<TaskDragHandle
+						ref={dragHandleRef}
+						disabled={isDragDisabled}
+						isDragging={isDragging}
+					/>
+				</div>
+				<p className="mt-3 text-sm leading-6 text-[var(--on-surface)]">
+					{card.title}
+				</p>
 				{card.description ? (
 					<p className="mt-2 text-xs leading-5 text-[var(--on-surface-variant)]">
 						{card.description}
@@ -736,6 +888,8 @@ function ActiveSprintSummary({
 	plannedStartDate,
 	plannedEndDate,
 	goal,
+	pointSummary,
+	hasDoneColumn,
 	isProjectOwner,
 	isEditing,
 	editPlannedStartDate,
@@ -756,6 +910,8 @@ function ActiveSprintSummary({
 	plannedStartDate: string;
 	plannedEndDate: string;
 	goal: string | null;
+	pointSummary: SprintPointSummary;
+	hasDoneColumn: boolean;
 	isProjectOwner: boolean;
 	isEditing: boolean;
 	editPlannedStartDate: string;
@@ -771,6 +927,15 @@ function ActiveSprintSummary({
 	onEditPlannedEndDateChange: (value: string) => void;
 	onEditGoalChange: (value: string) => void;
 }) {
+	const progressValue =
+		pointSummary.estimatedPoints > 0
+			? Math.round(
+					(pointSummary.donePoints / pointSummary.estimatedPoints) * 100,
+				)
+			: 0;
+	const shouldShowProgressBar =
+		hasDoneColumn && pointSummary.estimatedPoints > 0;
+
 	return (
 		<section className="mb-4 min-w-[1100px] rounded-[1.5rem] border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-5 shadow-sm">
 			<div className="flex flex-wrap items-start justify-between gap-4">
@@ -786,6 +951,35 @@ function ActiveSprintSummary({
 						{formatSprintDateLabel(plannedStartDate)} to{" "}
 						{formatSprintDateLabel(plannedEndDate)}
 					</p>
+					<div className="mt-4 grid max-w-xl gap-3 rounded-2xl bg-[var(--surface-container-low)] p-4">
+						<div className="flex flex-wrap items-center gap-2">
+							<p className="mr-2 text-sm font-bold text-[var(--on-surface)]">
+								Story Point progress
+							</p>
+							<PointSummaryChip>
+								{pointSummary.donePoints} pts done
+							</PointSummaryChip>
+							<PointSummaryChip>
+								{pointSummary.remainingPoints} pts remaining
+							</PointSummaryChip>
+							<PointSummaryChip>
+								No estimation: {pointSummary.unestimatedCount}
+							</PointSummaryChip>
+						</div>
+						{shouldShowProgressBar ? (
+							<SprintProgressBar value={progressValue} />
+						) : null}
+						{!hasDoneColumn ? (
+							<p className="text-sm font-semibold text-[var(--error)]">
+								Story Point progress needs a Done Column.
+							</p>
+						) : null}
+						{hasDoneColumn && pointSummary.estimatedPoints === 0 ? (
+							<p className="text-sm font-semibold text-[var(--on-surface-variant)]">
+								0 pts estimated
+							</p>
+						) : null}
+					</div>
 				</div>
 				<div className="flex max-w-xl flex-1 flex-col items-end gap-3">
 					{goal ? (
@@ -945,8 +1139,12 @@ function SprintCloseConfirmationPanel({
 			{preview.unfinishedTasks.length > 0 ? (
 				<ul className="mt-4 divide-y divide-[var(--outline-variant)] rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-low)]">
 					{preview.unfinishedTasks.map((task) => (
-						<li key={task.id} className="px-4 py-3 text-sm font-semibold">
-							{task.title}
+						<li
+							key={task.id}
+							className="flex items-center justify-between gap-3 px-4 py-3 text-sm font-semibold"
+						>
+							<span>{task.title}</span>
+							<StoryPointBadge storyPoints={task.storyPoints} />
 						</li>
 					))}
 				</ul>
@@ -1040,9 +1238,8 @@ function NoActiveSprintState({
 							Create Sprint
 						</button>
 						<Link
-							to="/projects/$projectId"
+							to="/projects/$projectId/backlog"
 							params={{ projectId }}
-							search={{ view: "backlog" }}
 							className="inline-flex items-center gap-2 rounded-full border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-5 py-2.5 text-sm font-bold text-[var(--on-surface)] no-underline hover:bg-[var(--surface-bright)]"
 						>
 							View Backlog
@@ -1156,95 +1353,36 @@ function NoActiveSprintState({
 	);
 }
 
-function DoneColumnSettings({
-	columns,
-	doneColumnId,
-	requiresDesignation,
+function MissingDoneColumnWarning({
 	isProjectOwner,
-	selectedColumnId,
-	isSaving,
-	error,
-	onSelectedColumnIdChange,
-	onSave,
+	onOpenEditProject,
 }: {
-	columns: BoardColumn[];
-	doneColumnId: string | null;
-	requiresDesignation: boolean;
 	isProjectOwner: boolean;
-	selectedColumnId: string;
-	isSaving: boolean;
-	error: string | null;
-	onSelectedColumnIdChange: (value: string) => void;
-	onSave: () => void;
+	onOpenEditProject: () => void;
 }) {
-	const currentColumn = columns.find((column) => column.id === doneColumnId);
-
 	return (
-		<section className="mb-4 min-w-[1100px] rounded-[1.5rem] border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-5 shadow-sm">
-			<div className="flex flex-wrap items-start justify-between gap-4">
-				<div>
-					<p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--on-surface-variant)]">
-						Done Column
-					</p>
-					<h3 className="mt-2 text-lg font-bold text-[var(--on-surface)]">
-						{currentColumn ? currentColumn.title : "Designation required"}
-					</h3>
-					<p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--on-surface-variant)]">
-						Kanai uses this workflow column to classify finished sprint work.
-					</p>
-					{requiresDesignation ? (
-						<p className="mt-3 rounded-xl bg-[var(--error-container)] px-4 py-3 text-sm font-semibold text-[var(--on-error-container)]">
-							Choose a Done Column before sprint close outcomes can be
-							classified.
-						</p>
-					) : null}
-				</div>
-				{isProjectOwner ? (
-					<form
-						aria-label="Choose Done Column"
-						className="flex min-w-80 flex-wrap items-end gap-3"
-						onSubmit={(event) => {
-							event.preventDefault();
-							onSave();
-						}}
-					>
-						<label className="grid flex-1 gap-2 text-sm font-semibold">
-							Done Column
-							<select
-								value={selectedColumnId}
-								onChange={(event) =>
-									onSelectedColumnIdChange(event.currentTarget.value)
-								}
-								disabled={isSaving}
-								className="rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-low)] px-4 py-3 text-sm outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-60"
-							>
-								<option value="">Select column</option>
-								{columns.map((column) => (
-									<option key={column.id} value={column.id}>
-										{column.title}
-									</option>
-								))}
-							</select>
-						</label>
-						<button
-							type="submit"
-							disabled={
-								isSaving ||
-								selectedColumnId === "" ||
-								selectedColumnId === doneColumnId
-							}
-							className="rounded-full bg-[var(--primary)] px-5 py-2.5 text-sm font-bold text-[color:var(--on-primary)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
-						>
-							{isSaving ? "Saving..." : "Save Done Column"}
-						</button>
-						{error ? (
-							<p className="basis-full text-sm font-semibold text-[var(--error)]">
-								{error}
-							</p>
-						) : null}
-					</form>
-				) : null}
-			</div>
+		<section className="mb-4 min-w-[1100px] rounded-[1.5rem] border border-[var(--error-container)] bg-[var(--error-container)] p-5 text-[var(--on-error-container)] shadow-sm">
+			<p className="text-xs font-bold uppercase tracking-[0.18em]">
+				Done Column required
+			</p>
+			<h3 className="mt-2 text-lg font-bold">Designation required</h3>
+			<p className="mt-1 max-w-2xl text-sm leading-6">
+				Choose a Done Column in Edit Project before sprint outcomes can be
+				classified.
+			</p>
+			{isProjectOwner ? (
+				<button
+					type="button"
+					onClick={onOpenEditProject}
+					className="mt-3 rounded-full bg-[var(--surface-container-lowest)] px-4 py-2 text-sm font-bold text-[var(--on-surface)] hover:bg-[var(--surface-bright)]"
+				>
+					Open Edit Project
+				</button>
+			) : (
+				<p className="mt-3 text-sm font-semibold">
+					Ask a Project Owner to open Edit Project and choose a Done Column.
+				</p>
+			)}
 		</section>
 	);
 }
@@ -1252,6 +1390,7 @@ function DoneColumnSettings({
 function ProjectBacklogView({
 	projectId,
 	tasks,
+	pointSummary,
 	isLoading,
 	isError,
 	isReordering,
@@ -1264,6 +1403,7 @@ function ProjectBacklogView({
 }: {
 	projectId: string;
 	tasks: Task[];
+	pointSummary: StoryPointSummary;
 	isLoading: boolean;
 	isError: boolean;
 	isReordering: boolean;
@@ -1284,6 +1424,14 @@ function ProjectBacklogView({
 					<h3 className="mt-2 font-display text-2xl font-bold">
 						Planning list
 					</h3>
+					<div className="mt-3 flex flex-wrap gap-2">
+						<PointSummaryChip>
+							{pointSummary.estimatedPoints} pts estimated
+						</PointSummaryChip>
+						<PointSummaryChip>
+							No estimation: {pointSummary.unestimatedCount}
+						</PointSummaryChip>
+					</div>
 				</div>
 				<Link
 					to="/projects/$projectId/tasks/new"
@@ -1335,14 +1483,19 @@ function ProjectBacklogView({
 							key={task.id}
 							className="flex items-center justify-between gap-4 px-4 py-3"
 						>
-							<Link
-								to="/projects/$projectId/tasks/$taskId"
-								params={{ projectId, taskId: task.id }}
-								search={{ backlog: true }}
-								className="min-w-0 flex-1 text-sm font-semibold text-[var(--on-surface)] no-underline hover:text-[var(--primary)]"
-							>
-								{task.title}
-							</Link>
+							<div className="min-w-0 flex-1">
+								<div className="mb-2 flex flex-wrap gap-2">
+									<StoryPointBadge storyPoints={task.storyPoints} />
+								</div>
+								<Link
+									to="/projects/$projectId/tasks/$taskId"
+									params={{ projectId, taskId: task.id }}
+									search={{ backlog: true }}
+									className="text-sm font-semibold text-[var(--on-surface)] no-underline hover:text-[var(--primary)]"
+								>
+									{task.title}
+								</Link>
+							</div>
 							<div className="flex gap-2">
 								{activeSprint ? (
 									<button
@@ -1443,6 +1596,22 @@ function ProjectSprintHistoryView({
 					const unfinished = entry.snapshots.filter(
 						(snapshot) => snapshot.outcome === "unfinished",
 					);
+					const pointSummary = getHistoricalPointSummary(entry.snapshots);
+					const finishedProgressValue =
+						pointSummary.estimatedPoints > 0
+							? Math.round(
+									(pointSummary.finishedPoints / pointSummary.estimatedPoints) *
+										100,
+								)
+							: 0;
+					const unfinishedProgressValue =
+						pointSummary.estimatedPoints > 0
+							? Math.round(
+									(pointSummary.unfinishedPoints /
+										pointSummary.estimatedPoints) *
+										100,
+								)
+							: 0;
 					return (
 						<article
 							key={entry.sprint.id}
@@ -1469,6 +1638,38 @@ function ProjectSprintHistoryView({
 										{entry.unfinishedCount} unfinished
 									</span>
 								</div>
+							</div>
+							<div className="mt-4 grid gap-3 rounded-2xl bg-[var(--surface-container-lowest)] p-4">
+								<div className="flex flex-wrap items-center gap-2">
+									<p className="mr-2 text-sm font-bold text-[var(--on-surface)]">
+										Historical Story Point split
+									</p>
+									<PointSummaryChip>
+										{pointSummary.finishedPoints} pts finished
+									</PointSummaryChip>
+									<PointSummaryChip>
+										{pointSummary.unfinishedPoints} pts unfinished
+									</PointSummaryChip>
+									<PointSummaryChip>
+										No estimation: {pointSummary.unestimatedCount}
+									</PointSummaryChip>
+								</div>
+								{pointSummary.estimatedPoints > 0 ? (
+									<div className="grid gap-2">
+										<SprintProgressBar
+											label={`${entry.sprint.name} finished Story Point progress`}
+											value={finishedProgressValue}
+										/>
+										<SprintProgressBar
+											label={`${entry.sprint.name} unfinished Story Point progress`}
+											value={unfinishedProgressValue}
+										/>
+									</div>
+								) : (
+									<p className="text-sm font-semibold text-[var(--on-surface-variant)]">
+										0 pts estimated
+									</p>
+								)}
 							</div>
 							<div className="mt-4 grid gap-4 md:grid-cols-2">
 								<HistoricalTaskGroup
@@ -1538,6 +1739,9 @@ function HistoricalTaskGroup({
 									{snapshot.acceptanceCriteria}
 								</p>
 							) : null}
+							<div className="mt-2 flex flex-wrap gap-2">
+								<StoryPointBadge storyPoints={snapshot.storyPoints} />
+							</div>
 						</li>
 					))}
 				</ul>
@@ -2276,9 +2480,20 @@ function ChatComposer({ chat }: { chat: ReturnType<typeof useProjectChat> }) {
 }
 
 export function ProjectBoardPage() {
-	const auth = useAuthBoundary();
 	const { projectId } = useParams({ from: "/projects/$projectId" });
 	const { view } = useSearch({ from: "/projects/$projectId" });
+
+	return <ProjectBoardContent projectId={projectId} view={view} />;
+}
+
+export function ProjectBoardContent({
+	projectId,
+	view,
+}: {
+	projectId: string;
+	view?: "backlog" | "history";
+}) {
+	const auth = useAuthBoundary();
 	const api = useKanaiApi();
 	const suggestedSprintDates = getSuggestedSprintDates();
 	const { data: currentUser } = useCurrentUserQuery();
@@ -2309,7 +2524,10 @@ export function ProjectBoardPage() {
 	const [isChatOpen, setIsChatOpen] = useState(false);
 	const [isMetadataEditing, setIsMetadataEditing] = useState(false);
 	const [metadataName, setMetadataName] = useState("");
+	const [metadataCode, setMetadataCode] = useState("");
 	const [metadataDescription, setMetadataDescription] = useState("");
+	const [metadataStatus, setMetadataStatus] =
+		useState<ProjectStatusValue>("active");
 	const [metadataError, setMetadataError] = useState<string | null>(null);
 	const [metadataSuccess, setMetadataSuccess] = useState<string | null>(null);
 	const [isMetadataSaving, setIsMetadataSaving] = useState(false);
@@ -2336,9 +2554,7 @@ export function ProjectBoardPage() {
 	const [closeSprintError, setCloseSprintError] = useState<string | null>(null);
 	const [isLoadingClosePreview, setIsLoadingClosePreview] = useState(false);
 	const [isClosingSprint, setIsClosingSprint] = useState(false);
-	const [selectedDoneColumnId, setSelectedDoneColumnId] = useState("");
-	const [doneColumnError, setDoneColumnError] = useState<string | null>(null);
-	const [isSavingDoneColumn, setIsSavingDoneColumn] = useState(false);
+	const [metadataDoneColumnId, setMetadataDoneColumnId] = useState("");
 	const [backlogError, setBacklogError] = useState<string | null>(null);
 	const [isReorderingBacklog, setIsReorderingBacklog] = useState(false);
 	const [initialSprintTaskIds, setInitialSprintTaskIds] = useState<string[]>(
@@ -2376,6 +2592,12 @@ export function ProjectBoardPage() {
 		isMovePending || isColumnReorderPending || removingSprintTaskId !== null;
 	const activeSprint = activeSprintQuery.data ?? null;
 	const doneColumn = doneColumnQuery.data;
+	const activeSprintTasks = tasksQuery.data ?? [];
+	const backlogPointSummary = getStoryPointSummary(backlogQuery.data ?? []);
+	const sprintPointSummary = getSprintPointSummary(
+		activeSprintTasks,
+		doneColumn?.doneColumnId,
+	);
 
 	useEffect(() => {
 		return () => {
@@ -2539,9 +2761,7 @@ export function ProjectBoardPage() {
 	}, [board, isBoardMutationPending]);
 
 	useEffect(() => {
-		if (doneColumn?.doneColumnId) {
-			setSelectedDoneColumnId(doneColumn.doneColumnId);
-		}
+		setMetadataDoneColumnId(doneColumn?.doneColumnId ?? "");
 	}, [doneColumn?.doneColumnId]);
 
 	function handleLogout() {
@@ -2560,7 +2780,10 @@ export function ProjectBoardPage() {
 		}
 
 		setMetadataName(projectQuery.data.name);
+		setMetadataCode(projectQuery.data.code);
 		setMetadataDescription(projectQuery.data.description ?? "");
+		setMetadataStatus(normalizeProjectStatus(projectQuery.data.status));
+		setMetadataDoneColumnId(doneColumn?.doneColumnId ?? "");
 		setMetadataError(null);
 		setMetadataSuccess(null);
 		setIsMetadataEditing(true);
@@ -2569,6 +2792,7 @@ export function ProjectBoardPage() {
 	function handleCancelMetadataEdit() {
 		setIsMetadataEditing(false);
 		setMetadataError(null);
+		setMetadataDoneColumnId(doneColumn?.doneColumnId ?? "");
 	}
 
 	async function handleSaveMetadata() {
@@ -2577,15 +2801,37 @@ export function ProjectBoardPage() {
 			setMetadataError("Project title is required.");
 			return;
 		}
+		const trimmedCode = metadataCode.trim().toUpperCase();
+		if (!/^[A-Z0-9]{3}$/.test(trimmedCode)) {
+			setMetadataError(
+				"Project code must be exactly three uppercase letters or numbers.",
+			);
+			return;
+		}
+		if (columns.length > 0 && metadataDoneColumnId === "") {
+			setMetadataError("Done Column is required when workflow columns exist.");
+			return;
+		}
 
 		setIsMetadataSaving(true);
 		setMetadataError(null);
 		try {
 			await api.projects.update(projectId, {
 				name: trimmedName,
+				code: trimmedCode,
 				description:
 					metadataDescription.trim() === "" ? null : metadataDescription,
+				status: metadataStatus,
 			});
+			if (
+				columns.length > 0 &&
+				metadataDoneColumnId !== "" &&
+				metadataDoneColumnId !== doneColumn?.doneColumnId
+			) {
+				await api.doneColumn.update(projectId, {
+					doneColumnId: metadataDoneColumnId,
+				});
+			}
 			setIsMetadataEditing(false);
 			setMetadataSuccess("Project details saved.");
 			if (metadataSuccessTimerRef.current) {
@@ -2596,7 +2842,7 @@ export function ProjectBoardPage() {
 				metadataSuccessTimerRef.current = null;
 			}, 3_000);
 		} catch {
-			setMetadataError("Project details could not be saved.");
+			setMetadataError("Project details or Done Column could not be saved.");
 		} finally {
 			setIsMetadataSaving(false);
 		}
@@ -2757,24 +3003,6 @@ export function ProjectBoardPage() {
 		}
 	}
 
-	async function handleSaveDoneColumn() {
-		if (!isProjectOwner || selectedDoneColumnId === "" || isSavingDoneColumn) {
-			return;
-		}
-
-		setIsSavingDoneColumn(true);
-		setDoneColumnError(null);
-		try {
-			await api.doneColumn.update(projectId, {
-				doneColumnId: selectedDoneColumnId,
-			});
-		} catch {
-			setDoneColumnError("Done Column could not be saved.");
-		} finally {
-			setIsSavingDoneColumn(false);
-		}
-	}
-
 	async function handleMoveBacklogTask(
 		taskId: string,
 		direction: "up" | "down",
@@ -2811,6 +3039,13 @@ export function ProjectBoardPage() {
 	const shouldShowBoard = Boolean(activeSprint);
 	const isBacklogView = view === "backlog";
 	const isHistoryView = view === "history";
+	const shouldShowMissingDoneColumnWarning = Boolean(
+		doneColumn?.requiresDesignation &&
+			columns.length > 0 &&
+			!isMetadataEditing &&
+			!columnsQuery.isPending &&
+			!columnsQuery.isError,
+	);
 
 	return (
 		<main className="min-h-screen overflow-hidden bg-[var(--background)] text-[var(--on-surface)]">
@@ -2938,6 +3173,15 @@ export function ProjectBoardPage() {
 											? `Main Board: ${projectQuery.data.name}`
 											: "Main Board"}
 									</h2>
+									{projectQuery.data ? (
+										<div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-[var(--on-surface-variant)]">
+											<span>{projectQuery.data.code}</span>
+											<span aria-hidden="true">/</span>
+											<span>
+												{getProjectStatusLabel(projectQuery.data.status)}
+											</span>
+										</div>
+									) : null}
 									<p className="mt-2 max-w-3xl whitespace-pre-wrap text-sm leading-6 text-[var(--on-surface-variant)]">
 										{projectDescription}
 									</p>
@@ -2955,7 +3199,7 @@ export function ProjectBoardPage() {
 											className="inline-flex items-center gap-2 rounded-full border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-4 py-2 text-sm font-semibold hover:bg-[var(--surface-bright)]"
 										>
 											<Pencil className="h-4 w-4" />
-											Edit project metadata
+											Edit project
 										</button>
 									) : null}
 									<button
@@ -2991,35 +3235,120 @@ export function ProjectBoardPage() {
 							</div>
 							{isMetadataEditing ? (
 								<form
-									aria-label="Edit project metadata"
+									aria-label="Edit project"
 									className="mt-4 max-w-3xl rounded-[1.5rem] border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-4 shadow-sm"
 									onSubmit={(event) => {
 										event.preventDefault();
 										void handleSaveMetadata();
 									}}
 								>
-									<div className="grid gap-4">
-										<label className="grid gap-2 text-sm font-semibold text-[var(--on-surface)]">
-											Project title
-											<input
+									<div className="grid gap-4 sm:grid-cols-2">
+										<Field className="sm:col-span-2">
+											<FieldLabel
+												className="text-sm font-semibold text-[var(--on-surface)]"
+												htmlFor="project-metadata-title"
+											>
+												Project title
+											</FieldLabel>
+											<Input
+												id="project-metadata-title"
 												value={metadataName}
 												onChange={(event) =>
 													setMetadataName(event.currentTarget.value)
 												}
-												className="rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-low)] px-4 py-3 text-sm outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)]"
+												className="rounded-2xl bg-[var(--surface-container-low)] text-sm focus-visible:ring-2"
 											/>
-										</label>
-										<label className="grid gap-2 text-sm font-semibold text-[var(--on-surface)]">
-											Project description
-											<textarea
+										</Field>
+										<Field>
+											<FieldLabel
+												className="text-sm font-semibold text-[var(--on-surface)]"
+												htmlFor="project-metadata-done-column"
+											>
+												Done Column
+											</FieldLabel>
+											<NativeSelect
+												id="project-metadata-done-column"
+												value={metadataDoneColumnId}
+												onChange={(event) =>
+													setMetadataDoneColumnId(event.currentTarget.value)
+												}
+												disabled={columns.length === 0 || isMetadataSaving}
+											>
+												<option value="">Select column</option>
+												{columns.map((column) => (
+													<NativeSelectOption key={column.id} value={column.id}>
+														{column.title}
+													</NativeSelectOption>
+												))}
+											</NativeSelect>
+											<p className="text-xs leading-5 text-[var(--on-surface-variant)]">
+												{columns.length === 0
+													? "Add a workflow column before choosing a Done Column. Project details can still be saved."
+													: "Kanai uses this Project-level column to classify finished sprint work."}
+											</p>
+										</Field>
+										<Field className="sm:col-span-2">
+											<FieldLabel
+												className="text-sm font-semibold text-[var(--on-surface)]"
+												htmlFor="project-metadata-code"
+											>
+												Project code
+											</FieldLabel>
+											<Input
+												id="project-metadata-code"
+												value={metadataCode}
+												maxLength={3}
+												minLength={3}
+												onChange={(event) =>
+													setMetadataCode(
+														event.currentTarget.value.toUpperCase(),
+													)
+												}
+												className="rounded-2xl bg-[var(--surface-container-low)] text-sm uppercase focus-visible:ring-2"
+											/>
+										</Field>
+										<Field>
+											<FieldLabel
+												className="text-sm font-semibold text-[var(--on-surface)]"
+												htmlFor="project-metadata-status"
+											>
+												Project status
+											</FieldLabel>
+											<NativeSelect
+												id="project-metadata-status"
+												value={metadataStatus}
+												onChange={(event) =>
+													setMetadataStatus(
+														normalizeProjectStatus(event.currentTarget.value),
+													)
+												}
+											>
+												{Object.entries(PROJECT_STATUS_LABELS).map(
+													([value, label]) => (
+														<NativeSelectOption key={value} value={value}>
+															{label}
+														</NativeSelectOption>
+													),
+												)}
+											</NativeSelect>
+										</Field>
+										<Field className="sm:col-span-2">
+											<FieldLabel
+												className="text-sm font-semibold text-[var(--on-surface)]"
+												htmlFor="project-metadata-description"
+											>
+												Project description
+											</FieldLabel>
+											<Textarea
+												id="project-metadata-description"
 												value={metadataDescription}
 												onChange={(event) =>
 													setMetadataDescription(event.currentTarget.value)
 												}
 												placeholder="Describe the project context"
-												className="min-h-28 resize-y rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-low)] px-4 py-3 text-sm leading-6 outline-none transition placeholder:text-[var(--on-surface-variant)] focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)]"
+												className="min-h-28 resize-y rounded-2xl bg-[var(--surface-container-low)] text-sm leading-6 placeholder:text-[var(--on-surface-variant)] focus-visible:ring-2"
 											/>
-										</label>
+										</Field>
 									</div>
 									{metadataError ? (
 										<p
@@ -3035,7 +3364,7 @@ export function ProjectBoardPage() {
 											disabled={isMetadataSaving}
 											className="rounded-full bg-[var(--primary)] px-5 py-2 text-sm font-bold text-[color:var(--on-primary)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
 										>
-											{isMetadataSaving ? "Saving..." : "Save details"}
+											{isMetadataSaving ? "Saving..." : "Save project"}
 										</button>
 										<button
 											type="button"
@@ -3049,6 +3378,13 @@ export function ProjectBoardPage() {
 								</form>
 							) : null}
 						</div>
+
+						{shouldShowMissingDoneColumnWarning ? (
+							<MissingDoneColumnWarning
+								isProjectOwner={isProjectOwner}
+								onOpenEditProject={handleEditMetadataClick}
+							/>
+						) : null}
 
 						{columnsQuery.isError ? (
 							<div className="mb-4 min-w-[1100px] rounded-xl border border-[var(--outline-variant)] bg-[var(--surface-container-low)] p-4 text-sm text-[var(--on-surface-variant)]">
@@ -3137,6 +3473,8 @@ export function ProjectBoardPage() {
 								plannedStartDate={activeSprint.plannedStartDate}
 								plannedEndDate={activeSprint.plannedEndDate}
 								goal={activeSprint.goal}
+								pointSummary={sprintPointSummary}
+								hasDoneColumn={Boolean(doneColumn?.doneColumnId)}
 								isProjectOwner={isProjectOwner}
 								isEditing={isSprintEditing}
 								editPlannedStartDate={editSprintStartDate}
@@ -3178,9 +3516,8 @@ export function ProjectBoardPage() {
 						{!isBacklogView && !isHistoryView && activeSprint ? (
 							<div className="mb-4 min-w-[1100px]">
 								<Link
-									to="/projects/$projectId"
+									to="/projects/$projectId/backlog"
 									params={{ projectId }}
-									search={{ view: "backlog" }}
 									className="inline-flex rounded-full border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-4 py-2 text-sm font-bold text-[var(--on-surface)] no-underline hover:bg-[var(--surface-bright)]"
 								>
 									View Backlog
@@ -3195,26 +3532,11 @@ export function ProjectBoardPage() {
 								</Link>
 							</div>
 						) : null}
-						{!columnsQuery.isPending &&
-						!columnsQuery.isError &&
-						doneColumn &&
-						columns.length > 0 ? (
-							<DoneColumnSettings
-								columns={columns}
-								doneColumnId={doneColumn.doneColumnId}
-								requiresDesignation={doneColumn.requiresDesignation}
-								isProjectOwner={isProjectOwner}
-								selectedColumnId={selectedDoneColumnId}
-								isSaving={isSavingDoneColumn}
-								error={doneColumnError}
-								onSelectedColumnIdChange={setSelectedDoneColumnId}
-								onSave={() => void handleSaveDoneColumn()}
-							/>
-						) : null}
 						{isBacklogView ? (
 							<ProjectBacklogView
 								projectId={projectId}
 								tasks={backlogQuery.data ?? []}
+								pointSummary={backlogPointSummary}
 								isLoading={backlogQuery.isPending}
 								isError={backlogQuery.isError}
 								isReordering={isReorderingBacklog}

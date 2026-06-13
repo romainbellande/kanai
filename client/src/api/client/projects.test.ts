@@ -23,6 +23,7 @@ import {
 	getProject,
 	getProjectDoneColumn,
 	listProjectColumns,
+	listProjectSprintHistory,
 	listProjects,
 	projectActiveSprintQueryOptions,
 	projectColumnsQueryOptions,
@@ -74,7 +75,6 @@ describe("projects client", () => {
 						id: "project-1",
 						name: "API Project",
 						code: "API",
-						priority: "high",
 						description: null,
 						status: "active",
 						owner_ids: [],
@@ -112,7 +112,6 @@ describe("projects client", () => {
 					id: "project-1",
 					name: "API Project",
 					code: "API",
-					priority: "high",
 					description: null,
 					status: "active",
 					owner_ids: [],
@@ -145,9 +144,8 @@ describe("projects client", () => {
 					id: "project-1",
 					name: "Created Project",
 					code: "CRT",
-					priority: "medium",
 					description: "Notes",
-					status: null,
+					status: "active",
 					owner_ids: [],
 					member_ids: [],
 					created_at: null,
@@ -161,7 +159,7 @@ describe("projects client", () => {
 		await createProject({
 			name: "Created Project",
 			code: "CRT",
-			priority: "medium",
+			status: "active",
 			description: "Notes",
 		});
 
@@ -172,7 +170,7 @@ describe("projects client", () => {
 		expect(JSON.parse(String(init?.body))).toEqual({
 			name: "Created Project",
 			code: "CRT",
-			priority: "medium",
+			status: "active",
 			description: "Notes",
 		});
 	});
@@ -189,7 +187,6 @@ describe("projects client", () => {
 					id: "project-1",
 					name: "Renamed Project",
 					code: "API",
-					priority: "high",
 					description: null,
 					status: "active",
 					owner_ids: [],
@@ -415,6 +412,7 @@ describe("projects client", () => {
 			title: "Unfinished task",
 			column_id: "column-todo",
 			priority: null,
+			story_points: 8,
 			rank: "U",
 			backlog_rank: null,
 			assignee_id: null,
@@ -463,6 +461,7 @@ describe("projects client", () => {
 								title: "Unfinished task",
 								outcome: "unfinished",
 								priority: null,
+								story_points: 8,
 								rank: "U",
 								description: null,
 								acceptance_criteria: null,
@@ -485,7 +484,9 @@ describe("projects client", () => {
 		});
 		await expect(closeActiveProjectSprint("project-1")).resolves.toMatchObject({
 			sprint: { lifecycleState: "closed" },
-			snapshots: [expect.objectContaining({ outcome: "unfinished" })],
+			snapshots: [
+				expect.objectContaining({ outcome: "unfinished", storyPoints: 8 }),
+			],
 		});
 		expect(fetchSpy.mock.calls[0][0]).toBe(
 			"https://api.example.test/projects/project-1/sprints/active/close-confirmation",
@@ -494,6 +495,87 @@ describe("projects client", () => {
 			"https://api.example.test/projects/project-1/sprints/active/close",
 		);
 		expect(fetchSpy.mock.calls[1][1]?.method).toBe("POST");
+	});
+
+	it("maps sprint history snapshots with historical Story Points", async () => {
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test/");
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({ accessToken: "history-token" }),
+		);
+		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(
+				JSON.stringify([
+					{
+						sprint: {
+							id: "sprint-1",
+							project_id: "project-1",
+							name: "Sprint 1",
+							lifecycle_state: "closed",
+							planned_start_date: "2026-06-01",
+							planned_end_date: "2026-06-14",
+							goal: null,
+							closed_at: "2026-06-09T20:00:00Z",
+							created_at: null,
+							updated_at: null,
+						},
+						finished_count: 1,
+						unfinished_count: 1,
+						unfinished_tasks: [],
+						carryover_statement:
+							"Unfinished tasks will move to the top of the Backlog.",
+						snapshots: [
+							{
+								id: "snapshot-finished",
+								sprint_id: "sprint-1",
+								task_id: "finished-task",
+								column_id: "column-done",
+								title: "Finished close-time title",
+								outcome: "finished",
+								priority: null,
+								story_points: 5,
+								rank: "U",
+								description: null,
+								acceptance_criteria: null,
+								tag: null,
+								live_task_exists: true,
+								created_at: null,
+							},
+							{
+								id: "snapshot-unestimated",
+								sprint_id: "sprint-1",
+								task_id: "unestimated-task",
+								column_id: "column-todo",
+								title: "Unestimated close-time title",
+								outcome: "unfinished",
+								priority: null,
+								story_points: null,
+								rank: "V",
+								description: null,
+								acceptance_criteria: null,
+								tag: null,
+								live_task_exists: false,
+								created_at: null,
+							},
+						],
+					},
+				]),
+				{ headers: { "content-type": "application/json" }, status: 200 },
+			),
+		);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		await expect(listProjectSprintHistory("project-1")).resolves.toMatchObject([
+			{
+				snapshots: [
+					expect.objectContaining({ storyPoints: 5, liveTaskExists: true }),
+					expect.objectContaining({ storyPoints: null, liveTaskExists: false }),
+				],
+			},
+		]);
+		expect(fetchSpy.mock.calls[0][0]).toBe(
+			"https://api.example.test/projects/project-1/sprints/history",
+		);
 	});
 
 	it("gets and updates project Done Column configuration", async () => {
@@ -731,7 +813,6 @@ describe("projects client", () => {
 					id: "project-1",
 					name: "API Project",
 					code: "API",
-					priority: "high",
 					description: null,
 					status: "active",
 					owner_ids: ["owner-1"],

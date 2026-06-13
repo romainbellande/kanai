@@ -21,7 +21,6 @@ import { mapValues } from '../runtime';
  *     name: Optional updated project display name. Defaults to None.
  *     code: Optional updated three-character project code using uppercase letters
  *         or digits. Defaults to None.
- *     priority: Optional updated project priority label. Defaults to None.
  *     description: Optional updated project description. Defaults to None.
  *     status: Optional updated project status label. Defaults to None.
  *     owner_ids: Optional replacement list of owner user IDs. Defaults to None.
@@ -47,19 +46,13 @@ export interface ProjectUpdate {
      * @type {string}
      * @memberof ProjectUpdate
      */
-    priority?: string | null;
-    /**
-     * 
-     * @type {string}
-     * @memberof ProjectUpdate
-     */
     description?: string | null;
     /**
      * 
-     * @type {string}
+     * @type {ProjectUpdateStatusEnum}
      * @memberof ProjectUpdate
      */
-    status?: string | null;
+    status?: ProjectUpdateStatusEnum | null;
     /**
      * 
      * @type {Array<string>}
@@ -73,6 +66,19 @@ export interface ProjectUpdate {
      */
     memberIds?: Array<string> | null;
 }
+
+
+/**
+ * @export
+ */
+export const ProjectUpdateStatusEnum = {
+    Active: 'active',
+    Paused: 'paused',
+    Blocked: 'blocked',
+    Done: 'done'
+} as const;
+export type ProjectUpdateStatusEnum = typeof ProjectUpdateStatusEnum[keyof typeof ProjectUpdateStatusEnum];
+
 
 /**
  * Check if a given object implements the ProjectUpdate interface.
@@ -93,7 +99,6 @@ export function ProjectUpdateFromJSONTyped(json: any, ignoreDiscriminator: boole
         
         'name': json['name'] == null ? undefined : json['name'],
         'code': json['code'] == null ? undefined : json['code'],
-        'priority': json['priority'] == null ? undefined : json['priority'],
         'description': json['description'] == null ? undefined : json['description'],
         'status': json['status'] == null ? undefined : json['status'],
         'ownerIds': json['owner_ids'] == null ? undefined : json['owner_ids'],
@@ -114,7 +119,6 @@ export function ProjectUpdateToJSONTyped(value?: ProjectUpdate | null, ignoreDis
         
         'name': value['name'],
         'code': value['code'],
-        'priority': value['priority'],
         'description': value['description'],
         'status': value['status'],
         'owner_ids': value['ownerIds'],

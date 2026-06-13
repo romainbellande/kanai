@@ -22,6 +22,7 @@ import { mapValues } from '../runtime';
  *     column_id: Optional workflow column ID. Defaults to the first project column.
  *     include_in_active_sprint: Whether the new task belongs to the active sprint.
  *     priority: Optional priority level for the task.
+ *     story_points: Optional Story Points estimate.
  *     assignee_id: Optional user ID assigned to the task.
  *     description: Optional task details.
  *     acceptance_criteria: Optional criteria required to complete the task.
@@ -31,49 +32,55 @@ import { mapValues } from '../runtime';
  */
 export interface TaskCreate {
     /**
-     *
+     * 
      * @type {string}
      * @memberof TaskCreate
      */
     title: string;
     /**
-     *
+     * 
      * @type {string}
      * @memberof TaskCreate
      */
     columnId?: string | null;
     /**
-     *
+     * 
      * @type {boolean}
      * @memberof TaskCreate
      */
     includeInActiveSprint?: boolean;
     /**
-     *
+     * 
      * @type {string}
      * @memberof TaskCreate
      */
     priority?: string | null;
     /**
-     *
+     * 
+     * @type {number}
+     * @memberof TaskCreate
+     */
+    storyPoints?: number | null;
+    /**
+     * 
      * @type {string}
      * @memberof TaskCreate
      */
     assigneeId?: string | null;
     /**
-     *
+     * 
      * @type {string}
      * @memberof TaskCreate
      */
     description?: string | null;
     /**
-     *
+     * 
      * @type {string}
      * @memberof TaskCreate
      */
     acceptanceCriteria?: string | null;
     /**
-     *
+     * 
      * @type {string}
      * @memberof TaskCreate
      */
@@ -102,6 +109,7 @@ export function TaskCreateFromJSONTyped(json: any, ignoreDiscriminator: boolean)
         'columnId': json['column_id'] == null ? undefined : json['column_id'],
         'includeInActiveSprint': json['include_in_active_sprint'] == null ? undefined : json['include_in_active_sprint'],
         'priority': json['priority'] == null ? undefined : json['priority'],
+        'storyPoints': json['story_points'] == null ? undefined : json['story_points'],
         'assigneeId': json['assignee_id'] == null ? undefined : json['assignee_id'],
         'description': json['description'] == null ? undefined : json['description'],
         'acceptanceCriteria': json['acceptance_criteria'] == null ? undefined : json['acceptance_criteria'],
@@ -124,6 +132,7 @@ export function TaskCreateToJSONTyped(value?: TaskCreate | null, ignoreDiscrimin
         'column_id': value['columnId'],
         'include_in_active_sprint': value['includeInActiveSprint'],
         'priority': value['priority'],
+        'story_points': value['storyPoints'],
         'assignee_id': value['assigneeId'],
         'description': value['description'],
         'acceptance_criteria': value['acceptanceCriteria'],

@@ -200,9 +200,8 @@ async def test_project_crud_endpoints(
         json={
             "name": "Enterprise Launch",
             "code": "ENT",
-            "priority": "medium",
             "description": "Launch work",
-            "status": "On Track",
+            "status": "paused",
             "owner_ids": [str(owner_id)],
             "member_ids": [str(member_id)],
         },
@@ -211,6 +210,8 @@ async def test_project_crud_endpoints(
     assert create_response.status_code == 201
     created_project = create_response.json()
     assert created_project["code"] == "ENT"
+    assert "priority" not in created_project
+    assert created_project["status"] == "paused"
     assert set(created_project["owner_ids"]) == {str(creator_id), str(owner_id)}
     assert created_project["member_ids"] == [str(member_id)]
 
@@ -231,6 +232,7 @@ async def test_project_crud_endpoints(
 
     assert get_response.status_code == 200
     assert get_response.json()["name"] == "Enterprise Launch"
+    assert "priority" not in get_response.json()
 
     update_response = await client.patch(
         f"/projects/{created_project['id']}",
@@ -241,6 +243,7 @@ async def test_project_crud_endpoints(
     assert update_response.status_code == 200
     updated_project = update_response.json()
     assert updated_project["name"] == "Enterprise Launch Updated"
+    assert updated_project["code"] == "ENT"
     assert updated_project["owner_ids"] == [str(creator_id)]
 
     delete_response = await client.delete(
@@ -266,6 +269,98 @@ async def test_project_crud_endpoints(
 
 
 @pytest.mark.asyncio
+async def test_project_contract_rejects_priority_and_invalid_status(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    del users
+    create_with_priority_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Enterprise Launch", "code": "PRI", "priority": "medium"},
+    )
+    invalid_status_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Enterprise Launch", "code": "BAD", "status": "on-track"},
+    )
+    create_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Enterprise Launch", "code": "STA"},
+    )
+    project_id = create_response.json()["id"]
+    update_with_priority_response = await client.patch(
+        f"/projects/{project_id}",
+        headers={"Authorization": "Bearer token"},
+        json={"priority": "high"},
+    )
+    update_status_response = await client.patch(
+        f"/projects/{project_id}",
+        headers={"Authorization": "Bearer token"},
+        json={"status": "blocked"},
+    )
+
+    assert create_with_priority_response.status_code == 422
+    assert invalid_status_response.status_code == 422
+    assert create_response.status_code == 201
+    assert create_response.json()["status"] == "active"
+    assert update_with_priority_response.status_code == 422
+    assert update_status_response.status_code == 200
+    assert update_status_response.json()["status"] == "blocked"
+
+
+@pytest.mark.asyncio
+async def test_project_reads_normalize_blank_and_null_status_to_active(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    users: dict[str, User],
+) -> None:
+    del users
+    blank_status_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Blank Status", "code": "BLS"},
+    )
+    null_status_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Null Status", "code": "NLS"},
+    )
+    blank_status_project_id = UUID(blank_status_response.json()["id"])
+    null_status_project_id = UUID(null_status_response.json()["id"])
+
+    async with session_factory() as session:
+        blank_status_project = await session.get(Project, blank_status_project_id)
+        null_status_project = await session.get(Project, null_status_project_id)
+        assert blank_status_project is not None
+        assert null_status_project is not None
+        blank_status_project.status = "   "
+        null_status_project.status = None
+        await session.commit()
+
+    blank_status_read_response = await client.get(
+        f"/projects/{blank_status_project_id}",
+        headers={"Authorization": "Bearer token"},
+    )
+    null_status_read_response = await client.get(
+        f"/projects/{null_status_project_id}",
+        headers={"Authorization": "Bearer token"},
+    )
+    list_response = await client.get(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert blank_status_read_response.status_code == 200
+    assert blank_status_read_response.json()["status"] == "active"
+    assert null_status_read_response.status_code == 200
+    assert null_status_read_response.json()["status"] == "active"
+    assert list_response.status_code == 200
+    assert {project["status"] for project in list_response.json()} == {"active"}
+
+
+@pytest.mark.asyncio
 async def test_project_update_preserves_omitted_description_and_clears_explicit_null(
     client: AsyncClient,
     users: dict[str, User],
@@ -277,7 +372,6 @@ async def test_project_update_preserves_omitted_description_and_clears_explicit_
         json={
             "name": "Enterprise Launch",
             "code": "EOM",
-            "priority": "medium",
             "description": "Launch work",
         },
     )
@@ -312,7 +406,7 @@ async def test_project_update_rejects_blank_and_null_names(
     create_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "Enterprise Launch", "code": "ERJ", "priority": "medium"},
+        json={"name": "Enterprise Launch", "code": "ERJ"},
     )
     project_id = create_response.json()["id"]
 
@@ -348,7 +442,6 @@ async def test_project_chat_history_allows_owners_and_members(
         json={
             "name": "Enterprise Launch",
             "code": "ENT",
-            "priority": "medium",
             "member_ids": [str(member_id)],
         },
     )
@@ -403,7 +496,7 @@ async def test_project_chat_history_denies_outsiders(
     project_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "Enterprise Launch", "code": "ENT", "priority": "medium"},
+        json={"name": "Enterprise Launch", "code": "ENT"},
     )
     project_id = project_response.json()["id"]
 
@@ -426,7 +519,7 @@ async def test_project_owner_creates_empty_active_sprint(
     project_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "Enterprise Launch", "code": "SP1", "priority": "medium"},
+        json={"name": "Enterprise Launch", "code": "SP1"},
     )
     project_id = project_response.json()["id"]
 
@@ -469,7 +562,6 @@ async def test_project_participants_can_read_active_sprint_but_only_owners_creat
         json={
             "name": "Enterprise Launch",
             "code": "SPR",
-            "priority": "medium",
             "member_ids": [str(member_id)],
         },
     )
@@ -516,7 +608,7 @@ async def test_project_sprint_creation_rejects_invalid_dates_and_second_active_s
     project_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "Enterprise Launch", "code": "SP2", "priority": "medium"},
+        json={"name": "Enterprise Launch", "code": "SP2"},
     )
     project_id = project_response.json()["id"]
 
@@ -565,7 +657,7 @@ async def test_project_owner_creates_active_sprint_with_initial_backlog_tasks(
     project_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "Enterprise Launch", "code": "SP3", "priority": "medium"},
+        json={"name": "Enterprise Launch", "code": "SP3"},
     )
     project_id = project_response.json()["id"]
     columns_response = await client.get(
@@ -602,11 +694,16 @@ async def test_project_owner_creates_active_sprint_with_initial_backlog_tasks(
     assert sprint_response.status_code == 201
     sprint_id = sprint_response.json()["id"]
     assert sprint_tasks_response.status_code == 200
+    expected_sprint_task = {
+        **backlog_task_response.json(),
+        "sprint_id": sprint_id,
+        "backlog_rank": None,
+    }
+    actual_sprint_task = sprint_tasks_response.json()[0]
+    expected_sprint_task["updated_at"] = actual_sprint_task["updated_at"]
     assert sprint_tasks_response.json() == [
         {
-            **backlog_task_response.json(),
-            "sprint_id": sprint_id,
-            "backlog_rank": None,
+            **expected_sprint_task,
         }
     ]
     assert sprint_tasks_response.json()[0]["column_id"] == todo_column["id"]
@@ -622,7 +719,7 @@ async def test_active_sprint_task_list_filters_project_tasks_by_sprint_membershi
     project_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "Enterprise Launch", "code": "SB1", "priority": "medium"},
+        json={"name": "Enterprise Launch", "code": "SB1"},
     )
     project_id = project_response.json()["id"]
     columns_response = await client.get(
@@ -685,7 +782,7 @@ async def test_sprint_task_creation_without_column_uses_first_non_done_column(
     project_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "Enterprise Launch", "code": "SB2", "priority": "medium"},
+        json={"name": "Enterprise Launch", "code": "SB2"},
     )
     project_id = project_response.json()["id"]
     columns_response = await client.get(
@@ -733,7 +830,7 @@ async def test_sprint_task_creation_requires_active_sprint(
     project_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "Enterprise Launch", "code": "SB3", "priority": "medium"},
+        json={"name": "Enterprise Launch", "code": "SB3"},
     )
     project_id = project_response.json()["id"]
 
@@ -766,7 +863,6 @@ async def test_project_member_adds_backlog_task_to_active_sprint_preserving_colu
         json={
             "name": "Enterprise Launch",
             "code": "SB4",
-            "priority": "medium",
             "member_ids": [str(member_id)],
         },
     )
@@ -825,7 +921,7 @@ async def test_done_backlog_task_cannot_be_added_to_active_sprint(
     project_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "Enterprise Launch", "code": "SB5", "priority": "medium"},
+        json={"name": "Enterprise Launch", "code": "SB5"},
     )
     project_id = project_response.json()["id"]
     columns_response = await client.get(
@@ -879,7 +975,6 @@ async def test_project_member_removes_active_sprint_task_to_top_of_backlog(
         json={
             "name": "Enterprise Launch",
             "code": "SB6",
-            "priority": "medium",
             "member_ids": [str(member_id)],
         },
     )
@@ -956,7 +1051,7 @@ async def test_remove_from_active_sprint_rejects_non_sprint_tasks(
     project_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "Enterprise Launch", "code": "SB7", "priority": "medium"},
+        json={"name": "Enterprise Launch", "code": "SB7"},
     )
     project_id = project_response.json()["id"]
     await client.post(
@@ -991,7 +1086,7 @@ async def test_project_backlog_lists_unfinished_non_sprint_tasks_in_backlog_orde
     project_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "Enterprise Launch", "code": "BL1", "priority": "medium"},
+        json={"name": "Enterprise Launch", "code": "BL1"},
     )
     project_id = project_response.json()["id"]
     columns_response = await client.get(
@@ -1070,7 +1165,7 @@ async def test_project_backlog_reorder_persists_independent_of_board_rank(
     project_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "Enterprise Launch", "code": "BL2", "priority": "medium"},
+        json={"name": "Enterprise Launch", "code": "BL2"},
     )
     project_id = project_response.json()["id"]
     first_response = await client.post(
@@ -1111,7 +1206,7 @@ async def test_project_backlog_reorder_requires_complete_backlog_task_set(
     project_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "Enterprise Launch", "code": "BL3", "priority": "medium"},
+        json={"name": "Enterprise Launch", "code": "BL3"},
     )
     project_id = project_response.json()["id"]
     first_response = await client.post(
@@ -1147,7 +1242,7 @@ async def test_project_done_column_auto_detects_single_done_column(
     project_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "Enterprise Launch", "code": "DC1", "priority": "medium"},
+        json={"name": "Enterprise Launch", "code": "DC1"},
     )
     project_id = UUID(project_response.json()["id"])
     columns_response = await client.get(
@@ -1185,7 +1280,7 @@ async def test_project_done_column_requires_designation_when_done_name_is_missin
     project_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "Enterprise Launch", "code": "DC2", "priority": "medium"},
+        json={"name": "Enterprise Launch", "code": "DC2"},
     )
     project_id = project_response.json()["id"]
     columns_response = await client.get(
@@ -1227,7 +1322,6 @@ async def test_project_owner_updates_done_column_and_members_cannot(
         json={
             "name": "Enterprise Launch",
             "code": "DC3",
-            "priority": "medium",
             "member_ids": [str(member_id)],
         },
     )
@@ -1272,7 +1366,7 @@ async def test_current_done_column_deletion_is_blocked_until_reassigned(
     project_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "Enterprise Launch", "code": "DC4", "priority": "medium"},
+        json={"name": "Enterprise Launch", "code": "DC4"},
     )
     project_id = project_response.json()["id"]
     columns_response = await client.get(
@@ -1320,7 +1414,7 @@ async def test_project_owner_updates_active_sprint_dates_and_goal(
     project_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "Enterprise Launch", "code": "SE1", "priority": "medium"},
+        json={"name": "Enterprise Launch", "code": "SE1"},
     )
     project_id = project_response.json()["id"]
     await client.post(
@@ -1372,7 +1466,6 @@ async def test_active_sprint_update_rejects_invalid_ranges_and_non_owners(
         json={
             "name": "Enterprise Launch",
             "code": "SE2",
-            "priority": "medium",
             "member_ids": [str(member_id)],
         },
     )
@@ -1414,7 +1507,7 @@ async def test_closed_sprint_metadata_is_not_editable_through_active_endpoint(
     project_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "Enterprise Launch", "code": "SE3", "priority": "medium"},
+        json={"name": "Enterprise Launch", "code": "SE3"},
     )
     project_id = UUID(project_response.json()["id"])
     create_response = await client.post(
@@ -1458,7 +1551,7 @@ async def test_active_sprint_close_confirmation_counts_finished_and_unfinished(
     project_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "Enterprise Launch", "code": "SC1", "priority": "medium"},
+        json={"name": "Enterprise Launch", "code": "SC1"},
     )
     project_id = project_response.json()["id"]
     columns_response = await client.get(
@@ -1537,7 +1630,6 @@ async def test_project_owner_closes_active_sprint_with_snapshots_and_carryover(
         json={
             "name": "Enterprise Launch",
             "code": "SC2",
-            "priority": "medium",
             "member_ids": [str(member_id)],
         },
     )
@@ -1576,6 +1668,7 @@ async def test_project_owner_closes_active_sprint_with_snapshots_and_carryover(
         json={
             "title": "First unfinished",
             "column_id": todo_column["id"],
+            "story_points": 5,
             "description": "Close-time notes",
             "include_in_active_sprint": True,
         },
@@ -1586,6 +1679,7 @@ async def test_project_owner_closes_active_sprint_with_snapshots_and_carryover(
         json={
             "title": "Second unfinished",
             "column_id": todo_column["id"],
+            "story_points": 8,
             "include_in_active_sprint": True,
         },
     )
@@ -1595,6 +1689,7 @@ async def test_project_owner_closes_active_sprint_with_snapshots_and_carryover(
         json={
             "title": "Finished task",
             "column_id": done_column["id"],
+            "story_points": 3,
             "include_in_active_sprint": True,
         },
     )
@@ -1650,6 +1745,14 @@ async def test_project_owner_closes_active_sprint_with_snapshots_and_carryover(
         "Second unfinished": "unfinished",
         "Finished task": "finished",
     }
+    assert {
+        snapshot["title"]: snapshot["story_points"]
+        for snapshot in close_payload["snapshots"]
+    } == {
+        "First unfinished": 5,
+        "Second unfinished": 8,
+        "Finished task": 3,
+    }
     assert active_sprint_response.json() is None
     assert [task["title"] for task in backlog_response.json()][:3] == [
         "First unfinished",
@@ -1692,7 +1795,23 @@ async def test_project_owner_closes_active_sprint_with_snapshots_and_carryover(
         "Second unfinished",
         "Finished task",
     }
+    assert {snapshot.title: snapshot.story_points for snapshot in snapshots} == {
+        "First unfinished": 5,
+        "Second unfinished": 8,
+        "Finished task": 3,
+    }
     assert all(snapshot.title != "Removed before close" for snapshot in snapshots)
+
+    await client.patch(
+        f"/projects/{project_id}/tasks/{second_unfinished_response.json()['id']}",
+        headers={"Authorization": "Bearer token"},
+        json={"story_points": 13},
+    )
+    await client.patch(
+        f"/projects/{project_id}/tasks/{finished_response.json()['id']}",
+        headers={"Authorization": "Bearer token"},
+        json={"story_points": 1},
+    )
 
     async with session_factory() as session:
         persisted_snapshots = (
@@ -1707,6 +1826,13 @@ async def test_project_owner_closes_active_sprint_with_snapshots_and_carryover(
         "First unfinished",
         "Second unfinished",
         "Finished task",
+    }
+    assert {
+        snapshot.title: snapshot.story_points for snapshot in persisted_snapshots
+    } == {
+        "First unfinished": 5,
+        "Second unfinished": 8,
+        "Finished task": 3,
     }
 
     await client.patch(
@@ -1731,12 +1857,16 @@ async def test_project_owner_closes_active_sprint_with_snapshots_and_carryover(
     assert history[0]["finished_count"] == 1
     assert history[0]["unfinished_count"] == 2
     assert {
-        snapshot["title"]: (snapshot["outcome"], snapshot["live_task_exists"])
+        snapshot["title"]: (
+            snapshot["outcome"],
+            snapshot["story_points"],
+            snapshot["live_task_exists"],
+        )
         for snapshot in history[0]["snapshots"]
     } == {
-        "First unfinished": ("unfinished", False),
-        "Second unfinished": ("unfinished", True),
-        "Finished task": ("finished", True),
+        "First unfinished": ("unfinished", 5, False),
+        "Second unfinished": ("unfinished", 8, True),
+        "Finished task": ("finished", 3, True),
     }
 
 
@@ -1749,7 +1879,7 @@ async def test_subsequent_sprint_creation_uses_next_name_and_rejects_overlap(
     project_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "Enterprise Launch", "code": "SC3", "priority": "medium"},
+        json={"name": "Enterprise Launch", "code": "SC3"},
     )
     project_id = project_response.json()["id"]
     first_response = await client.post(
@@ -1784,7 +1914,7 @@ async def test_subsequent_sprint_creation_uses_next_name_and_rejects_overlap(
     other_project_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "Other Launch", "code": "SC4", "priority": "medium"},
+        json={"name": "Other Launch", "code": "SC4"},
     )
     other_first_response = await client.post(
         f"/projects/{other_project_response.json()['id']}/sprints",
@@ -1815,7 +1945,7 @@ async def test_project_chat_socket_denies_missing_subprotocol_token(
     project_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "Enterprise Launch", "code": "ENT", "priority": "medium"},
+        json={"name": "Enterprise Launch", "code": "ENT"},
     )
     project_id = project_response.json()["id"]
 
@@ -1839,7 +1969,7 @@ async def test_project_chat_socket_denies_invalid_subprotocol_token(
     project_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "Enterprise Launch", "code": "ENT", "priority": "medium"},
+        json={"name": "Enterprise Launch", "code": "ENT"},
     )
     project_id = project_response.json()["id"]
 
@@ -1863,7 +1993,7 @@ async def test_project_chat_socket_denies_users_without_project_access(
     project_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "Enterprise Launch", "code": "ENT", "priority": "medium"},
+        json={"name": "Enterprise Launch", "code": "ENT"},
     )
     project_id = project_response.json()["id"]
 
@@ -1891,7 +2021,6 @@ async def test_project_chat_socket_allows_owner_and_member_connections(
         json={
             "name": "Enterprise Launch",
             "code": "ENT",
-            "priority": "medium",
             "member_ids": [str(member_id)],
         },
     )
@@ -1934,7 +2063,6 @@ async def test_project_chat_service_creates_trimmed_persisted_messages_for_membe
         json={
             "name": "Enterprise Launch",
             "code": "ENT",
-            "priority": "medium",
             "member_ids": [str(member_id)],
         },
     )
@@ -1975,7 +2103,6 @@ async def test_project_chat_author_snapshot_falls_back_to_display_external_and_u
         json={
             "name": "Enterprise Launch",
             "code": "ENT",
-            "priority": "medium",
             "member_ids": [str(member_id)],
         },
     )
@@ -2049,7 +2176,6 @@ async def test_project_chat_history_keeps_deleted_author_snapshot(
         json={
             "name": "Enterprise Launch",
             "code": "ENT",
-            "priority": "medium",
             "member_ids": [str(member_id)],
         },
     )
@@ -2106,7 +2232,6 @@ async def test_project_chat_socket_creates_persisted_message_before_delivery(
         json={
             "name": "Enterprise Launch",
             "code": "ENT",
-            "priority": "medium",
             "member_ids": [str(member_id)],
         },
     )
@@ -2161,7 +2286,6 @@ async def test_project_chat_socket_rechecks_access_before_message_send(
         json={
             "name": "Enterprise Launch",
             "code": "ENT",
-            "priority": "medium",
             "member_ids": [str(member_id)],
         },
     )
@@ -2211,7 +2335,7 @@ async def test_project_chat_socket_rejects_invalid_message_bodies(
     project_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "Enterprise Launch", "code": "ENT", "priority": "medium"},
+        json={"name": "Enterprise Launch", "code": "ENT"},
     )
     project_id = project_response.json()["id"]
 
@@ -2308,12 +2432,12 @@ async def test_project_chat_history_returns_latest_50_oldest_to_newest_and_isola
     first_project_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "First", "code": "ONE", "priority": "medium"},
+        json={"name": "First", "code": "ONE"},
     )
     second_project_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "Second", "code": "TWO", "priority": "medium"},
+        json={"name": "Second", "code": "TWO"},
     )
     project_id = UUID(first_project_response.json()["id"])
     other_project_id = UUID(second_project_response.json()["id"])
@@ -2368,7 +2492,7 @@ async def test_project_chat_history_cursor_returns_older_messages_deterministica
     project_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "Cursor Chat", "code": "CUR", "priority": "medium"},
+        json={"name": "Cursor Chat", "code": "CUR"},
     )
     project_id = UUID(project_response.json()["id"])
     base_time = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
@@ -2437,7 +2561,7 @@ async def test_project_chat_history_cursor_uses_id_tiebreaker_for_same_timestamp
     project_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "Tie Chat", "code": "TIE", "priority": "medium"},
+        json={"name": "Tie Chat", "code": "TIE"},
     )
     project_id = UUID(project_response.json()["id"])
     created_at = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
@@ -2482,7 +2606,7 @@ async def test_project_delete_removes_project_chat_messages(
     project_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "Enterprise Launch", "code": "ENT", "priority": "medium"},
+        json={"name": "Enterprise Launch", "code": "ENT"},
     )
     project_id = UUID(project_response.json()["id"])
 
@@ -2524,7 +2648,7 @@ async def test_project_add_member_is_owner_only_and_idempotent(
     project_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "Enterprise Launch", "code": "ENT", "priority": "medium"},
+        json={"name": "Enterprise Launch", "code": "ENT"},
     )
     project_id = project_response.json()["id"]
 
@@ -2565,7 +2689,7 @@ async def test_project_add_member_validates_user_exists(
     project_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "Enterprise Launch", "code": "ENT", "priority": "medium"},
+        json={"name": "Enterprise Launch", "code": "ENT"},
     )
     project_id = project_response.json()["id"]
 
@@ -2595,7 +2719,6 @@ async def test_project_members_can_list_default_columns(
         json={
             "name": "Enterprise Launch",
             "code": "ENT",
-            "priority": "medium",
             "member_ids": [str(member_id)],
         },
     )
@@ -2631,7 +2754,6 @@ async def test_project_owner_can_create_column_at_end(
         json={
             "name": "Enterprise Launch",
             "code": "ENT",
-            "priority": "medium",
             "member_ids": [str(member_id)],
         },
     )
@@ -2675,7 +2797,7 @@ async def test_project_column_create_stores_blank_description_as_null(
     project_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "Enterprise Launch", "code": "ENT", "priority": "medium"},
+        json={"name": "Enterprise Launch", "code": "ENT"},
     )
     project_id = project_response.json()["id"]
 
@@ -2698,7 +2820,7 @@ async def test_project_column_description_rejects_values_over_500_characters(
     project_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "Enterprise Launch", "code": "ENT", "priority": "medium"},
+        json={"name": "Enterprise Launch", "code": "ENT"},
     )
     project_id = project_response.json()["id"]
     overlong_description = "a" * 501
@@ -2729,7 +2851,6 @@ async def test_project_column_create_is_owner_only_and_rejects_duplicate_names(
         json={
             "name": "Enterprise Launch",
             "code": "ENT",
-            "priority": "medium",
             "member_ids": [str(member_id)],
         },
     )
@@ -2761,7 +2882,7 @@ async def test_project_column_create_rejects_reserved_backlog_name(
     project_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "Enterprise Launch", "code": "ENT", "priority": "medium"},
+        json={"name": "Enterprise Launch", "code": "ENT"},
     )
     project_id = project_response.json()["id"]
 
@@ -2791,7 +2912,6 @@ async def test_project_owner_can_rename_column_without_reordering(
         json={
             "name": "Enterprise Launch",
             "code": "ENT",
-            "priority": "medium",
             "member_ids": [str(member_id)],
         },
     )
@@ -2855,7 +2975,6 @@ async def test_project_column_rename_is_owner_only_and_rejects_duplicate_names(
         json={
             "name": "Enterprise Launch",
             "code": "ENT",
-            "priority": "medium",
             "member_ids": [str(member_id)],
         },
     )
@@ -2893,7 +3012,7 @@ async def test_project_column_rename_rejects_reserved_backlog_name(
     project_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "Enterprise Launch", "code": "ENT", "priority": "medium"},
+        json={"name": "Enterprise Launch", "code": "ENT"},
     )
     project_id = project_response.json()["id"]
 
@@ -2924,7 +3043,7 @@ async def test_project_column_rename_rejects_empty_names(
     project_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "Enterprise Launch", "code": "ENT", "priority": "medium"},
+        json={"name": "Enterprise Launch", "code": "ENT"},
     )
     project_id = project_response.json()["id"]
 
@@ -2953,7 +3072,7 @@ async def test_project_owner_can_reorder_columns(
     project_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "Enterprise Launch", "code": "ENT", "priority": "medium"},
+        json={"name": "Enterprise Launch", "code": "ENT"},
     )
     project_id = project_response.json()["id"]
 
@@ -3004,7 +3123,6 @@ async def test_project_column_reorder_is_owner_only_and_requires_complete_projec
         json={
             "name": "Enterprise Launch",
             "code": "ENT",
-            "priority": "medium",
             "member_ids": [str(member_id)],
         },
     )
@@ -3012,7 +3130,7 @@ async def test_project_column_reorder_is_owner_only_and_requires_complete_projec
     other_project_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "Platform Launch", "code": "PLT", "priority": "medium"},
+        json={"name": "Platform Launch", "code": "PLT"},
     )
     other_project_id = other_project_response.json()["id"]
 
@@ -3069,7 +3187,7 @@ async def test_project_owner_can_delete_empty_column_and_positions_are_normalize
     project_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "Enterprise Launch", "code": "ENT", "priority": "medium"},
+        json={"name": "Enterprise Launch", "code": "ENT"},
     )
     project_id = project_response.json()["id"]
 
@@ -3113,7 +3231,6 @@ async def test_project_column_delete_is_owner_only_and_rejects_final_column(
         json={
             "name": "Enterprise Launch",
             "code": "ENT",
-            "priority": "medium",
             "member_ids": [str(member_id)],
         },
     )
@@ -3161,7 +3278,6 @@ async def test_project_create_rejects_duplicate_global_code(
     payload = {
         "name": "Enterprise Launch",
         "code": "ENT",
-        "priority": "medium",
     }
 
     first_response = await client.post(
@@ -3192,7 +3308,7 @@ async def test_task_crud_endpoints_do_not_expose_due_fields(
     project_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "Enterprise Launch", "code": "ENT", "priority": "medium"},
+        json={"name": "Enterprise Launch", "code": "ENT"},
     )
     project_id = project_response.json()["id"]
 
@@ -3202,6 +3318,7 @@ async def test_task_crud_endpoints_do_not_expose_due_fields(
         json={
             "title": "Finalize launch checklist",
             "priority": "urgent",
+            "story_points": 5,
             "assignee_id": str(assignee_id),
             "description": "Launch handoff",
             "acceptance_criteria": "Checklist approved",
@@ -3213,6 +3330,7 @@ async def test_task_crud_endpoints_do_not_expose_due_fields(
     created_task = create_response.json()
     assert created_task["title"] == "Finalize launch checklist"
     assert created_task["priority"] == "critical"
+    assert created_task["story_points"] == 5
     assert "column_id" in created_task
     assert "status" not in created_task
     assert "due_label" not in created_task
@@ -3233,23 +3351,26 @@ async def test_task_crud_endpoints_do_not_expose_due_fields(
 
     assert get_response.status_code == 200
     assert get_response.json()["tag"] == "Strategic"
+    assert get_response.json()["story_points"] == 5
 
     update_response = await client.patch(
         f"/projects/{project_id}/tasks/{created_task['id']}",
         headers={"Authorization": "Bearer token"},
-        json={"priority": "low"},
+        json={"priority": "low", "story_points": 8},
     )
 
     assert update_response.status_code == 200
     updated_task = update_response.json()
     assert "status" not in updated_task
     assert updated_task["priority"] == "low"
+    assert updated_task["story_points"] == 8
 
     clear_response = await client.patch(
         f"/projects/{project_id}/tasks/{created_task['id']}",
         headers={"Authorization": "Bearer token"},
         json={
             "assignee_id": None,
+            "story_points": None,
             "description": None,
             "acceptance_criteria": None,
             "tag": None,
@@ -3259,6 +3380,7 @@ async def test_task_crud_endpoints_do_not_expose_due_fields(
     assert clear_response.status_code == 200
     cleared_task = clear_response.json()
     assert cleared_task["assignee_id"] is None
+    assert cleared_task["story_points"] is None
     assert cleared_task["description"] is None
     assert cleared_task["acceptance_criteria"] is None
     assert cleared_task["tag"] is None
@@ -3289,7 +3411,6 @@ async def test_task_priority_is_optional_and_clearable(
         json={
             "name": "Optional Priority",
             "code": f"O{uuid4().hex[:2].upper()}",
-            "priority": "medium",
         },
     )
     project_id = project_response.json()["id"]
@@ -3329,6 +3450,91 @@ async def test_task_priority_is_optional_and_clearable(
 
 
 @pytest.mark.asyncio
+async def test_task_story_points_are_optional_clearable_and_validated(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "name": "Story Point Contract",
+            "code": f"S{uuid4().hex[:2].upper()}",
+        },
+    )
+    project_id = project_response.json()["id"]
+
+    create_response = await client.post(
+        f"/projects/{project_id}/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={"title": "Estimated task", "story_points": 13},
+    )
+    blank_create_response = await client.post(
+        f"/projects/{project_id}/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={"title": "Blank estimate", "story_points": ""},
+    )
+    invalid_create_response = await client.post(
+        f"/projects/{project_id}/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={"title": "Invalid estimate", "story_points": 4},
+    )
+
+    assert create_response.status_code == 201
+    created_task = create_response.json()
+    assert created_task["story_points"] == 13
+    assert blank_create_response.status_code == 201
+    assert blank_create_response.json()["story_points"] is None
+    assert invalid_create_response.status_code == 422
+
+    async with session_factory() as session:
+        stored_task = await session.get(Task, UUID(created_task["id"]))
+        blank_task = await session.get(Task, UUID(blank_create_response.json()["id"]))
+        assert stored_task is not None
+        assert blank_task is not None
+        assert stored_task.story_points == 13
+        assert blank_task.story_points is None
+
+    for story_points in (1, 2, 3, 5, 8, 13):
+        update_response = await client.patch(
+            f"/projects/{project_id}/tasks/{created_task['id']}",
+            headers={"Authorization": "Bearer token"},
+            json={"story_points": story_points},
+        )
+        assert update_response.status_code == 200
+        assert update_response.json()["story_points"] == story_points
+
+    read_response = await client.get(
+        f"/projects/{project_id}/tasks/{created_task['id']}",
+        headers={"Authorization": "Bearer token"},
+    )
+    list_response = await client.get(
+        f"/projects/{project_id}/tasks",
+        headers={"Authorization": "Bearer token"},
+    )
+    clear_response = await client.patch(
+        f"/projects/{project_id}/tasks/{created_task['id']}",
+        headers={"Authorization": "Bearer token"},
+        json={"story_points": None},
+    )
+    invalid_update_response = await client.patch(
+        f"/projects/{project_id}/tasks/{created_task['id']}",
+        headers={"Authorization": "Bearer token"},
+        json={"story_points": 21},
+    )
+
+    assert read_response.status_code == 200
+    assert read_response.json()["story_points"] == 13
+    assert list_response.status_code == 200
+    assert {task["story_points"] for task in list_response.json()} == {13, None}
+    assert clear_response.status_code == 200
+    assert clear_response.json()["story_points"] is None
+    assert invalid_update_response.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_task_move_endpoint_returns_server_ranked_task(
     client: AsyncClient,
     users: dict[str, User],
@@ -3342,7 +3548,6 @@ async def test_task_move_endpoint_returns_server_ranked_task(
         json={
             "name": "Move Contract",
             "code": "MOV",
-            "priority": "medium",
             "member_ids": [str(member_id)],
         },
     )
@@ -3396,7 +3601,7 @@ async def test_task_create_and_patch_reject_rank_payloads(
     project_response = await client.post(
         "/projects",
         headers={"Authorization": "Bearer token"},
-        json={"name": "Rank Contract", "code": "RNK", "priority": "medium"},
+        json={"name": "Rank Contract", "code": "RNK"},
     )
     project_id = project_response.json()["id"]
 

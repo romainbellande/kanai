@@ -53,9 +53,8 @@ function createdProjectResponse() {
 		id: "project-1",
 		name: "Client API Integration",
 		code: "CLI",
-		priority: "medium",
 		description: "Persist this project",
-		status: null,
+		status: "active",
 		owner_ids: [],
 		member_ids: [],
 		created_at: null,
@@ -136,7 +135,7 @@ describe("CreateProjectPage", () => {
 		expect(JSON.parse(String(init?.body))).toEqual({
 			name: "Client API Integration",
 			code: "CLI",
-			priority: "medium",
+			status: "active",
 			description: "Persist this project",
 		});
 		expect(routerMocks.navigate).toHaveBeenCalledWith({

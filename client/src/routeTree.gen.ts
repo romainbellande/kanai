@@ -15,6 +15,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProjectsNewRouteImport } from './routes/projects/new'
 import { Route as ProjectsProjectIdRouteImport } from './routes/projects/$projectId'
 import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
+import { Route as ProjectsProjectIdBacklogRouteImport } from './routes/projects_.$projectId.backlog'
 import { Route as ProjectsProjectIdTasksNewRouteImport } from './routes/projects_.$projectId.tasks.new'
 import { Route as ProjectsProjectIdTasksTaskIdRouteImport } from './routes/projects_.$projectId.tasks.$taskId'
 import { Route as ProjectsProjectIdColumnsNewRouteImport } from './routes/projects_.$projectId.columns.new'
@@ -50,6 +51,12 @@ const AuthCallbackRoute = AuthCallbackRouteImport.update({
   path: '/auth/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProjectsProjectIdBacklogRoute =
+  ProjectsProjectIdBacklogRouteImport.update({
+    id: '/projects_/$projectId/backlog',
+    path: '/projects/$projectId/backlog',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ProjectsProjectIdTasksNewRoute =
   ProjectsProjectIdTasksNewRouteImport.update({
     id: '/projects_/$projectId/tasks/new',
@@ -82,6 +89,7 @@ export interface FileRoutesByFullPath {
   '/auth/callback': typeof AuthCallbackRoute
   '/projects/$projectId': typeof ProjectsProjectIdRoute
   '/projects/new': typeof ProjectsNewRoute
+  '/projects/$projectId/backlog': typeof ProjectsProjectIdBacklogRoute
   '/projects/$projectId/columns/$columnId': typeof ProjectsProjectIdColumnsColumnIdRoute
   '/projects/$projectId/columns/new': typeof ProjectsProjectIdColumnsNewRoute
   '/projects/$projectId/tasks/$taskId': typeof ProjectsProjectIdTasksTaskIdRoute
@@ -94,6 +102,7 @@ export interface FileRoutesByTo {
   '/auth/callback': typeof AuthCallbackRoute
   '/projects/$projectId': typeof ProjectsProjectIdRoute
   '/projects/new': typeof ProjectsNewRoute
+  '/projects/$projectId/backlog': typeof ProjectsProjectIdBacklogRoute
   '/projects/$projectId/columns/$columnId': typeof ProjectsProjectIdColumnsColumnIdRoute
   '/projects/$projectId/columns/new': typeof ProjectsProjectIdColumnsNewRoute
   '/projects/$projectId/tasks/$taskId': typeof ProjectsProjectIdTasksTaskIdRoute
@@ -107,6 +116,7 @@ export interface FileRoutesById {
   '/auth/callback': typeof AuthCallbackRoute
   '/projects/$projectId': typeof ProjectsProjectIdRoute
   '/projects/new': typeof ProjectsNewRoute
+  '/projects_/$projectId/backlog': typeof ProjectsProjectIdBacklogRoute
   '/projects_/$projectId/columns/$columnId': typeof ProjectsProjectIdColumnsColumnIdRoute
   '/projects_/$projectId/columns/new': typeof ProjectsProjectIdColumnsNewRoute
   '/projects_/$projectId/tasks/$taskId': typeof ProjectsProjectIdTasksTaskIdRoute
@@ -121,6 +131,7 @@ export interface FileRouteTypes {
     | '/auth/callback'
     | '/projects/$projectId'
     | '/projects/new'
+    | '/projects/$projectId/backlog'
     | '/projects/$projectId/columns/$columnId'
     | '/projects/$projectId/columns/new'
     | '/projects/$projectId/tasks/$taskId'
@@ -133,6 +144,7 @@ export interface FileRouteTypes {
     | '/auth/callback'
     | '/projects/$projectId'
     | '/projects/new'
+    | '/projects/$projectId/backlog'
     | '/projects/$projectId/columns/$columnId'
     | '/projects/$projectId/columns/new'
     | '/projects/$projectId/tasks/$taskId'
@@ -145,6 +157,7 @@ export interface FileRouteTypes {
     | '/auth/callback'
     | '/projects/$projectId'
     | '/projects/new'
+    | '/projects_/$projectId/backlog'
     | '/projects_/$projectId/columns/$columnId'
     | '/projects_/$projectId/columns/new'
     | '/projects_/$projectId/tasks/$taskId'
@@ -158,6 +171,7 @@ export interface RootRouteChildren {
   AuthCallbackRoute: typeof AuthCallbackRoute
   ProjectsProjectIdRoute: typeof ProjectsProjectIdRoute
   ProjectsNewRoute: typeof ProjectsNewRoute
+  ProjectsProjectIdBacklogRoute: typeof ProjectsProjectIdBacklogRoute
   ProjectsProjectIdColumnsColumnIdRoute: typeof ProjectsProjectIdColumnsColumnIdRoute
   ProjectsProjectIdColumnsNewRoute: typeof ProjectsProjectIdColumnsNewRoute
   ProjectsProjectIdTasksTaskIdRoute: typeof ProjectsProjectIdTasksTaskIdRoute
@@ -208,6 +222,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/projects_/$projectId/backlog': {
+      id: '/projects_/$projectId/backlog'
+      path: '/projects/$projectId/backlog'
+      fullPath: '/projects/$projectId/backlog'
+      preLoaderRoute: typeof ProjectsProjectIdBacklogRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/projects_/$projectId/tasks/new': {
       id: '/projects_/$projectId/tasks/new'
       path: '/projects/$projectId/tasks/new'
@@ -246,6 +267,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthCallbackRoute: AuthCallbackRoute,
   ProjectsProjectIdRoute: ProjectsProjectIdRoute,
   ProjectsNewRoute: ProjectsNewRoute,
+  ProjectsProjectIdBacklogRoute: ProjectsProjectIdBacklogRoute,
   ProjectsProjectIdColumnsColumnIdRoute: ProjectsProjectIdColumnsColumnIdRoute,
   ProjectsProjectIdColumnsNewRoute: ProjectsProjectIdColumnsNewRoute,
   ProjectsProjectIdTasksTaskIdRoute: ProjectsProjectIdTasksTaskIdRoute,

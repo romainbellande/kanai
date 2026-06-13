@@ -177,7 +177,6 @@ async def test_create_project_adds_creator_to_owners_by_default(
         creator_user_id=creator.id,
         name="Enterprise Launch",
         code="ENT",
-        priority="medium",
         owner_ids=[owner.id],
         member_ids=[member.id],
     )
@@ -214,7 +213,6 @@ async def test_create_project_adds_default_ordered_columns(
         creator_user_id=creator.id,
         name="Enterprise Launch",
         code="ENT",
-        priority="medium",
     )
 
     assert project.id is not None

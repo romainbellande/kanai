@@ -14,6 +14,7 @@ Name | Type
 `title` | string
 `outcome` | string
 `priority` | string
+`storyPoints` | number
 `rank` | string
 `description` | string
 `acceptanceCriteria` | string
@@ -35,6 +36,7 @@ const example = {
   "title": null,
   "outcome": null,
   "priority": null,
+  "storyPoints": null,
   "rank": null,
   "description": null,
   "acceptanceCriteria": null,

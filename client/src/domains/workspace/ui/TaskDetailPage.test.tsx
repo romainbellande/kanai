@@ -64,6 +64,7 @@ function task(overrides: Partial<Task> = {}): Task {
 		title: "Original Task",
 		columnId: "todo",
 		priority: "medium",
+		storyPoints: 3,
 		rank: "U",
 		assigneeId: null,
 		description: "Original notes",
@@ -80,9 +81,8 @@ function project(overrides: Partial<Project> = {}): Project {
 		id: "project-1",
 		name: "Launch Plan",
 		code: "LCH",
-		priority: "medium",
 		description: null,
-		status: null,
+		status: "active",
 		ownerIds: [],
 		memberIds: [],
 		createdAt: null,
@@ -164,6 +164,7 @@ describe("TaskDetailPage", () => {
 			columnId: "done",
 			description: "Updated notes",
 			priority: "high",
+			storyPoints: 8,
 			title: "Updated Task",
 		});
 		const updatedTaskJson = {
@@ -172,6 +173,7 @@ describe("TaskDetailPage", () => {
 			title: updatedTask.title,
 			column_id: updatedTask.columnId,
 			priority: updatedTask.priority,
+			story_points: updatedTask.storyPoints,
 			rank: updatedTask.rank,
 			assignee_id: updatedTask.assigneeId,
 			description: updatedTask.description,
@@ -208,12 +210,28 @@ describe("TaskDetailPage", () => {
 			["high", "High"],
 			["critical", "Critical"],
 		]);
+		expect(
+			Array.from(
+				screen.getByLabelText<HTMLSelectElement>("Story Points").options,
+			).map((option) => [option.value, option.textContent]),
+		).toEqual([
+			["", "No estimation"],
+			["1", "1"],
+			["2", "2"],
+			["3", "3"],
+			["5", "5"],
+			["8", "8"],
+			["13", "13"],
+		]);
 
 		fireEvent.change(screen.getByLabelText("Task Title"), {
 			target: { value: "Updated Task" },
 		});
 		fireEvent.change(screen.getByLabelText("Priority"), {
 			target: { value: "high" },
+		});
+		fireEvent.change(screen.getByLabelText("Story Points"), {
+			target: { value: "8" },
 		});
 		fireEvent.change(screen.getByLabelText("Workflow"), {
 			target: { value: "done" },
@@ -230,6 +248,7 @@ describe("TaskDetailPage", () => {
 			acceptance_criteria: "Original criteria",
 			description: "Updated notes",
 			priority: "high",
+			story_points: 8,
 			tag: "Feature",
 			title: "Updated Task",
 		});
@@ -319,7 +338,7 @@ describe("TaskDetailPage", () => {
 			screen.getByRole("link", { name: "Back to the Backlog" }),
 		).toHaveProperty(
 			"href",
-			expect.stringContaining("/projects/project-1?view=backlog"),
+			expect.stringContaining("/projects/project-1/backlog"),
 		);
 		expect(screen.queryByRole("link", { name: "Back to Board" })).toBeNull();
 	});

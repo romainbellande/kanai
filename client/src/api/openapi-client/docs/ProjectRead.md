@@ -1,7 +1,7 @@
 
 # ProjectRead
 
-Defines the project response payload.  Attributes:     id: Project identifier.     name: Project display name.     code: Three-character project code.     priority: Project priority label.     description: Optional project description.     status: Optional project status label.     owner_ids: User IDs assigned as project owners.     member_ids: User IDs assigned as project members.     created_at: Optional timestamp when the project was created.     updated_at: Optional timestamp when the project was last updated.
+Defines the project response payload.  Attributes:     id: Project identifier.     name: Project display name.     code: Three-character project code.     description: Optional project description.     status: Project lifecycle status.     owner_ids: User IDs assigned as project owners.     member_ids: User IDs assigned as project members.     created_at: Optional timestamp when the project was created.     updated_at: Optional timestamp when the project was last updated.
 
 ## Properties
 
@@ -10,7 +10,6 @@ Name | Type
 `id` | string
 `name` | string
 `code` | string
-`priority` | string
 `description` | string
 `status` | string
 `ownerIds` | Array&lt;string&gt;
@@ -28,7 +27,6 @@ const example = {
   "id": null,
   "name": null,
   "code": null,
-  "priority": null,
   "description": null,
   "status": null,
   "ownerIds": null,

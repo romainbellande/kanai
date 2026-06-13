@@ -21,6 +21,7 @@ import { mapValues } from '../runtime';
  *     title: Optional replacement task title.
  *     column_id: Optional replacement workflow column ID.
  *     priority: Optional replacement priority level. Explicit null clears it.
+ *     story_points: Optional replacement Story Points estimate. Explicit null clears it.
  *     assignee_id: Optional replacement user ID assigned to the task.
  *     description: Optional replacement task details.
  *     acceptance_criteria: Optional replacement completion criteria.
@@ -47,6 +48,12 @@ export interface TaskUpdate {
      * @memberof TaskUpdate
      */
     priority?: string | null;
+    /**
+     * 
+     * @type {number}
+     * @memberof TaskUpdate
+     */
+    storyPoints?: number | null;
     /**
      * 
      * @type {string}
@@ -93,6 +100,7 @@ export function TaskUpdateFromJSONTyped(json: any, ignoreDiscriminator: boolean)
         'title': json['title'] == null ? undefined : json['title'],
         'columnId': json['column_id'] == null ? undefined : json['column_id'],
         'priority': json['priority'] == null ? undefined : json['priority'],
+        'storyPoints': json['story_points'] == null ? undefined : json['story_points'],
         'assigneeId': json['assignee_id'] == null ? undefined : json['assignee_id'],
         'description': json['description'] == null ? undefined : json['description'],
         'acceptanceCriteria': json['acceptance_criteria'] == null ? undefined : json['acceptance_criteria'],
@@ -114,6 +122,7 @@ export function TaskUpdateToJSONTyped(value?: TaskUpdate | null, ignoreDiscrimin
         'title': value['title'],
         'column_id': value['columnId'],
         'priority': value['priority'],
+        'story_points': value['storyPoints'],
         'assignee_id': value['assigneeId'],
         'description': value['description'],
         'acceptance_criteria': value['acceptanceCriteria'],

@@ -11,14 +11,25 @@ import {
 } from "#/api/client";
 import { WorkspaceLayout } from "#/domains/workspace/ui/templates/WorkspaceLayout";
 
+const PROJECT_STATUS_LABELS = {
+	active: "Active",
+	paused: "Paused",
+	blocked: "Blocked",
+	done: "Done",
+} as const;
+
 function getProjectStatus(project: Project): { status: string; tone: string } {
-	const normalizedStatus = project.status?.trim();
-	const status = normalizedStatus || "Active";
-	const tone = /blocked|risk|review/i.test(status)
-		? "warning"
-		: /done|complete|closed/i.test(status)
-			? "secondary"
-			: "primary";
+	const normalizedStatus = project.status?.trim().toLowerCase();
+	const status =
+		PROJECT_STATUS_LABELS[
+			normalizedStatus as keyof typeof PROJECT_STATUS_LABELS
+		] ?? PROJECT_STATUS_LABELS.active;
+	const tone =
+		normalizedStatus === "blocked"
+			? "warning"
+			: normalizedStatus === "done"
+				? "secondary"
+				: "primary";
 
 	return { status, tone };
 }

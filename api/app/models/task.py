@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import Column, DateTime, ForeignKey, String, Uuid, func
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Uuid, func
 from sqlmodel import Field, SQLModel
 
 
@@ -41,6 +41,10 @@ class Task(SQLModel, table=True):
     )
     title: str = Field(sa_column=Column(String(), nullable=False))
     priority: str = Field(sa_column=Column(String(), nullable=False))
+    story_points: int | None = Field(
+        default=None,
+        sa_column=Column(Integer(), nullable=True),
+    )
     rank: str = Field(
         default="U",
         sa_column=Column("task_rank", String(), nullable=False, server_default="U"),

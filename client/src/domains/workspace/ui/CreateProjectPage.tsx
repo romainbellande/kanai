@@ -3,6 +3,10 @@ import { CirclePlus } from "lucide-react";
 import { type FormEvent, useState } from "react";
 
 import { useCreateProjectMutation } from "#/api/client";
+import { Button } from "#/components/ui/button";
+import { Field, FieldDescription, FieldLabel } from "#/components/ui/field";
+import { Input } from "#/components/ui/input";
+import { Textarea } from "#/components/ui/textarea";
 import { WorkspaceLayout } from "#/domains/workspace/ui/templates/WorkspaceLayout";
 
 function createProjectCode(value: string): string {
@@ -28,7 +32,6 @@ export function CreateProjectPage() {
 		const code = String(formData.get("projectCode") ?? "")
 			.trim()
 			.toUpperCase();
-		const priority = String(formData.get("projectPriority") ?? "medium");
 		const description = String(formData.get("projectDescription") ?? "").trim();
 
 		if (!name) {
@@ -47,7 +50,7 @@ export function CreateProjectPage() {
 			const project = await createProjectMutation.mutateAsync({
 				name,
 				code,
-				priority,
+				status: "active",
 				description: description || undefined,
 			});
 
@@ -83,15 +86,14 @@ export function CreateProjectPage() {
 			<section className="rise-in rounded-[1.75rem] border border-[color:color-mix(in_srgb,var(--outline-variant)_50%,transparent)] bg-[var(--surface-container-lowest)] p-6 shadow-[0_18px_42px_rgba(25,28,30,0.04)] sm:p-10">
 				<form className="flex flex-col gap-8" onSubmit={handleSubmit}>
 					<div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-						<div className="sm:col-span-2">
-							<label
-								className="mb-2 block text-sm font-semibold text-[var(--on-surface)]"
+						<Field className="sm:col-span-2">
+							<FieldLabel
+								className="text-sm font-semibold text-[var(--on-surface)]"
 								htmlFor="projectName"
 							>
 								Project Name
-							</label>
-							<input
-								className="w-full rounded-lg border border-[var(--outline-variant)] bg-[var(--surface)] px-4 py-3 text-base text-[var(--on-surface)] outline-none transition placeholder:text-[var(--outline)] focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]"
+							</FieldLabel>
+							<Input
 								id="projectName"
 								name="projectName"
 								onChange={(event) =>
@@ -101,17 +103,17 @@ export function CreateProjectPage() {
 								required
 								type="text"
 							/>
-						</div>
+						</Field>
 
-						<div>
-							<label
-								className="mb-2 block text-sm font-semibold text-[var(--on-surface)]"
+						<Field>
+							<FieldLabel
+								className="text-sm font-semibold text-[var(--on-surface)]"
 								htmlFor="projectCode"
 							>
 								Project Code
-							</label>
-							<input
-								className="w-full rounded-lg border border-[var(--outline-variant)] bg-[var(--surface)] px-4 py-3 text-base text-[var(--on-surface)] uppercase outline-none transition placeholder:text-[var(--outline)] focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]"
+							</FieldLabel>
+							<Input
+								className="uppercase"
 								id="projectCode"
 								maxLength={3}
 								minLength={3}
@@ -126,45 +128,25 @@ export function CreateProjectPage() {
 								type="text"
 								value={projectCode}
 							/>
-							<p className="mt-2 text-xs text-[var(--on-surface-variant)]">
+							<FieldDescription className="text-xs text-[var(--on-surface-variant)]">
 								Auto-generated from the project name, but editable.
-							</p>
-						</div>
+							</FieldDescription>
+						</Field>
 
-						<div>
-							<label
-								className="mb-2 block text-sm font-semibold text-[var(--on-surface)]"
-								htmlFor="projectPriority"
-							>
-								Priority
-							</label>
-							<select
-								className="w-full rounded-lg border border-[var(--outline-variant)] bg-[var(--surface)] px-4 py-3 text-base text-[var(--on-surface)] outline-none transition focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]"
-								defaultValue="medium"
-								id="projectPriority"
-								name="projectPriority"
-							>
-								<option value="low">Low</option>
-								<option value="medium">Medium</option>
-								<option value="high">High</option>
-							</select>
-						</div>
-
-						<div className="sm:col-span-2">
-							<label
-								className="mb-2 block text-sm font-semibold text-[var(--on-surface)]"
+						<Field className="sm:col-span-2">
+							<FieldLabel
+								className="text-sm font-semibold text-[var(--on-surface)]"
 								htmlFor="projectDescription"
 							>
 								Description
-							</label>
-							<textarea
-								className="w-full resize-none rounded-lg border border-[var(--outline-variant)] bg-[var(--surface)] px-4 py-3 text-base text-[var(--on-surface)] outline-none transition placeholder:text-[var(--outline)] focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]"
+							</FieldLabel>
+							<Textarea
 								id="projectDescription"
 								name="projectDescription"
 								placeholder="Briefly describe the goals and scope of this project..."
 								rows={4}
 							/>
-						</div>
+						</Field>
 
 						<div className="sm:col-span-2 rounded-2xl border border-dashed border-[var(--outline-variant)] bg-[var(--surface-container-low)] p-4 text-sm leading-6 text-[var(--on-surface-variant)]">
 							Project members are not editable until the user directory API is
@@ -186,16 +168,16 @@ export function CreateProjectPage() {
 						>
 							Cancel
 						</Link>
-						<button
+						<Button
 							disabled={createProjectMutation.isPending}
 							type="submit"
-							className="inline-flex items-center justify-center gap-2 rounded-full bg-[var(--primary)] px-5 py-2.5 text-sm font-semibold text-[color:var(--on-primary)] shadow-[0_12px_28px_rgba(0,61,155,0.18)] transition hover:bg-[var(--primary-container)]"
+							className="h-auto rounded-full bg-[var(--primary)] px-5 py-2.5 text-sm font-semibold text-[color:var(--on-primary)] shadow-[0_12px_28px_rgba(0,61,155,0.18)] transition hover:bg-[var(--primary-container)]"
 						>
-							<CirclePlus className="h-4 w-4" />
+							<CirclePlus data-icon="inline-start" />
 							{createProjectMutation.isPending
 								? "Creating..."
 								: "Create Project"}
-						</button>
+						</Button>
 					</div>
 				</form>
 			</section>

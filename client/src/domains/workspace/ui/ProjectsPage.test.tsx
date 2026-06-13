@@ -77,9 +77,8 @@ describe("ProjectsPage", () => {
 				id: "project-api-id",
 				name: "Persisted Project",
 				code: "PRS",
-				priority: "high",
 				description: "Loaded from API",
-				status: "on-track",
+				status: "blocked",
 				ownerIds: [],
 				memberIds: [],
 				createdAt: null,
@@ -91,7 +90,7 @@ describe("ProjectsPage", () => {
 
 		expect(screen.getByText("Persisted Project")).toBeTruthy();
 		expect(screen.getByText("Loaded from API")).toBeTruthy();
-		expect(screen.getByText("on-track")).toBeTruthy();
+		expect(screen.getByText("Blocked")).toBeTruthy();
 		expect(
 			screen.getByRole("link", { name: /open board/i }).getAttribute("href"),
 		).toBe("/projects/project-api-id");
@@ -135,9 +134,8 @@ describe("ProjectsPage", () => {
 				id: "project-api-id",
 				name: "Persisted Project",
 				code: "PRS",
-				priority: "high",
 				description: "Loaded from API",
-				status: "on-track",
+				status: "active",
 				ownerIds: [],
 				memberIds: [],
 				createdAt: null,

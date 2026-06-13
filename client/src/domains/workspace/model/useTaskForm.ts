@@ -4,11 +4,13 @@ import { useEffect, useState } from "react";
 import { type ProjectColumn, type Task, useKanaiApi } from "#/api/client";
 
 const NO_TASK_PRIORITY = "";
+export const STORY_POINT_OPTIONS = [1, 2, 3, 5, 8, 13] as const;
 
 export type TaskFormValues = {
 	title: string;
 	status: string;
 	priority: string;
+	storyPoints: string;
 	description: string;
 	acceptanceCriteria: string;
 	tag: string;
@@ -125,6 +127,7 @@ function createInitialValues(
 		title: "",
 		status: initialColumnId ?? "",
 		priority: NO_TASK_PRIORITY,
+		storyPoints: "",
 		description: "",
 		acceptanceCriteria: "",
 		tag: "",
@@ -136,6 +139,7 @@ function editInitialValues(task: Task | null | undefined): TaskFormValues {
 		title: task?.title ?? "",
 		status: task?.columnId ?? "todo",
 		priority: normalizeTaskPriority(task?.priority),
+		storyPoints: task?.storyPoints?.toString() ?? "",
 		description: task?.description ?? "",
 		acceptanceCriteria: task?.acceptanceCriteria ?? "",
 		tag: task?.tag ?? "",
@@ -148,6 +152,20 @@ function normalizeTaskPriority(priority: string | null | undefined): string {
 		return "critical";
 	}
 	return normalizedPriority;
+}
+
+function taskStoryPointsToPayload(
+	storyPoints: string,
+): number | null | undefined {
+	if (storyPoints === "") {
+		return null;
+	}
+	const value = Number(storyPoints);
+	return STORY_POINT_OPTIONS.includes(
+		value as (typeof STORY_POINT_OPTIONS)[number],
+	)
+		? value
+		: undefined;
 }
 
 function initialValues(input: UseTaskFormInput): TaskFormValues {
@@ -233,6 +251,7 @@ export function useTaskForm(input: UseTaskFormInput) {
 		const acceptanceCriteria = values.acceptanceCriteria.trim();
 		const tag = values.tag.trim();
 		const priority = normalizeTaskPriority(values.priority);
+		const storyPoints = taskStoryPointsToPayload(values.storyPoints);
 
 		if (!title) {
 			setErrorMessage("Task title is required.");
@@ -252,6 +271,7 @@ export function useTaskForm(input: UseTaskFormInput) {
 						title,
 						columnId: values.status,
 						priority: priority || null,
+						storyPoints: storyPoints ?? null,
 						description: description || null,
 						acceptanceCriteria: acceptanceCriteria || null,
 						tag: tag || null,
@@ -272,6 +292,7 @@ export function useTaskForm(input: UseTaskFormInput) {
 					? { includeInActiveSprint: true }
 					: {}),
 				priority: priority || undefined,
+				storyPoints: storyPoints ?? undefined,
 				description: description || undefined,
 				acceptanceCriteria: acceptanceCriteria || undefined,
 				tag: tag || undefined,

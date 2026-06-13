@@ -24,6 +24,7 @@ import { mapValues } from '../runtime';
  *     title: Task title.
  *     column_id: Workflow column ID for the task.
  *     priority: Optional priority level for the task.
+ *     story_points: Optional Story Points estimate.
  *     rank: Sortable LexoRank-style position within the task column.
  *     backlog_rank: Optional manual rank within the project backlog.
  *     assignee_id: Optional user ID assigned to the task.
@@ -37,85 +38,91 @@ import { mapValues } from '../runtime';
  */
 export interface TaskRead {
     /**
-     *
+     * 
      * @type {string}
      * @memberof TaskRead
      */
     id: string;
     /**
-     *
+     * 
      * @type {string}
      * @memberof TaskRead
      */
     projectId: string;
     /**
-     *
+     * 
      * @type {string}
      * @memberof TaskRead
      */
     sprintId: string | null;
     /**
-     *
+     * 
      * @type {string}
      * @memberof TaskRead
      */
     columnId: string;
     /**
-     *
+     * 
      * @type {string}
      * @memberof TaskRead
      */
     title: string;
     /**
-     *
+     * 
      * @type {string}
      * @memberof TaskRead
      */
     priority: string | null;
     /**
-     *
+     * 
+     * @type {number}
+     * @memberof TaskRead
+     */
+    storyPoints: number | null;
+    /**
+     * 
      * @type {string}
      * @memberof TaskRead
      */
     rank: string;
     /**
-     *
+     * 
      * @type {string}
      * @memberof TaskRead
      */
     backlogRank: string | null;
     /**
-     *
+     * 
      * @type {string}
      * @memberof TaskRead
      */
     assigneeId: string | null;
     /**
-     *
+     * 
      * @type {string}
      * @memberof TaskRead
      */
     description: string | null;
     /**
-     *
+     * 
      * @type {string}
      * @memberof TaskRead
      */
     acceptanceCriteria: string | null;
     /**
-     *
+     * 
      * @type {string}
      * @memberof TaskRead
      */
     tag: string | null;
     /**
-     *
+     * 
      * @type {Date}
      * @memberof TaskRead
      */
     createdAt: Date | null;
     /**
-     *
+     * 
      * @type {Date}
      * @memberof TaskRead
      */
@@ -132,6 +139,7 @@ export function instanceOfTaskRead(value: object): value is TaskRead {
     if (!('columnId' in value) || value['columnId'] === undefined) return false;
     if (!('title' in value) || value['title'] === undefined) return false;
     if (!('priority' in value) || value['priority'] === undefined) return false;
+    if (!('storyPoints' in value) || value['storyPoints'] === undefined) return false;
     if (!('rank' in value) || value['rank'] === undefined) return false;
     if (!('backlogRank' in value) || value['backlogRank'] === undefined) return false;
     if (!('assigneeId' in value) || value['assigneeId'] === undefined) return false;
@@ -159,6 +167,7 @@ export function TaskReadFromJSONTyped(json: any, ignoreDiscriminator: boolean): 
         'columnId': json['column_id'],
         'title': json['title'],
         'priority': json['priority'],
+        'storyPoints': json['story_points'],
         'rank': json['rank'],
         'backlogRank': json['backlog_rank'],
         'assigneeId': json['assignee_id'],
@@ -187,6 +196,7 @@ export function TaskReadToJSONTyped(value?: TaskRead | null, ignoreDiscriminator
         'column_id': value['columnId'],
         'title': value['title'],
         'priority': value['priority'],
+        'story_points': value['storyPoints'],
         'rank': value['rank'],
         'backlog_rank': value['backlogRank'],
         'assignee_id': value['assigneeId'],

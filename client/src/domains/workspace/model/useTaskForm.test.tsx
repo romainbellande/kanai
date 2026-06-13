@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
 	getTaskFormWorkflowState,
+	STORY_POINT_OPTIONS,
 	useTaskForm,
 } from "#/domains/workspace/model/useTaskForm";
 
@@ -36,6 +37,7 @@ function createdTask(overrides: Record<string, unknown> = {}) {
 		title: "Created task",
 		column_id: "todo",
 		priority: null,
+		story_points: null,
 		rank: "0|hzzzzz:",
 		assignee_id: null,
 		description: null,
@@ -56,6 +58,7 @@ function task(overrides: Record<string, unknown> = {}) {
 		title: "Existing task",
 		columnId: "in-progress",
 		priority: "high",
+		storyPoints: 5,
 		rank: "0|hzzzzz:",
 		assigneeId: null,
 		description: "Current notes",
@@ -201,6 +204,7 @@ describe("useTaskForm create mode", () => {
 			title: "",
 			status: "column-unknown",
 			priority: "",
+			storyPoints: "",
 			description: "",
 			acceptanceCriteria: "",
 			tag: "",
@@ -275,6 +279,7 @@ describe("useTaskForm create mode", () => {
 						title: "Created task",
 						column_id: "done",
 						priority: "high",
+						story_points: 8,
 						description: "Useful notes",
 						acceptance_criteria: "Done means done",
 					}),
@@ -302,6 +307,7 @@ describe("useTaskForm create mode", () => {
 			result.current.setField("title", "  Created task  ");
 			result.current.setField("status", "column-done");
 			result.current.setField("priority", "high");
+			result.current.setField("storyPoints", "8");
 			result.current.setField("description", "  Useful notes  ");
 			result.current.setField("acceptanceCriteria", "  Done means done  ");
 		});
@@ -316,11 +322,47 @@ describe("useTaskForm create mode", () => {
 			title: "Created task",
 			column_id: "column-done",
 			priority: "high",
+			story_points: 8,
 			description: "Useful notes",
 			acceptance_criteria: "Done means done",
 		});
 		expect(onSaved).toHaveBeenCalledWith(
 			expect.objectContaining({ id: "task-1", title: "Created task" }),
+		);
+	});
+
+	it("submits supported story point options on create", async () => {
+		const queryClient = createTestQueryClient();
+		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(JSON.stringify(createdTask({ story_points: 13 })), {
+				headers: { "content-type": "application/json" },
+				status: 200,
+			}),
+		);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		const { result } = renderHook(
+			() =>
+				useTaskForm({
+					projectId: "project-1",
+					mode: "create",
+					workflowColumns: [{ id: "column-todo", name: "To Do" }],
+				}),
+			{ wrapper: createWrapper(queryClient) },
+		);
+
+		act(() => {
+			result.current.setField("title", "Estimated task");
+			result.current.setField("storyPoints", "13");
+		});
+
+		await act(async () => {
+			await result.current.submit();
+		});
+
+		expect(STORY_POINT_OPTIONS).toEqual([1, 2, 3, 5, 8, 13]);
+		expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toEqual(
+			expect.objectContaining({ story_points: 13 }),
 		);
 	});
 
@@ -512,6 +554,7 @@ describe("useTaskForm edit mode", () => {
 			title: "Existing task",
 			status: "in-progress",
 			priority: "high",
+			storyPoints: "5",
 			description: "Current notes",
 			acceptanceCriteria: "Current criteria",
 			tag: "frontend",
@@ -537,6 +580,7 @@ describe("useTaskForm edit mode", () => {
 						title: "Updated task",
 						column_id: "done",
 						priority: "critical",
+						story_points: 8,
 						description: null,
 						acceptance_criteria: null,
 						tag: null,
@@ -567,6 +611,7 @@ describe("useTaskForm edit mode", () => {
 			result.current.setField("title", "  Updated task  ");
 			result.current.setField("status", "done");
 			result.current.setField("priority", "critical");
+			result.current.setField("storyPoints", "8");
 			result.current.setField("description", "   ");
 			result.current.setField("acceptanceCriteria", "   ");
 			result.current.setField("tag", "   ");
@@ -582,6 +627,7 @@ describe("useTaskForm edit mode", () => {
 			title: "Updated task",
 			column_id: "done",
 			priority: "critical",
+			story_points: 8,
 			description: null,
 			acceptance_criteria: null,
 			tag: null,
@@ -651,6 +697,49 @@ describe("useTaskForm edit mode", () => {
 		const [, init] = fetchSpy.mock.calls[0];
 		expect(JSON.parse(String(init?.body))).toEqual(
 			expect.objectContaining({ priority: null }),
+		);
+	});
+
+	it("clears story points on edit submit", async () => {
+		const queryClient = createTestQueryClient();
+		const existingTask = task({ storyPoints: 8 });
+		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(
+				JSON.stringify(
+					createdTask({
+						title: "Existing task",
+						column_id: "in-progress",
+						story_points: null,
+					}),
+				),
+				{ headers: { "content-type": "application/json" }, status: 200 },
+			),
+		);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		const { result } = renderHook(
+			() =>
+				useTaskForm({
+					projectId: "project-1",
+					mode: "edit",
+					taskId: "task-1",
+					task: existingTask,
+					workflowColumns: [{ id: "in-progress", name: "In Progress" }],
+				}),
+			{ wrapper: createWrapper(queryClient) },
+		);
+
+		act(() => {
+			result.current.setField("storyPoints", "");
+		});
+
+		await act(async () => {
+			await result.current.submit();
+		});
+
+		const [, init] = fetchSpy.mock.calls[0];
+		expect(JSON.parse(String(init?.body))).toEqual(
+			expect.objectContaining({ story_points: null }),
 		);
 	});
 

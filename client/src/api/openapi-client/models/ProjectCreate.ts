@@ -20,9 +20,8 @@ import { mapValues } from '../runtime';
  * Attributes:
  *     name: Project display name.
  *     code: Three-character project code using uppercase letters or digits.
- *     priority: Project priority label.
  *     description: Optional project description. Defaults to None.
- *     status: Optional project status label. Defaults to None.
+ *     status: Project lifecycle status. Defaults to active.
  *     owner_ids: User IDs assigned as project owners. Defaults to an empty list.
  *     member_ids: User IDs assigned as project members. Defaults to an empty list.
  * @export
@@ -46,19 +45,13 @@ export interface ProjectCreate {
      * @type {string}
      * @memberof ProjectCreate
      */
-    priority: string;
-    /**
-     * 
-     * @type {string}
-     * @memberof ProjectCreate
-     */
     description?: string | null;
     /**
      * 
-     * @type {string}
+     * @type {ProjectCreateStatusEnum}
      * @memberof ProjectCreate
      */
-    status?: string | null;
+    status?: ProjectCreateStatusEnum;
     /**
      * 
      * @type {Array<string>}
@@ -73,13 +66,25 @@ export interface ProjectCreate {
     memberIds?: Array<string>;
 }
 
+
+/**
+ * @export
+ */
+export const ProjectCreateStatusEnum = {
+    Active: 'active',
+    Paused: 'paused',
+    Blocked: 'blocked',
+    Done: 'done'
+} as const;
+export type ProjectCreateStatusEnum = typeof ProjectCreateStatusEnum[keyof typeof ProjectCreateStatusEnum];
+
+
 /**
  * Check if a given object implements the ProjectCreate interface.
  */
 export function instanceOfProjectCreate(value: object): value is ProjectCreate {
     if (!('name' in value) || value['name'] === undefined) return false;
     if (!('code' in value) || value['code'] === undefined) return false;
-    if (!('priority' in value) || value['priority'] === undefined) return false;
     return true;
 }
 
@@ -95,7 +100,6 @@ export function ProjectCreateFromJSONTyped(json: any, ignoreDiscriminator: boole
         
         'name': json['name'],
         'code': json['code'],
-        'priority': json['priority'],
         'description': json['description'] == null ? undefined : json['description'],
         'status': json['status'] == null ? undefined : json['status'],
         'ownerIds': json['owner_ids'] == null ? undefined : json['owner_ids'],
@@ -116,7 +120,6 @@ export function ProjectCreateToJSONTyped(value?: ProjectCreate | null, ignoreDis
         
         'name': value['name'],
         'code': value['code'],
-        'priority': value['priority'],
         'description': value['description'],
         'status': value['status'],
         'owner_ids': value['ownerIds'],

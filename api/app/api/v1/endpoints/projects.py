@@ -71,7 +71,6 @@ async def create_project_endpoint(
         creator_user_id=require_current_user_id(current_user.id),
         name=payload.name,
         code=payload.code,
-        priority=payload.priority,
         description=payload.description,
         status_value=payload.status,
         owner_ids=payload.owner_ids,

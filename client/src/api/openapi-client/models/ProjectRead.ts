@@ -21,9 +21,8 @@ import { mapValues } from '../runtime';
  *     id: Project identifier.
  *     name: Project display name.
  *     code: Three-character project code.
- *     priority: Project priority label.
  *     description: Optional project description.
- *     status: Optional project status label.
+ *     status: Project lifecycle status.
  *     owner_ids: User IDs assigned as project owners.
  *     member_ids: User IDs assigned as project members.
  *     created_at: Optional timestamp when the project was created.
@@ -55,19 +54,13 @@ export interface ProjectRead {
      * @type {string}
      * @memberof ProjectRead
      */
-    priority: string;
-    /**
-     * 
-     * @type {string}
-     * @memberof ProjectRead
-     */
     description: string | null;
     /**
      * 
-     * @type {string}
+     * @type {ProjectReadStatusEnum}
      * @memberof ProjectRead
      */
-    status: string | null;
+    status: ProjectReadStatusEnum;
     /**
      * 
      * @type {Array<string>}
@@ -94,6 +87,19 @@ export interface ProjectRead {
     updatedAt: Date | null;
 }
 
+
+/**
+ * @export
+ */
+export const ProjectReadStatusEnum = {
+    Active: 'active',
+    Paused: 'paused',
+    Blocked: 'blocked',
+    Done: 'done'
+} as const;
+export type ProjectReadStatusEnum = typeof ProjectReadStatusEnum[keyof typeof ProjectReadStatusEnum];
+
+
 /**
  * Check if a given object implements the ProjectRead interface.
  */
@@ -101,7 +107,6 @@ export function instanceOfProjectRead(value: object): value is ProjectRead {
     if (!('id' in value) || value['id'] === undefined) return false;
     if (!('name' in value) || value['name'] === undefined) return false;
     if (!('code' in value) || value['code'] === undefined) return false;
-    if (!('priority' in value) || value['priority'] === undefined) return false;
     if (!('description' in value) || value['description'] === undefined) return false;
     if (!('status' in value) || value['status'] === undefined) return false;
     if (!('ownerIds' in value) || value['ownerIds'] === undefined) return false;
@@ -124,7 +129,6 @@ export function ProjectReadFromJSONTyped(json: any, ignoreDiscriminator: boolean
         'id': json['id'],
         'name': json['name'],
         'code': json['code'],
-        'priority': json['priority'],
         'description': json['description'],
         'status': json['status'],
         'ownerIds': json['owner_ids'],
@@ -148,7 +152,6 @@ export function ProjectReadToJSONTyped(value?: ProjectRead | null, ignoreDiscrim
         'id': value['id'],
         'name': value['name'],
         'code': value['code'],
-        'priority': value['priority'],
         'description': value['description'],
         'status': value['status'],
         'owner_ids': value['ownerIds'],

@@ -64,6 +64,12 @@ export interface ProjectSprintTaskSnapshotRead {
     priority: string | null;
     /**
      * 
+     * @type {number}
+     * @memberof ProjectSprintTaskSnapshotRead
+     */
+    storyPoints: number | null;
+    /**
+     * 
      * @type {string}
      * @memberof ProjectSprintTaskSnapshotRead
      */
@@ -111,6 +117,7 @@ export function instanceOfProjectSprintTaskSnapshotRead(value: object): value is
     if (!('title' in value) || value['title'] === undefined) return false;
     if (!('outcome' in value) || value['outcome'] === undefined) return false;
     if (!('priority' in value) || value['priority'] === undefined) return false;
+    if (!('storyPoints' in value) || value['storyPoints'] === undefined) return false;
     if (!('rank' in value) || value['rank'] === undefined) return false;
     if (!('description' in value) || value['description'] === undefined) return false;
     if (!('acceptanceCriteria' in value) || value['acceptanceCriteria'] === undefined) return false;
@@ -136,6 +143,7 @@ export function ProjectSprintTaskSnapshotReadFromJSONTyped(json: any, ignoreDisc
         'title': json['title'],
         'outcome': json['outcome'],
         'priority': json['priority'],
+        'storyPoints': json['story_points'],
         'rank': json['rank'],
         'description': json['description'],
         'acceptanceCriteria': json['acceptance_criteria'],
@@ -163,6 +171,7 @@ export function ProjectSprintTaskSnapshotReadToJSONTyped(value?: ProjectSprintTa
         'title': value['title'],
         'outcome': value['outcome'],
         'priority': value['priority'],
+        'story_points': value['storyPoints'],
         'rank': value['rank'],
         'description': value['description'],
         'acceptance_criteria': value['acceptanceCriteria'],

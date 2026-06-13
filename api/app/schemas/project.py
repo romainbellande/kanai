@@ -3,13 +3,15 @@
 from datetime import date, datetime
 from uuid import UUID
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.schemas.task import TaskRead
 
 NULLABLE_UPDATE_FIELD = "nullable_update_field"
+ProjectStatus = Literal["active", "paused", "blocked", "done"]
+DEFAULT_PROJECT_STATUS: ProjectStatus = "active"
 
 
 class ProjectCreate(BaseModel):
@@ -18,18 +20,18 @@ class ProjectCreate(BaseModel):
     Attributes:
         name: Project display name.
         code: Three-character project code using uppercase letters or digits.
-        priority: Project priority label.
         description: Optional project description. Defaults to None.
-        status: Optional project status label. Defaults to None.
+        status: Project lifecycle status. Defaults to active.
         owner_ids: User IDs assigned as project owners. Defaults to an empty list.
         member_ids: User IDs assigned as project members. Defaults to an empty list.
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     name: str
     code: str = Field(min_length=3, max_length=3, pattern=r"^[A-Z0-9]{3}$")
-    priority: str
     description: str | None = None
-    status: str | None = None
+    status: ProjectStatus = DEFAULT_PROJECT_STATUS
     owner_ids: list[UUID] = Field(default_factory=list)
     member_ids: list[UUID] = Field(default_factory=list)
 
@@ -41,7 +43,6 @@ class ProjectUpdate(BaseModel):
         name: Optional updated project display name. Defaults to None.
         code: Optional updated three-character project code using uppercase letters
             or digits. Defaults to None.
-        priority: Optional updated project priority label. Defaults to None.
         description: Optional updated project description. Defaults to None.
         status: Optional updated project status label. Defaults to None.
         owner_ids: Optional replacement list of owner user IDs. Defaults to None.
@@ -54,12 +55,11 @@ class ProjectUpdate(BaseModel):
     code: str | None = Field(
         default=None, min_length=3, max_length=3, pattern=r"^[A-Z0-9]{3}$"
     )
-    priority: str | None = None
     description: str | None = Field(
         default=None,
         json_schema_extra={NULLABLE_UPDATE_FIELD: True},
     )
-    status: str | None = None
+    status: ProjectStatus | None = None
     owner_ids: list[UUID] | None = None
     member_ids: list[UUID] | None = None
 
@@ -108,9 +108,8 @@ class ProjectRead(BaseModel):
         id: Project identifier.
         name: Project display name.
         code: Three-character project code.
-        priority: Project priority label.
         description: Optional project description.
-        status: Optional project status label.
+        status: Project lifecycle status.
         owner_ids: User IDs assigned as project owners.
         member_ids: User IDs assigned as project members.
         created_at: Optional timestamp when the project was created.
@@ -122,9 +121,8 @@ class ProjectRead(BaseModel):
     id: UUID
     name: str
     code: str
-    priority: str
     description: str | None
-    status: str | None
+    status: ProjectStatus
     owner_ids: list[UUID]
     member_ids: list[UUID]
     created_at: datetime | None
@@ -241,6 +239,7 @@ class ProjectSprintTaskSnapshotRead(BaseModel):
     title: str
     outcome: str
     priority: str | None
+    story_points: int | None
     rank: str
     description: str | None
     acceptance_criteria: str | None

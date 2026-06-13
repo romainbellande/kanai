@@ -61,6 +61,7 @@ export type ProjectSprintTaskSnapshot = {
 	title: string;
 	outcome: "finished" | "unfinished";
 	priority: string | null;
+	storyPoints: number | null;
 	rank: string;
 	description: string | null;
 	acceptanceCriteria: string | null;
@@ -147,6 +148,7 @@ type ProjectSprintTaskSnapshotJson = {
 	title: string;
 	outcome: "finished" | "unfinished";
 	priority: string | null;
+	story_points?: number | null;
 	rank: string;
 	description: string | null;
 	acceptance_criteria: string | null;
@@ -174,6 +176,7 @@ type TaskJson = {
 	title: string;
 	column_id: string;
 	priority: string | null;
+	story_points?: number | null;
 	rank: string;
 	backlog_rank?: string | null;
 	assignee_id: string | null;
@@ -287,6 +290,7 @@ function mapTask(task: TaskJson): Task {
 		title: task.title,
 		columnId: task.column_id,
 		priority: task.priority,
+		storyPoints: task.story_points ?? null,
 		rank: task.rank,
 		backlogRank: task.backlog_rank ?? null,
 		assigneeId: task.assignee_id,
@@ -309,6 +313,7 @@ function mapProjectSprintTaskSnapshot(
 		title: snapshot.title,
 		outcome: snapshot.outcome,
 		priority: snapshot.priority,
+		storyPoints: snapshot.story_points ?? null,
 		rank: snapshot.rank,
 		description: snapshot.description,
 		acceptanceCriteria: snapshot.acceptance_criteria,

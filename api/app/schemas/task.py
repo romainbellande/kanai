@@ -11,6 +11,7 @@ NULLABLE_UPDATE_FIELD = "nullable_update_field"
 NO_TASK_PRIORITY = ""
 LEGACY_TASK_PRIORITY = "urgent"
 NORMALIZED_LEGACY_TASK_PRIORITY = "critical"
+ALLOWED_STORY_POINTS = {1, 2, 3, 5, 8, 13}
 
 
 def normalize_task_priority(priority: str | None) -> str | None:
@@ -31,6 +32,19 @@ def task_priority_to_storage(priority: str | None) -> str:
     return normalize_task_priority(priority) or NO_TASK_PRIORITY
 
 
+def normalize_story_points(story_points: Any) -> int | None:
+    """Normalize optional Story Points while enforcing the fixed scale."""
+    if story_points is None or story_points == "":
+        return None
+    if isinstance(story_points, str):
+        story_points = int(story_points) if story_points.isdecimal() else story_points
+    if isinstance(story_points, bool) or not isinstance(story_points, int):
+        raise ValueError("story_points must be one of 1, 2, 3, 5, 8, or 13")
+    if story_points not in ALLOWED_STORY_POINTS:
+        raise ValueError("story_points must be one of 1, 2, 3, 5, 8, or 13")
+    return story_points
+
+
 class TaskCreate(BaseModel):
     """Request payload for creating a project task.
 
@@ -39,6 +53,7 @@ class TaskCreate(BaseModel):
         column_id: Optional workflow column ID. Defaults to the first project column.
         include_in_active_sprint: Whether the new task belongs to the active sprint.
         priority: Optional priority level for the task.
+        story_points: Optional Story Points estimate.
         assignee_id: Optional user ID assigned to the task.
         description: Optional task details.
         acceptance_criteria: Optional criteria required to complete the task.
@@ -51,6 +66,7 @@ class TaskCreate(BaseModel):
     column_id: UUID | None = None
     include_in_active_sprint: bool = False
     priority: str | None = None
+    story_points: int | None = None
     assignee_id: UUID | None = None
     description: str | None = None
     acceptance_criteria: str | None = None
@@ -62,6 +78,12 @@ class TaskCreate(BaseModel):
         """Expose legacy urgent as critical and blank values as no priority."""
         return normalize_task_priority(priority)
 
+    @field_validator("story_points", mode="before")
+    @classmethod
+    def validate_story_points(cls, story_points: Any) -> int | None:
+        """Allow no estimation and reject values outside the fixed scale."""
+        return normalize_story_points(story_points)
+
 
 class TaskUpdate(BaseModel):
     """Request payload for updating a project task.
@@ -70,6 +92,7 @@ class TaskUpdate(BaseModel):
         title: Optional replacement task title.
         column_id: Optional replacement workflow column ID.
         priority: Optional replacement priority level. Explicit null clears it.
+        story_points: Optional replacement Story Points estimate. Explicit null clears it.
         assignee_id: Optional replacement user ID assigned to the task.
         description: Optional replacement task details.
         acceptance_criteria: Optional replacement completion criteria.
@@ -81,6 +104,10 @@ class TaskUpdate(BaseModel):
     title: str | None = None
     column_id: UUID | None = None
     priority: str | None = Field(
+        default=None,
+        json_schema_extra={NULLABLE_UPDATE_FIELD: True},
+    )
+    story_points: int | None = Field(
         default=None,
         json_schema_extra={NULLABLE_UPDATE_FIELD: True},
     )
@@ -106,6 +133,12 @@ class TaskUpdate(BaseModel):
     def normalize_priority(cls, priority: str | None) -> str | None:
         """Expose legacy urgent as critical and blank values as no priority."""
         return normalize_task_priority(priority)
+
+    @field_validator("story_points", mode="before")
+    @classmethod
+    def validate_story_points(cls, story_points: Any) -> int | None:
+        """Allow no estimation and reject values outside the fixed scale."""
+        return normalize_story_points(story_points)
 
     @model_validator(mode="before")
     @classmethod
@@ -153,6 +186,7 @@ class TaskRead(BaseModel):
         title: Task title.
         column_id: Workflow column ID for the task.
         priority: Optional priority level for the task.
+        story_points: Optional Story Points estimate.
         rank: Sortable LexoRank-style position within the task column.
         backlog_rank: Optional manual rank within the project backlog.
         assignee_id: Optional user ID assigned to the task.
@@ -171,6 +205,7 @@ class TaskRead(BaseModel):
     column_id: UUID
     title: str
     priority: str | None
+    story_points: int | None
     rank: str
     backlog_rank: str | None
     assignee_id: UUID | None

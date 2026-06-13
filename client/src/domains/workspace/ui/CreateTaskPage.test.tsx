@@ -92,9 +92,8 @@ function renderWithQueryClient(
 		id: "project-1",
 		name: "API Project",
 		code: "API",
-		priority: "medium",
 		description: null,
-		status: null,
+		status: "active",
 		ownerIds: [],
 		memberIds: [],
 		createdAt: null,
@@ -149,6 +148,7 @@ describe("CreateTaskPage", () => {
 					title: "Persist task",
 					column_id: "column-review",
 					priority: null,
+					story_points: 5,
 					rank: "0|hzzzzz:",
 					assignee_id: null,
 					description: "Task notes",
@@ -169,6 +169,9 @@ describe("CreateTaskPage", () => {
 		const prioritySelect = screen.getByLabelText(
 			/priority/i,
 		) as HTMLSelectElement;
+		const storyPointsSelect = screen.getByLabelText(
+			/story points/i,
+		) as HTMLSelectElement;
 		expect(prioritySelect.value).toBe("");
 		expect(
 			Array.from(prioritySelect.options).map((option) => [
@@ -181,6 +184,21 @@ describe("CreateTaskPage", () => {
 			["medium", "Medium"],
 			["high", "High"],
 			["critical", "Critical"],
+		]);
+		expect(storyPointsSelect.value).toBe("");
+		expect(
+			Array.from(storyPointsSelect.options).map((option) => [
+				option.value,
+				option.textContent,
+			]),
+		).toEqual([
+			["", "No estimation"],
+			["1", "1"],
+			["2", "2"],
+			["3", "3"],
+			["5", "5"],
+			["8", "8"],
+			["13", "13"],
 		]);
 		expect(
 			Array.from(workflowSelect.options).map((option) => [
@@ -196,6 +214,9 @@ describe("CreateTaskPage", () => {
 		});
 		fireEvent.change(workflowSelect, {
 			target: { value: "column-review" },
+		});
+		fireEvent.change(storyPointsSelect, {
+			target: { value: "5" },
 		});
 		fireEvent.change(screen.getByLabelText(/description/i), {
 			target: { value: "Task notes" },
@@ -222,6 +243,7 @@ describe("CreateTaskPage", () => {
 		expect(JSON.parse(String(init?.body))).toEqual({
 			title: "Persist task",
 			column_id: "column-review",
+			story_points: 5,
 			description: "Task notes",
 			acceptance_criteria: "Done means done",
 		});
@@ -479,9 +501,8 @@ describe("CreateTaskPage", () => {
 			tag: "UX",
 		});
 		expect(routerMocks.navigate).toHaveBeenCalledWith({
-			to: "/projects/$projectId",
+			to: "/projects/$projectId/backlog",
 			params: { projectId: "project-1" },
-			search: { view: "backlog" },
 		});
 	});
 

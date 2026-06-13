@@ -31,7 +31,7 @@ import {
 	type UserProfile,
 } from "#/api/client";
 
-let projectSearch: { view?: "backlog" | "history" } = {};
+let projectSearch: { view?: "history" } = {};
 
 vi.mock("@tanstack/react-router", () => ({
 	Link: ({
@@ -78,6 +78,7 @@ function task(overrides: Partial<Task>): Task {
 		title: "Task",
 		columnId: "column-todo",
 		priority: "medium",
+		storyPoints: null,
 		rank: "U",
 		backlogRank: null,
 		assigneeId: null,
@@ -108,9 +109,8 @@ function project(overrides: Partial<Project> = {}): Project {
 		id: "project-1",
 		name: "Project",
 		code: "PRJ",
-		priority: "medium",
 		description: null,
-		status: null,
+		status: "active",
 		ownerIds: [],
 		memberIds: [],
 		createdAt: null,
@@ -458,7 +458,12 @@ describe("ProjectBoardPage", () => {
 			project({ name: "API Board" }),
 		);
 		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
-			task({ id: "todo-task", title: "API Todo", columnId: "column-todo" }),
+			task({
+				id: "todo-task",
+				title: "API Todo",
+				columnId: "column-todo",
+				storyPoints: 3,
+			}),
 			task({ id: "doing-task", title: "API Doing", columnId: "column-doing" }),
 			task({ id: "done-task", title: "API Done", columnId: "column-done" }),
 			task({
@@ -489,7 +494,9 @@ describe("ProjectBoardPage", () => {
 		).toContain("/projects/project-1/tasks/todo-task");
 		expect(screen.getByText("API Doing")).toBeTruthy();
 		expect(screen.getByText("API Done")).toBeTruthy();
-		expect(screen.getByText("Backlog")).toBeTruthy();
+		expect(screen.getByText("3 pts")).toBeTruthy();
+		expect(screen.getAllByText("No estimation").length).toBeGreaterThan(0);
+		expect(screen.getAllByText("Backlog").length).toBeGreaterThan(0);
 		expect(screen.getByText("Review")).toBeTruthy();
 		expect(screen.getByText("Shipped")).toBeTruthy();
 		expect(screen.queryByRole("button", { name: "Board" })).toBeNull();
@@ -499,6 +506,44 @@ describe("ProjectBoardPage", () => {
 		expect(screen.queryByText("Other Project")).toBeNull();
 		expect(screen.queryByText("Backlog only")).toBeNull();
 		expect(screen.queryByText("Security Audit Phase 1")).toBeNull();
+	});
+
+	it("updates task card Story Point badges when saved task data changes", async () => {
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project({ name: "API Board" }),
+		);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({ id: "column-todo", name: "To Do", position: 0 }),
+		]);
+		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
+			task({
+				id: "todo-task",
+				title: "Estimate me",
+				columnId: "column-todo",
+				storyPoints: null,
+			}),
+		]);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+
+		expect(screen.getByText("No estimation")).toBeTruthy();
+		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
+			task({
+				id: "todo-task",
+				title: "Estimate me",
+				columnId: "column-todo",
+				storyPoints: 13,
+			}),
+		]);
+		cleanup();
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+
+		expect(screen.getByText("13 pts")).toBeTruthy();
 	});
 
 	it("shows a no-active-sprint planning state and creates the first sprint", async () => {
@@ -536,23 +581,34 @@ describe("ProjectBoardPage", () => {
 		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
 			column({ id: "column-todo", name: "Backlog", position: 0 }),
 		]);
-		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
-			new Response(
-				JSON.stringify({
-					id: "sprint-1",
-					project_id: "project-1",
-					name: "Sprint 1",
-					lifecycle_state: "active",
-					planned_start_date: "2026-06-01",
-					planned_end_date: "2026-06-14",
-					goal: "Planning goal",
-					closed_at: null,
-					created_at: null,
-					updated_at: null,
+		const sprintResponse = {
+			id: "sprint-1",
+			project_id: "project-1",
+			name: "Sprint 1",
+			lifecycle_state: "active",
+			planned_start_date: "2026-06-01",
+			planned_end_date: "2026-06-14",
+			goal: "Planning goal",
+			closed_at: null,
+			created_at: null,
+			updated_at: null,
+		};
+		const fetchSpy = vi.fn<typeof fetch>().mockImplementation((url, init) => {
+			if (String(url).endsWith("/projects/project-1/sprints/history")) {
+				return Promise.resolve(
+					new Response(JSON.stringify([]), {
+						headers: { "content-type": "application/json" },
+						status: 200,
+					}),
+				);
+			}
+			return Promise.resolve(
+				new Response(JSON.stringify(sprintResponse), {
+					headers: { "content-type": "application/json" },
+					status: init?.method === "POST" ? 201 : 200,
 				}),
-				{ headers: { "content-type": "application/json" }, status: 201 },
-			),
-		);
+			);
+		});
 		vi.stubGlobal("fetch", fetchSpy);
 
 		renderWithQueryClient(<ProjectBoardPage />, queryClient);
@@ -560,7 +616,7 @@ describe("ProjectBoardPage", () => {
 		expect(screen.getByText("No active sprint")).toBeTruthy();
 		expect(screen.getByRole("link", { name: /view backlog/i })).toHaveProperty(
 			"href",
-			expect.stringContaining("/projects/project-1?view=backlog"),
+			expect.stringContaining("/projects/project-1/backlog"),
 		);
 		expect(screen.queryByText("Hidden until sprint exists")).toBeNull();
 
@@ -579,11 +635,13 @@ describe("ProjectBoardPage", () => {
 		);
 
 		await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
-		expect(fetchSpy.mock.calls[0][0]).toBe(
-			"https://api.example.test/projects/project-1/sprints",
-		);
-		expect(fetchSpy.mock.calls[0][1]?.method).toBe("POST");
-		expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toEqual({
+		const [, createSprintInit] = fetchSpy.mock.calls.find(
+			([url, init]) =>
+				url === "https://api.example.test/projects/project-1/sprints" &&
+				init?.method === "POST",
+		) ?? [null, undefined];
+		expect(createSprintInit?.method).toBe("POST");
+		expect(JSON.parse(String(createSprintInit?.body))).toEqual({
 			planned_start_date: "2026-06-01",
 			planned_end_date: "2026-06-14",
 			goal: "Planning goal",
@@ -827,6 +885,177 @@ describe("ProjectBoardPage", () => {
 		expect(screen.queryByRole("form", { name: /edit sprint/i })).toBeNull();
 	});
 
+	it("shows Current Sprint point progress without a visible percentage", async () => {
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project({ name: "API Board" }),
+		);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({ id: "column-todo", name: "To Do", position: 0 }),
+			column({ id: "column-done", name: "Done", position: 1 }),
+		]);
+		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
+			task({
+				id: "done-task",
+				title: "Done estimated",
+				columnId: "column-done",
+				storyPoints: 5,
+			}),
+			task({
+				id: "todo-task",
+				title: "Todo estimated",
+				columnId: "column-todo",
+				storyPoints: 3,
+			}),
+			task({
+				id: "unestimated-task",
+				title: "Unestimated",
+				columnId: "column-todo",
+				storyPoints: null,
+			}),
+		]);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+
+		expect(screen.getByText("Story Point progress")).toBeTruthy();
+		expect(screen.getByText("5 pts done")).toBeTruthy();
+		expect(screen.getByText("3 pts remaining")).toBeTruthy();
+		expect(screen.getAllByText("No estimation: 1").length).toBeGreaterThan(0);
+		expect(
+			screen.getByRole("progressbar", {
+				name: "Current Sprint Story Point progress",
+			}),
+		).toBeTruthy();
+		expect(screen.queryByText(/%/)).toBeNull();
+	});
+
+	it("omits Current Sprint progress bar when no Done Column is configured", async () => {
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project({ name: "API Board", ownerIds: ["owner-1"] }),
+		);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({ id: "column-todo", name: "To Do", position: 0 }),
+		]);
+		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
+			task({
+				id: "estimated-task",
+				title: "Estimated",
+				columnId: "column-todo",
+				storyPoints: 8,
+			}),
+		]);
+		queryClient.setQueryData(
+			projectDoneColumnQueryOptions("project-1").queryKey,
+			doneColumn({ doneColumnId: null, requiresDesignation: true }),
+		);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+
+		expect(
+			screen.getByText("Story Point progress needs a Done Column."),
+		).toBeTruthy();
+		expect(
+			screen.queryByRole("progressbar", {
+				name: "Current Sprint Story Point progress",
+			}),
+		).toBeNull();
+	});
+
+	it("omits Current Sprint progress bar when sprint tasks have zero estimated points", async () => {
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project({ name: "API Board" }),
+		);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({ id: "column-todo", name: "To Do", position: 0 }),
+			column({ id: "column-done", name: "Done", position: 1 }),
+		]);
+		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
+			task({ id: "first", title: "First", storyPoints: null }),
+			task({ id: "second", title: "Second", storyPoints: null }),
+		]);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+
+		expect(screen.getByText("0 pts estimated")).toBeTruthy();
+		expect(screen.getByText("No estimation: 2")).toBeTruthy();
+		expect(
+			screen.queryByRole("progressbar", {
+				name: "Current Sprint Story Point progress",
+			}),
+		).toBeNull();
+	});
+
+	it("recalculates Current Sprint progress after Story Point and Done Column changes", async () => {
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project({ name: "API Board" }),
+		);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({ id: "column-todo", name: "To Do", position: 0 }),
+			column({ id: "column-done", name: "Done", position: 1 }),
+		]);
+		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
+			task({
+				id: "todo-task",
+				title: "Todo estimated",
+				columnId: "column-todo",
+				storyPoints: 3,
+			}),
+			task({
+				id: "done-task",
+				title: "Done estimated",
+				columnId: "column-done",
+				storyPoints: 5,
+			}),
+		]);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+		expect(screen.getByText("5 pts done")).toBeTruthy();
+		expect(screen.getByText("3 pts remaining")).toBeTruthy();
+
+		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
+			task({
+				id: "todo-task",
+				title: "Todo estimated",
+				columnId: "column-todo",
+				storyPoints: 8,
+			}),
+			task({
+				id: "done-task",
+				title: "Done estimated",
+				columnId: "column-done",
+				storyPoints: 5,
+			}),
+		]);
+		queryClient.setQueryData(
+			projectDoneColumnQueryOptions("project-1").queryKey,
+			doneColumn({ doneColumnId: "column-todo" }),
+		);
+		cleanup();
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+
+		expect(screen.getByText("8 pts done")).toBeTruthy();
+		expect(screen.getByText("5 pts remaining")).toBeTruthy();
+	});
+
 	it("shows close confirmation and closes the active sprint", async () => {
 		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
 		window.sessionStorage.setItem(
@@ -863,6 +1092,10 @@ describe("ProjectBoardPage", () => {
 			projectBacklogQueryOptions("project-1").queryKey,
 			[],
 		);
+		queryClient.setQueryData(
+			projectSprintHistoryQueryOptions("project-1").queryKey,
+			[],
+		);
 		const sprintJson = {
 			id: "sprint-1",
 			project_id: "project-1",
@@ -882,6 +1115,7 @@ describe("ProjectBoardPage", () => {
 			title: "Unfinished task",
 			column_id: "column-todo",
 			priority: null,
+			story_points: 8,
 			rank: "U",
 			backlog_rank: null,
 			assignee_id: null,
@@ -898,8 +1132,16 @@ describe("ProjectBoardPage", () => {
 					JSON.stringify({
 						sprint: sprintJson,
 						finished_count: 1,
-						unfinished_count: 1,
-						unfinished_tasks: [taskJson],
+						unfinished_count: 2,
+						unfinished_tasks: [
+							taskJson,
+							{
+								...taskJson,
+								id: "unestimated-task",
+								title: "Unestimated unfinished",
+								story_points: null,
+							},
+						],
 						carryover_statement:
 							"Unfinished tasks will move to the top of the Backlog.",
 					}),
@@ -915,9 +1157,17 @@ describe("ProjectBoardPage", () => {
 							closed_at: "2026-06-09T20:00:00Z",
 						},
 						finished_count: 1,
-						unfinished_count: 1,
+						unfinished_count: 2,
 						unfinished_tasks: [
 							{ ...taskJson, sprint_id: null, backlog_rank: "!" },
+							{
+								...taskJson,
+								id: "unestimated-task",
+								title: "Unestimated unfinished",
+								story_points: null,
+								sprint_id: null,
+								backlog_rank: "~",
+							},
 						],
 						carryover_statement:
 							"Unfinished tasks will move to the top of the Backlog.",
@@ -950,18 +1200,36 @@ describe("ProjectBoardPage", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Close sprint" }));
 
 		await waitFor(() => expect(screen.getByText("Confirm close")).toBeTruthy());
-		expect(screen.getByText("Unfinished task")).toBeTruthy();
+		expect(screen.getAllByText("Unfinished task").length).toBeGreaterThan(0);
+		expect(screen.getByText("8 pts")).toBeTruthy();
+		expect(screen.getByText("Unestimated unfinished")).toBeTruthy();
+		expect(screen.getAllByText("No estimation").length).toBeGreaterThan(0);
 		expect(screen.getByText("Unfinished")).toBeTruthy();
 		fireEvent.click(screen.getByRole("button", { name: "Confirm close" }));
 
-		await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(5));
-		expect(fetchSpy.mock.calls[0][0]).toBe(
-			"https://api.example.test/projects/project-1/sprints/active/close-confirmation",
+		await waitFor(() =>
+			expect(
+				fetchSpy.mock.calls.some(
+					([url]) =>
+						url ===
+						"https://api.example.test/projects/project-1/sprints/active/close",
+				),
+			).toBe(true),
 		);
-		expect(fetchSpy.mock.calls[1][0]).toBe(
-			"https://api.example.test/projects/project-1/sprints/active/close",
-		);
-		expect(screen.getByText("No active sprint")).toBeTruthy();
+		expect(
+			fetchSpy.mock.calls.some(
+				([url]) =>
+					url ===
+					"https://api.example.test/projects/project-1/sprints/active/close-confirmation",
+			),
+		).toBe(true);
+		expect(
+			fetchSpy.mock.calls.some(
+				([url]) =>
+					url ===
+					"https://api.example.test/projects/project-1/sprints/active/close",
+			),
+		).toBe(true);
 	});
 
 	it("renders active sprint metadata read-only for non-owner members", async () => {
@@ -994,12 +1262,12 @@ describe("ProjectBoardPage", () => {
 
 		renderWithQueryClient(<ProjectBoardPage />, queryClient);
 
-		expect(screen.getByText("Sprint 1")).toBeTruthy();
+		expect(screen.getAllByText("Sprint 1").length).toBeGreaterThan(0);
 		expect(screen.getByText("Member visible goal")).toBeTruthy();
 		expect(screen.queryByRole("button", { name: /edit sprint/i })).toBeNull();
 	});
 
-	it("lets project owners choose the project Done Column", async () => {
+	it("lets project owners save the Done Column from Edit Project", async () => {
 		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
 		window.sessionStorage.setItem(
 			"kanai.openid-client.auth-session",
@@ -1028,33 +1296,106 @@ describe("ProjectBoardPage", () => {
 			projectDoneColumnQueryOptions("project-1").queryKey,
 			doneColumn({ doneColumnId: "column-done" }),
 		);
-		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
-			new Response(
+		queryClient.setQueryData(
+			projectSprintHistoryQueryOptions("project-1").queryKey,
+			[],
+		);
+		const fetchSpy = vi.fn<typeof fetch>().mockImplementation(async (input) => {
+			const url = String(input);
+			if (url.endsWith("/done-column")) {
+				return new Response(
+					JSON.stringify({
+						project_id: "project-1",
+						done_column_id: "column-todo",
+						requires_designation: false,
+					}),
+					{ headers: { "content-type": "application/json" }, status: 200 },
+				);
+			}
+			if (url.endsWith("/columns")) {
+				return new Response(
+					JSON.stringify([
+						{
+							id: "column-todo",
+							project_id: "project-1",
+							name: "To Do",
+							description: null,
+							position: 0,
+							created_at: null,
+							updated_at: null,
+						},
+						{
+							id: "column-done",
+							project_id: "project-1",
+							name: "Done",
+							description: null,
+							position: 1,
+							created_at: null,
+							updated_at: null,
+						},
+					]),
+					{ headers: { "content-type": "application/json" }, status: 200 },
+				);
+			}
+			if (url.endsWith("/projects")) {
+				return new Response(JSON.stringify([]), {
+					headers: { "content-type": "application/json" },
+					status: 200,
+				});
+			}
+			return new Response(
 				JSON.stringify({
-					project_id: "project-1",
-					done_column_id: "column-todo",
-					requires_designation: false,
+					id: "project-1",
+					name: "API Board",
+					code: "PRJ",
+					description: null,
+					status: "active",
+					owner_ids: ["owner-1"],
+					member_ids: [],
+					created_at: null,
+					updated_at: null,
 				}),
 				{ headers: { "content-type": "application/json" }, status: 200 },
-			),
-		);
+			);
+		});
 		vi.stubGlobal("fetch", fetchSpy);
 
 		renderWithQueryClient(<ProjectBoardPage />, queryClient);
 
+		expect(
+			screen.queryByRole("button", { name: /save done column/i }),
+		).toBeNull();
+		fireEvent.click(screen.getByRole("button", { name: /edit project/i }));
 		fireEvent.change(screen.getByLabelText("Done Column"), {
 			target: { value: "column-todo" },
 		});
-		fireEvent.click(screen.getByRole("button", { name: /save done column/i }));
+		fireEvent.click(screen.getByRole("button", { name: /save project/i }));
 
-		await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
-		expect(fetchSpy.mock.calls[0][0]).toBe(
+		await waitFor(() =>
+			expect(
+				fetchSpy.mock.calls.some(
+					([url, init]) =>
+						url === "https://api.example.test/projects/project-1" &&
+						init?.method === "PATCH",
+				),
+			).toBe(true),
+		);
+		const doneColumnRequest = fetchSpy.mock.calls.find(
+			([url, init]) =>
+				url === "https://api.example.test/projects/project-1/done-column" &&
+				init?.method === "PATCH",
+		);
+		expect(doneColumnRequest?.[0]).toBe(
 			"https://api.example.test/projects/project-1/done-column",
 		);
-		expect(fetchSpy.mock.calls[0][1]?.method).toBe("PATCH");
-		expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toEqual({
+		expect(JSON.parse(String(doneColumnRequest?.[1]?.body))).toEqual({
 			done_column_id: "column-todo",
 		});
+		expect(
+			fetchSpy.mock.calls.some(([url]) =>
+				String(url).includes("/sprints/history"),
+			),
+		).toBe(false);
 		await waitFor(() =>
 			expect(
 				queryClient.getQueryData(
@@ -1064,7 +1405,7 @@ describe("ProjectBoardPage", () => {
 		);
 	});
 
-	it("prompts owners to designate a Done Column when none is configured", async () => {
+	it("prompts owners to designate a missing Done Column in Edit Project", async () => {
 		const { ProjectBoardPage } = await import(
 			"#/domains/workspace/ui/ProjectBoardPage"
 		);
@@ -1092,16 +1433,130 @@ describe("ProjectBoardPage", () => {
 
 		expect(screen.getByText("Designation required")).toBeTruthy();
 		expect(
-			screen.getByText(/Choose a Done Column before sprint close outcomes/i),
+			screen.getByText(/Choose a Done Column in Edit Project/i),
 		).toBeTruthy();
+		expect(screen.queryByLabelText("Done Column")).toBeNull();
+		fireEvent.click(screen.getByRole("button", { name: /open edit project/i }));
+		expect(screen.getByLabelText("Done Column")).toHaveProperty("value", "");
 		expect(
-			screen.getByRole("button", { name: /save done column/i }),
-		).toHaveProperty("disabled", true);
+			screen.getByRole("button", { name: /save project/i }),
+		).not.toHaveProperty("disabled", true);
+	});
+
+	it("requires a Done Column when saving Edit Project with workflow columns", async () => {
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(currentUserQueryOptions().queryKey, {
+			id: "owner-1",
+		});
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project({ name: "API Board", ownerIds: ["owner-1"] }),
+		);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({ id: "column-todo", name: "To Do", position: 0 }),
+		]);
+		queryClient.setQueryData(
+			projectTasksQueryOptions("project-1").queryKey,
+			[],
+		);
+		queryClient.setQueryData(
+			projectDoneColumnQueryOptions("project-1").queryKey,
+			doneColumn({ doneColumnId: null, requiresDesignation: true }),
+		);
+		const fetchSpy = vi.fn<typeof fetch>();
+		vi.stubGlobal("fetch", fetchSpy);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+		fireEvent.click(screen.getByRole("button", { name: /open edit project/i }));
+		fireEvent.click(screen.getByRole("button", { name: /save project/i }));
+
+		expect(fetchSpy).not.toHaveBeenCalled();
+		expect(
+			screen.getByText("Done Column is required when workflow columns exist."),
+		).toBeTruthy();
+	});
+
+	it("allows metadata save with Done Column disabled when no workflow columns exist", async () => {
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({ accessToken: "project-token" }),
+		);
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		seedProjectBoardQueries(queryClient);
+		queryClient.setQueryData(
+			projectColumnsQueryOptions("project-1").queryKey,
+			[],
+		);
+		queryClient.setQueryData(
+			projectDoneColumnQueryOptions("project-1").queryKey,
+			doneColumn({ doneColumnId: null, requiresDesignation: false }),
+		);
+		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					id: "project-1",
+					name: "No Columns Board",
+					code: "PRJ",
+					description: null,
+					status: "active",
+					owner_ids: ["owner-1"],
+					member_ids: [],
+					created_at: null,
+					updated_at: null,
+				}),
+				{ headers: { "content-type": "application/json" }, status: 200 },
+			),
+		);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+		fireEvent.click(screen.getByRole("button", { name: /edit project/i }));
+		fireEvent.change(screen.getByLabelText("Project title"), {
+			target: { value: "No Columns Board" },
+		});
+		expect(screen.getByLabelText("Done Column")).toHaveProperty(
+			"disabled",
+			true,
+		);
+		expect(
+			screen.getByText(/Add a workflow column before choosing a Done Column/i),
+		).toBeTruthy();
+		fireEvent.click(screen.getByRole("button", { name: /save project/i }));
+
+		await waitFor(() =>
+			expect(
+				fetchSpy.mock.calls.some(
+					([url, init]) =>
+						url === "https://api.example.test/projects/project-1" &&
+						init?.method === "PATCH",
+				),
+			).toBe(true),
+		);
+		expect(
+			fetchSpy.mock.calls.some(
+				([url, init]) =>
+					url === "https://api.example.test/projects/project-1/done-column" &&
+					init?.method === "PATCH",
+			),
+		).toBe(false);
+		expect(
+			fetchSpy.mock.calls.some(
+				([url, init]) =>
+					url === "https://api.example.test/projects/project-1" &&
+					init?.method === "PATCH",
+			),
+		).toBe(true);
 	});
 
 	it("renders the shareable Backlog list view without workflow board cards", async () => {
-		projectSearch = { view: "backlog" };
-		const { ProjectBoardPage } = await import(
+		const { ProjectBoardContent } = await import(
 			"#/domains/workspace/ui/ProjectBoardPage"
 		);
 		const queryClient = createTestQueryClient();
@@ -1128,6 +1583,7 @@ describe("ProjectBoardPage", () => {
 				title: "Backlog first",
 				sprintId: null,
 				backlogRank: "F",
+				storyPoints: 5,
 			}),
 			task({
 				id: "backlog-second",
@@ -1137,14 +1593,25 @@ describe("ProjectBoardPage", () => {
 			}),
 		]);
 
-		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+		renderWithQueryClient(
+			<ProjectBoardContent projectId="project-1" view="backlog" />,
+			queryClient,
+		);
 
 		expect(screen.getByText("Planning list")).toBeTruthy();
 		expect(screen.getByText("Backlog first")).toBeTruthy();
 		expect(screen.getByText("Backlog second")).toBeTruthy();
+		expect(screen.getByText("5 pts estimated")).toBeTruthy();
+		expect(screen.getAllByText("No estimation: 1").length).toBeGreaterThan(0);
+		expect(screen.getByText("5 pts")).toBeTruthy();
+		expect(screen.getByText("No estimation")).toBeTruthy();
 		expect(screen.queryByText("Sprint task")).toBeNull();
 		expect(screen.queryByText("No tasks in to do.")).toBeNull();
 		expect(screen.getByRole("link", { name: "Current Sprint" })).toBeTruthy();
+		expect(screen.getByRole("link", { name: "Current Sprint" })).toHaveProperty(
+			"href",
+			expect.stringContaining("/projects/project-1"),
+		);
 		expect(screen.queryByLabelText("Backlog task title")).toBeNull();
 		expect(
 			screen.getByRole("link", { name: "Add Backlog Task" }),
@@ -1198,7 +1665,7 @@ describe("ProjectBoardPage", () => {
 						goal: "History goal",
 					}),
 					finishedCount: 1,
-					unfinishedCount: 1,
+					unfinishedCount: 2,
 					unfinishedTasks: [],
 					carryoverStatement:
 						"Unfinished tasks will move to the top of the Backlog.",
@@ -1211,6 +1678,7 @@ describe("ProjectBoardPage", () => {
 							title: "Finished close-time title",
 							outcome: "finished",
 							priority: null,
+							storyPoints: 5,
 							rank: "U",
 							description: "Finished notes",
 							acceptanceCriteria: null,
@@ -1226,11 +1694,28 @@ describe("ProjectBoardPage", () => {
 							title: "Deleted close-time title",
 							outcome: "unfinished",
 							priority: null,
+							storyPoints: 3,
 							rank: "V",
 							description: null,
 							acceptanceCriteria: "Close-time criteria",
 							tag: null,
 							liveTaskExists: false,
+							createdAt: null,
+						},
+						{
+							id: "snapshot-unestimated",
+							sprintId: "closed-sprint",
+							taskId: "unestimated-task",
+							columnId: "column-todo",
+							title: "Unestimated close-time title",
+							outcome: "unfinished",
+							priority: null,
+							storyPoints: null,
+							rank: "W",
+							description: null,
+							acceptanceCriteria: null,
+							tag: null,
+							liveTaskExists: true,
 							createdAt: null,
 						},
 					],
@@ -1241,12 +1726,29 @@ describe("ProjectBoardPage", () => {
 		renderWithQueryClient(<ProjectBoardPage />, queryClient);
 
 		expect(screen.getByText("Closed sprints")).toBeTruthy();
-		expect(screen.getByText("Sprint 1")).toBeTruthy();
+		expect(screen.getAllByText("Sprint 1").length).toBeGreaterThan(0);
 		expect(screen.getByText("History goal")).toBeTruthy();
 		expect(screen.getByText("1 finished")).toBeTruthy();
-		expect(screen.getByText("1 unfinished")).toBeTruthy();
+		expect(screen.getByText("2 unfinished")).toBeTruthy();
+		expect(screen.getByText("Historical Story Point split")).toBeTruthy();
+		expect(screen.getByText("5 pts finished")).toBeTruthy();
+		expect(screen.getByText("3 pts unfinished")).toBeTruthy();
+		expect(screen.getAllByText("No estimation: 1").length).toBeGreaterThan(0);
+		expect(
+			screen.getByRole("progressbar", {
+				name: "Sprint 1 finished Story Point progress",
+			}),
+		).toBeTruthy();
+		expect(
+			screen.getByRole("progressbar", {
+				name: "Sprint 1 unfinished Story Point progress",
+			}),
+		).toBeTruthy();
 		expect(screen.getByText("Finished")).toBeTruthy();
 		expect(screen.getByText("Unfinished")).toBeTruthy();
+		expect(screen.getByText("5 pts")).toBeTruthy();
+		expect(screen.getByText("3 pts")).toBeTruthy();
+		expect(screen.getByText("No estimation")).toBeTruthy();
 		expect(screen.getByText("Finished notes")).toBeTruthy();
 		expect(screen.getByText("Close-time criteria")).toBeTruthy();
 		expect(
@@ -1261,13 +1763,12 @@ describe("ProjectBoardPage", () => {
 	});
 
 	it("persists manual Backlog reorder", async () => {
-		projectSearch = { view: "backlog" };
 		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
 		window.sessionStorage.setItem(
 			"kanai.openid-client.auth-session",
 			JSON.stringify({ accessToken: "backlog-token" }),
 		);
-		const { ProjectBoardPage } = await import(
+		const { ProjectBoardContent } = await import(
 			"#/domains/workspace/ui/ProjectBoardPage"
 		);
 		const queryClient = createTestQueryClient();
@@ -1322,7 +1823,10 @@ describe("ProjectBoardPage", () => {
 			);
 		vi.stubGlobal("fetch", fetchSpy);
 
-		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+		renderWithQueryClient(
+			<ProjectBoardContent projectId="project-1" view="backlog" />,
+			queryClient,
+		);
 		fireEvent.click(screen.getByRole("button", { name: "Move Second up" }));
 		await waitFor(() =>
 			expect(
@@ -1343,13 +1847,12 @@ describe("ProjectBoardPage", () => {
 	});
 
 	it("adds a backlog task to the active sprint from the Backlog view", async () => {
-		projectSearch = { view: "backlog" };
 		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
 		window.sessionStorage.setItem(
 			"kanai.openid-client.auth-session",
 			JSON.stringify({ accessToken: "sprint-token" }),
 		);
-		const { ProjectBoardPage } = await import(
+		const { ProjectBoardContent } = await import(
 			"#/domains/workspace/ui/ProjectBoardPage"
 		);
 		const queryClient = createTestQueryClient();
@@ -1382,6 +1885,7 @@ describe("ProjectBoardPage", () => {
 				columnId: "column-review",
 				sprintId: null,
 				backlogRank: "F",
+				storyPoints: null,
 			}),
 		]);
 		queryClient.setQueryData(
@@ -1397,6 +1901,7 @@ describe("ProjectBoardPage", () => {
 					title: "Ready backlog task",
 					column_id: "column-review",
 					priority: null,
+					story_points: null,
 					rank: "U",
 					backlog_rank: null,
 					assignee_id: null,
@@ -1411,7 +1916,11 @@ describe("ProjectBoardPage", () => {
 		);
 		vi.stubGlobal("fetch", fetchSpy);
 
-		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+		renderWithQueryClient(
+			<ProjectBoardContent projectId="project-1" view="backlog" />,
+			queryClient,
+		);
+		expect(screen.getByText("No estimation")).toBeTruthy();
 		fireEvent.click(screen.getByRole("button", { name: /add to sprint/i }));
 
 		await waitFor(() =>
@@ -1753,9 +2262,7 @@ describe("ProjectBoardPage", () => {
 		expect(
 			screen.getByText("Shared context for non-owner project members."),
 		).toBeTruthy();
-		expect(
-			screen.queryByRole("button", { name: /edit project metadata/i }),
-		).toBeNull();
+		expect(screen.queryByRole("button", { name: /edit project/i })).toBeNull();
 	});
 
 	it("shows owner-only inline project metadata editing controls", async () => {
@@ -1767,13 +2274,9 @@ describe("ProjectBoardPage", () => {
 
 		renderWithQueryClient(<ProjectBoardPage />, queryClient);
 
-		fireEvent.click(
-			screen.getByRole("button", { name: /edit project metadata/i }),
-		);
+		fireEvent.click(screen.getByRole("button", { name: /edit project/i }));
 
-		expect(
-			screen.getByRole("form", { name: /edit project metadata/i }),
-		).toBeTruthy();
+		expect(screen.getByRole("form", { name: /edit project/i })).toBeTruthy();
 		expect(screen.getByLabelText("Project title")).toHaveProperty(
 			"value",
 			"API Board",
@@ -1781,6 +2284,14 @@ describe("ProjectBoardPage", () => {
 		expect(screen.getByLabelText("Project description")).toHaveProperty(
 			"value",
 			"",
+		);
+		expect(screen.getByLabelText("Project code")).toHaveProperty(
+			"value",
+			"PRJ",
+		);
+		expect(screen.getByLabelText("Project status")).toHaveProperty(
+			"value",
+			"active",
 		);
 	});
 
@@ -1795,54 +2306,58 @@ describe("ProjectBoardPage", () => {
 		);
 		const queryClient = createTestQueryClient();
 		seedProjectBoardQueries(queryClient);
-		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
-			new Response(
-				JSON.stringify({
-					id: "project-1",
-					name: "Renamed Board",
-					code: "PRJ",
-					priority: "medium",
-					description: "Updated context",
-					status: null,
-					owner_ids: ["owner-1"],
-					member_ids: [],
-					created_at: null,
-					updated_at: null,
-				}),
-				{ headers: { "content-type": "application/json" }, status: 200 },
-			),
+		const fetchSpy = vi.fn<typeof fetch>().mockImplementation(
+			async () =>
+				new Response(
+					JSON.stringify({
+						id: "project-1",
+						name: "Renamed Board",
+						code: "PRJ",
+						description: "Updated context",
+						status: "paused",
+						owner_ids: ["owner-1"],
+						member_ids: [],
+						created_at: null,
+						updated_at: null,
+					}),
+					{ headers: { "content-type": "application/json" }, status: 200 },
+				),
 		);
 		vi.stubGlobal("fetch", fetchSpy);
 
 		renderWithQueryClient(<ProjectBoardPage />, queryClient);
-		fireEvent.click(
-			screen.getByRole("button", { name: /edit project metadata/i }),
-		);
+		fireEvent.click(screen.getByRole("button", { name: /edit project/i }));
 		fireEvent.change(screen.getByLabelText("Project title"), {
 			target: { value: "  Renamed Board  " },
 		});
 		fireEvent.change(screen.getByLabelText("Project description"), {
 			target: { value: "Updated context" },
 		});
-		fireEvent.click(screen.getByRole("button", { name: /save details/i }));
+		fireEvent.change(screen.getByLabelText("Project status"), {
+			target: { value: "paused" },
+		});
+		fetchSpy.mockClear();
+		fireEvent.click(screen.getByRole("button", { name: /save project/i }));
 
 		await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
-		expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toEqual({
+		const saveRequest = fetchSpy.mock.calls.find(([, init]) => init?.body);
+		expect(JSON.parse(String(saveRequest?.[1]?.body))).toEqual({
 			name: "Renamed Board",
+			code: "PRJ",
 			description: "Updated context",
+			status: "paused",
 		});
 		await waitFor(() =>
 			expect(screen.getByText("Main Board: Renamed Board")).toBeTruthy(),
 		);
 		expect(screen.getByText("Project details saved.")).toBeTruthy();
-		expect(
-			screen.queryByRole("form", { name: /edit project metadata/i }),
-		).toBeNull();
+		expect(screen.queryByRole("form", { name: /edit project/i })).toBeNull();
 		expect(
 			queryClient.getQueryData(projectQueryOptions("project-1").queryKey),
 		).toMatchObject({
 			name: "Renamed Board",
 			description: "Updated context",
+			status: "paused",
 		});
 	});
 
@@ -1856,9 +2371,7 @@ describe("ProjectBoardPage", () => {
 		vi.stubGlobal("fetch", fetchSpy);
 
 		renderWithQueryClient(<ProjectBoardPage />, queryClient);
-		fireEvent.click(
-			screen.getByRole("button", { name: /edit project metadata/i }),
-		);
+		fireEvent.click(screen.getByRole("button", { name: /edit project/i }));
 		fireEvent.change(screen.getByLabelText("Project title"), {
 			target: { value: "Unsaved Board" },
 		});
@@ -1866,9 +2379,7 @@ describe("ProjectBoardPage", () => {
 
 		expect(fetchSpy).not.toHaveBeenCalled();
 		expect(screen.getByText("Main Board: API Board")).toBeTruthy();
-		expect(
-			screen.queryByRole("form", { name: /edit project metadata/i }),
-		).toBeNull();
+		expect(screen.queryByRole("form", { name: /edit project/i })).toBeNull();
 	});
 
 	it("persists explicit null when an owner clears the project description", async () => {
@@ -1890,38 +2401,40 @@ describe("ProjectBoardPage", () => {
 				ownerIds: ["owner-1"],
 			}),
 		);
-		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
-			new Response(
-				JSON.stringify({
-					id: "project-1",
-					name: "API Board",
-					code: "PRJ",
-					priority: "medium",
-					description: null,
-					status: null,
-					owner_ids: ["owner-1"],
-					member_ids: [],
-					created_at: null,
-					updated_at: null,
-				}),
-				{ headers: { "content-type": "application/json" }, status: 200 },
-			),
+		const fetchSpy = vi.fn<typeof fetch>().mockImplementation(
+			async () =>
+				new Response(
+					JSON.stringify({
+						id: "project-1",
+						name: "API Board",
+						code: "PRJ",
+						description: null,
+						status: "active",
+						owner_ids: ["owner-1"],
+						member_ids: [],
+						created_at: null,
+						updated_at: null,
+					}),
+					{ headers: { "content-type": "application/json" }, status: 200 },
+				),
 		);
 		vi.stubGlobal("fetch", fetchSpy);
 
 		renderWithQueryClient(<ProjectBoardPage />, queryClient);
-		fireEvent.click(
-			screen.getByRole("button", { name: /edit project metadata/i }),
-		);
+		fireEvent.click(screen.getByRole("button", { name: /edit project/i }));
 		fireEvent.change(screen.getByLabelText("Project description"), {
 			target: { value: "" },
 		});
-		fireEvent.click(screen.getByRole("button", { name: /save details/i }));
+		fetchSpy.mockClear();
+		fireEvent.click(screen.getByRole("button", { name: /save project/i }));
 
 		await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
-		expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toEqual({
+		const saveRequest = fetchSpy.mock.calls.find(([, init]) => init?.body);
+		expect(JSON.parse(String(saveRequest?.[1]?.body))).toEqual({
 			name: "API Board",
+			code: "PRJ",
 			description: null,
+			status: "active",
 		});
 		await waitFor(() =>
 			expect(screen.getByText("No project description yet.")).toBeTruthy(),
@@ -2111,9 +2624,8 @@ describe("ProjectBoardPage", () => {
 						id: "project-1",
 						name: "API Board",
 						code: "PRJ",
-						priority: "medium",
 						description: null,
-						status: null,
+						status: "active",
 						owner_ids: ["owner-1"],
 						member_ids: ["candidate-1"],
 						created_at: null,

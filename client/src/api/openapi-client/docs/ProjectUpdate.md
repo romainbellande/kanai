@@ -1,7 +1,7 @@
 
 # ProjectUpdate
 
-Defines the payload for updating a project.  Attributes:     name: Optional updated project display name. Defaults to None.     code: Optional updated three-character project code using uppercase letters         or digits. Defaults to None.     priority: Optional updated project priority label. Defaults to None.     description: Optional updated project description. Defaults to None.     status: Optional updated project status label. Defaults to None.     owner_ids: Optional replacement list of owner user IDs. Defaults to None.     member_ids: Optional replacement list of member user IDs. Defaults to None.
+Defines the payload for updating a project.  Attributes:     name: Optional updated project display name. Defaults to None.     code: Optional updated three-character project code using uppercase letters         or digits. Defaults to None.     description: Optional updated project description. Defaults to None.     status: Optional updated project status label. Defaults to None.     owner_ids: Optional replacement list of owner user IDs. Defaults to None.     member_ids: Optional replacement list of member user IDs. Defaults to None.
 
 ## Properties
 
@@ -9,7 +9,6 @@ Name | Type
 ------------ | -------------
 `name` | string
 `code` | string
-`priority` | string
 `description` | string
 `status` | string
 `ownerIds` | Array&lt;string&gt;
@@ -24,7 +23,6 @@ import type { ProjectUpdate } from ''
 const example = {
   "name": null,
   "code": null,
-  "priority": null,
   "description": null,
   "status": null,
   "ownerIds": null,
