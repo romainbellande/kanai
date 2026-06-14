@@ -1,0 +1,3 @@
+# A2A agent exposure
+
+Kanai exposes AI form helpers as agent-scoped A2A JSON-RPC endpoints, starting with `/a2a/acceptance-criteria`, with each agent publishing a public card under `/a2a/{agent_slug}/.well-known/agent-card.json` while invocation remains protected by Kanai bearer authentication and Project access checks. We chose this over a custom JSON helper endpoint or REST-only A2A routes because the agent surface is intended to be interoperable beyond the first UI button, and we require OpenAI-compatible Pydantic AI configuration at API startup so deployment misconfiguration fails before users invoke agent-backed workflows.

@@ -10,6 +10,7 @@ from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.security import AuthMiddleware
 from app.db.session import create_db_and_tables
+from app.features.a2a import a2a_router
 from app.services.auth_service import (
     WebSocketAuthBoundary,
     build_authenticate_request,
@@ -58,3 +59,4 @@ app.add_middleware(
 
 
 app.include_router(api_router)
+app.include_router(a2a_router)

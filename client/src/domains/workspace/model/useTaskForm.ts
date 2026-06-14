@@ -1,9 +1,18 @@
 import { useMutation } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { type ProjectColumn, type Task, useKanaiApi } from "#/api/client";
+import {
+	generateAcceptanceCriteria,
+	type ProjectColumn,
+	type Task,
+	useKanaiApi,
+} from "#/api/client";
 
 const NO_TASK_PRIORITY = "";
+const ACCEPTANCE_CRITERIA_EMPTY_CONTEXT_MESSAGE =
+	"Add a task title or description before generating acceptance criteria.";
+const ACCEPTANCE_CRITERIA_GENERATION_ERROR_MESSAGE =
+	"Acceptance criteria could not be generated. Please try again.";
 export const STORY_POINT_OPTIONS = [1, 2, 3, 5, 8, 13] as const;
 
 export type TaskFormValues = {
@@ -168,6 +177,11 @@ function taskStoryPointsToPayload(
 		: undefined;
 }
 
+function blankToNull(value: string): string | null {
+	const trimmed = value.trim();
+	return trimmed ? trimmed : null;
+}
+
 function initialValues(input: UseTaskFormInput): TaskFormValues {
 	return input.mode === "create"
 		? createInitialValues(input.initialColumnId)
@@ -183,6 +197,15 @@ export function useTaskForm(input: UseTaskFormInput) {
 		input.mode === "edit" ? (input.task?.id ?? null) : null,
 	);
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
+	const [
+		acceptanceCriteriaGenerationMessage,
+		setAcceptanceCriteriaGenerationMessage,
+	] = useState<string | null>(null);
+	const [isGeneratingAcceptanceCriteria, setIsGeneratingAcceptanceCriteria] =
+		useState(false);
+	const acceptanceCriteriaAbortControllerRef = useRef<AbortController | null>(
+		null,
+	);
 	const workflowState =
 		input.mode === "create"
 			? getTaskFormWorkflowState({
@@ -241,6 +264,84 @@ export function useTaskForm(input: UseTaskFormInput) {
 	function setField(name: keyof TaskFormValues, value: string) {
 		setValues((currentValues) => ({ ...currentValues, [name]: value }));
 		setIsDirty(true);
+		if (name === "title" || name === "description") {
+			setAcceptanceCriteriaGenerationMessage(null);
+		}
+	}
+
+	async function generateAcceptanceCriteriaForForm(): Promise<void> {
+		if (acceptanceCriteriaAbortControllerRef.current) {
+			return;
+		}
+
+		const title = values.title.trim();
+		const description = values.description.trim();
+
+		if (!title && !description) {
+			setAcceptanceCriteriaGenerationMessage(
+				ACCEPTANCE_CRITERIA_EMPTY_CONTEXT_MESSAGE,
+			);
+			return;
+		}
+
+		const previousAcceptanceCriteria = values.acceptanceCriteria;
+		const selectedWorkflowColumn = input.workflowColumns?.find(
+			(column) => column.id === workflowState.selectedColumnId,
+		);
+		const abortController = new AbortController();
+
+		setAcceptanceCriteriaGenerationMessage(null);
+		acceptanceCriteriaAbortControllerRef.current = abortController;
+		setIsGeneratingAcceptanceCriteria(true);
+		setIsDirty(true);
+		setValues((currentValues) => ({
+			...currentValues,
+			acceptanceCriteria: "",
+		}));
+
+		try {
+			await generateAcceptanceCriteria({
+				projectId: input.projectId,
+				signal: abortController.signal,
+				task: {
+					title: blankToNull(values.title),
+					description: blankToNull(values.description),
+					acceptanceCriteria: blankToNull(previousAcceptanceCriteria),
+					priority: blankToNull(normalizeTaskPriority(values.priority)),
+					storyPoints: taskStoryPointsToPayload(values.storyPoints) ?? null,
+					tag: blankToNull(values.tag),
+					workflowColumn: selectedWorkflowColumn?.name ?? null,
+					mode: input.mode,
+				},
+				onChunk: (chunk) => {
+					setValues((currentValues) => ({
+						...currentValues,
+						acceptanceCriteria: currentValues.acceptanceCriteria + chunk,
+					}));
+				},
+			});
+		} catch {
+			if (abortController.signal.aborted) {
+				return;
+			}
+
+			setValues((currentValues) => ({
+				...currentValues,
+				acceptanceCriteria: previousAcceptanceCriteria,
+			}));
+			setAcceptanceCriteriaGenerationMessage(
+				ACCEPTANCE_CRITERIA_GENERATION_ERROR_MESSAGE,
+			);
+		} finally {
+			if (acceptanceCriteriaAbortControllerRef.current === abortController) {
+				acceptanceCriteriaAbortControllerRef.current = null;
+			}
+			setIsGeneratingAcceptanceCriteria(false);
+		}
+	}
+
+	function cancelAcceptanceCriteriaGeneration(): void {
+		acceptanceCriteriaAbortControllerRef.current?.abort();
 	}
 
 	async function submit(): Promise<Task | null> {
@@ -318,6 +419,17 @@ export function useTaskForm(input: UseTaskFormInput) {
 				: updateTaskMutation.isPending,
 		errorMessage,
 		workflowState,
+		acceptanceCriteriaGeneration: {
+			canGenerate: Boolean(values.title.trim() || values.description.trim()),
+			isGenerating: isGeneratingAcceptanceCriteria,
+			message:
+				acceptanceCriteriaGenerationMessage ??
+				(values.title.trim() || values.description.trim()
+					? null
+					: ACCEPTANCE_CRITERIA_EMPTY_CONTEXT_MESSAGE),
+			generate: generateAcceptanceCriteriaForForm,
+			cancel: cancelAcceptanceCriteriaGeneration,
+		},
 		setField,
 		submit,
 	};

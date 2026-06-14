@@ -70,6 +70,35 @@ function task(overrides: Record<string, unknown> = {}) {
 	};
 }
 
+function a2aStreamResponse(...chunks: string[]): Response {
+	const encoder = new TextEncoder();
+	return new Response(
+		new ReadableStream<Uint8Array>({
+			start(controller) {
+				for (const chunk of chunks) {
+					controller.enqueue(
+						encoder.encode(
+							`${JSON.stringify({
+								jsonrpc: "2.0",
+								id: "request-1",
+								result: {
+									kind: "message",
+									message: {
+										role: "agent",
+										parts: [{ kind: "text", text: chunk }],
+									},
+								},
+							})}\n`,
+						),
+					);
+				}
+				controller.close();
+			},
+		}),
+		{ headers: { "content-type": "application/x-ndjson" }, status: 200 },
+	);
+}
+
 describe("getTaskFormWorkflowState", () => {
 	it("selects the first loaded column by default", () => {
 		expect(
@@ -519,6 +548,109 @@ describe("useTaskForm create mode", () => {
 			tag: "UX",
 		});
 	});
+
+	it("prompts for task context without calling A2A", async () => {
+		const queryClient = createTestQueryClient();
+		const fetchSpy = vi.fn<typeof fetch>();
+		vi.stubGlobal("fetch", fetchSpy);
+
+		const { result } = renderHook(
+			() =>
+				useTaskForm({
+					projectId: "project-1",
+					mode: "create",
+					workflowColumns: [{ id: "column-todo", name: "To Do" }],
+				}),
+			{ wrapper: createWrapper(queryClient) },
+		);
+
+		expect(result.current.acceptanceCriteriaGeneration.canGenerate).toBe(false);
+		expect(result.current.acceptanceCriteriaGeneration.message).toBe(
+			"Add a task title or description before generating acceptance criteria.",
+		);
+
+		await act(async () => {
+			await result.current.acceptanceCriteriaGeneration.generate();
+		});
+
+		expect(fetchSpy).not.toHaveBeenCalled();
+		expect(result.current.acceptanceCriteriaGeneration.message).toBe(
+			"Add a task title or description before generating acceptance criteria.",
+		);
+	});
+
+	it("streams generated acceptance criteria from create form metadata", async () => {
+		const queryClient = createTestQueryClient();
+		const fetchSpy = vi
+			.fn<typeof fetch>()
+			.mockResolvedValue(
+				a2aStreamResponse("- First criterion", "\n- Second criterion"),
+			);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		const { result } = renderHook(
+			() =>
+				useTaskForm({
+					projectId: "project-1",
+					mode: "create",
+					workflowColumns: [
+						{ id: "column-todo", name: "To Do" },
+						{ id: "column-review", name: "Review" },
+					],
+				}),
+			{ wrapper: createWrapper(queryClient) },
+		);
+
+		act(() => {
+			result.current.setField("title", "  Generate task  ");
+			result.current.setField("status", "column-review");
+			result.current.setField("priority", "high");
+			result.current.setField("storyPoints", "5");
+			result.current.setField("description", "  Helpful context  ");
+			result.current.setField("acceptanceCriteria", "  Existing draft  ");
+			result.current.setField("tag", "  UX  ");
+		});
+
+		await act(async () => {
+			await result.current.acceptanceCriteriaGeneration.generate();
+		});
+
+		expect(fetchSpy).toHaveBeenCalledTimes(1);
+		expect(fetchSpy.mock.calls[0][0]).toBe(
+			"https://api.example.test/a2a/acceptance-criteria",
+		);
+		expect(
+			new Headers(fetchSpy.mock.calls[0][1]?.headers).get("Authorization"),
+		).toBe("Bearer task-form-token");
+		expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toMatchObject({
+			jsonrpc: "2.0",
+			method: "message/stream",
+			params: {
+				message: {
+					metadata: {
+						projectId: "project-1",
+						task: {
+							title: "Generate task",
+							description: "Helpful context",
+							acceptanceCriteria: "Existing draft",
+							priority: "high",
+							storyPoints: 5,
+							tag: "UX",
+							workflowColumn: "Review",
+							mode: "create",
+						},
+					},
+				},
+			},
+		});
+		expect(result.current.values.acceptanceCriteria).toBe(
+			"- First criterion\n- Second criterion",
+		);
+		expect(result.current.acceptanceCriteriaGeneration.isGenerating).toBe(
+			false,
+		);
+		expect(result.current.isDirty).toBe(true);
+	});
 });
 
 describe("useTaskForm edit mode", () => {
@@ -741,6 +873,138 @@ describe("useTaskForm edit mode", () => {
 		expect(JSON.parse(String(init?.body))).toEqual(
 			expect.objectContaining({ story_points: null }),
 		);
+	});
+
+	it("prompts for edit task context without calling A2A", async () => {
+		const queryClient = createTestQueryClient();
+		const existingTask = task({ title: "", description: "" });
+		const fetchSpy = vi.fn<typeof fetch>();
+		vi.stubGlobal("fetch", fetchSpy);
+
+		const { result } = renderHook(
+			() =>
+				useTaskForm({
+					projectId: "project-1",
+					mode: "edit",
+					taskId: "task-1",
+					task: existingTask,
+					workflowColumns: [{ id: "in-progress", name: "In Progress" }],
+				}),
+			{ wrapper: createWrapper(queryClient) },
+		);
+
+		expect(result.current.acceptanceCriteriaGeneration.canGenerate).toBe(false);
+		expect(result.current.acceptanceCriteriaGeneration.message).toBe(
+			"Add a task title or description before generating acceptance criteria.",
+		);
+
+		await act(async () => {
+			await result.current.acceptanceCriteriaGeneration.generate();
+		});
+
+		expect(fetchSpy).not.toHaveBeenCalled();
+	});
+
+	it("streams generated edit criteria and persists them only on submit", async () => {
+		const queryClient = createTestQueryClient();
+		const onSaved = vi.fn();
+		const existingTask = task();
+		const fetchSpy = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(
+				a2aStreamResponse("- Regenerated criterion", "\n- Save later"),
+			)
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify(
+						createdTask({
+							title: "Existing task",
+							column_id: "in-progress",
+							priority: "high",
+							story_points: 5,
+							description: "Current notes",
+							acceptance_criteria: "- Regenerated criterion\n- Save later",
+							tag: "frontend",
+						}),
+					),
+					{ headers: { "content-type": "application/json" }, status: 200 },
+				),
+			);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		const { result } = renderHook(
+			() =>
+				useTaskForm({
+					projectId: "project-1",
+					mode: "edit",
+					taskId: "task-1",
+					task: existingTask,
+					workflowColumns: [
+						{ id: "in-progress", name: "In Progress" },
+						{ id: "done", name: "Done" },
+					],
+					onSaved,
+				}),
+			{ wrapper: createWrapper(queryClient) },
+		);
+
+		await act(async () => {
+			await result.current.acceptanceCriteriaGeneration.generate();
+		});
+
+		expect(fetchSpy).toHaveBeenCalledTimes(1);
+		expect(fetchSpy.mock.calls[0][0]).toBe(
+			"https://api.example.test/a2a/acceptance-criteria",
+		);
+		expect(
+			new Headers(fetchSpy.mock.calls[0][1]?.headers).get("Authorization"),
+		).toBe("Bearer task-form-token");
+		expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toMatchObject({
+			jsonrpc: "2.0",
+			method: "message/stream",
+			params: {
+				message: {
+					metadata: {
+						projectId: "project-1",
+						task: {
+							title: "Existing task",
+							description: "Current notes",
+							acceptanceCriteria: "Current criteria",
+							priority: "high",
+							storyPoints: 5,
+							tag: "frontend",
+							workflowColumn: "In Progress",
+							mode: "edit",
+						},
+					},
+				},
+			},
+		});
+		expect(result.current.values.acceptanceCriteria).toBe(
+			"- Regenerated criterion\n- Save later",
+		);
+		expect(result.current.isDirty).toBe(true);
+
+		await act(async () => {
+			await result.current.submit();
+		});
+
+		expect(fetchSpy).toHaveBeenCalledTimes(2);
+		expect(JSON.parse(String(fetchSpy.mock.calls[1][1]?.body))).toEqual({
+			title: "Existing task",
+			column_id: "in-progress",
+			priority: "high",
+			story_points: 5,
+			description: "Current notes",
+			acceptance_criteria: "- Regenerated criterion\n- Save later",
+			tag: "frontend",
+		});
+		expect(onSaved).toHaveBeenCalledWith(
+			expect.objectContaining({
+				acceptanceCriteria: "- Regenerated criterion\n- Save later",
+			}),
+		);
+		expect(result.current.isDirty).toBe(false);
 	});
 
 	it.each([

@@ -61,6 +61,16 @@ export function TaskDetailPage({
 		await form.submit();
 	}
 
+	function handleGenerateAcceptanceCriteria() {
+		if (form.acceptanceCriteriaGeneration.isGenerating) {
+			form.acceptanceCriteriaGeneration.cancel();
+			return;
+		}
+
+		setSavedMessage(null);
+		void form.acceptanceCriteriaGeneration.generate();
+	}
+
 	return (
 		<WorkspaceLayout
 			breadcrumbItems={[
@@ -285,14 +295,30 @@ export function TaskDetailPage({
 							</Field>
 
 							<Field>
-								<FieldLabel
-									className="text-sm font-semibold text-[var(--on-surface)]"
-									htmlFor="taskAcceptanceCriteria"
-								>
-									Acceptance Criteria
-								</FieldLabel>
+								<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+									<FieldLabel
+										className="text-sm font-semibold text-[var(--on-surface)]"
+										htmlFor="taskAcceptanceCriteria"
+									>
+										Acceptance Criteria
+									</FieldLabel>
+									<Button
+										className="h-auto self-start rounded-full border border-[var(--outline-variant)] bg-[var(--surface)] px-3 py-1.5 text-xs font-semibold text-[var(--primary)] shadow-none transition hover:bg-[var(--primary-container)] sm:self-auto"
+										disabled={
+											!form.acceptanceCriteriaGeneration.canGenerate &&
+											!form.acceptanceCriteriaGeneration.isGenerating
+										}
+										type="button"
+										onClick={handleGenerateAcceptanceCriteria}
+									>
+										{form.acceptanceCriteriaGeneration.isGenerating
+											? "Cancel generation"
+											: "Generate with AI"}
+									</Button>
+								</div>
 								<Textarea
 									id="taskAcceptanceCriteria"
+									disabled={form.acceptanceCriteriaGeneration.isGenerating}
 									onChange={(event) =>
 										updateField("acceptanceCriteria", event.target.value)
 									}
@@ -300,6 +326,11 @@ export function TaskDetailPage({
 									rows={4}
 									value={form.values.acceptanceCriteria}
 								/>
+								{form.acceptanceCriteriaGeneration.message ? (
+									<FieldDescription className="text-sm font-medium text-[var(--on-surface-variant)]">
+										{form.acceptanceCriteriaGeneration.message}
+									</FieldDescription>
+								) : null}
 							</Field>
 						</section>
 

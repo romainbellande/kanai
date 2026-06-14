@@ -1,7 +1,9 @@
+apis/A2aApi.ts
 apis/ProjectsApi.ts
 apis/TasksApi.ts
 apis/UsersApi.ts
 apis/index.ts
+docs/A2aApi.md
 docs/HTTPValidationError.md
 docs/LocationInner.md
 docs/ProjectBacklogReorder.md

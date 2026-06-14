@@ -20,6 +20,14 @@ _Avoid_: Project phase, project health
 A Project participant who can work with project tasks and Sprint Membership.
 _Avoid_: Contributor, teammate
 
+**Project Task**:
+A Kanai work item owned by a Project and managed through planning and workflow views.
+_Avoid_: A2A Task, agent task
+
+**A2A Task**:
+A protocol-level agent execution state used for A2A streaming and interoperability.
+_Avoid_: Project Task, backlog task, sprint task
+
 **Sprint**:
 A time-boxed planning period within one Project, with planned start and end dates.
 _Avoid_: Iteration, cycle
@@ -67,6 +75,10 @@ _Avoid_: Queue order, backlog rank
 **Story Points**:
 An optional Task sizing value for planning work, using the point scale 1, 2, 3, 5, 8, or 13.
 _Avoid_: Task points, effort points
+
+**Acceptance Criteria**:
+Task-owned, user-editable conditions used to judge whether a Task is ready to become a Finished Task.
+_Avoid_: Completion checklist, Definition of Done, workflow rule
 
 **Sprint Board**:
 A Project task board view limited to Sprint Tasks.

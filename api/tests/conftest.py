@@ -15,3 +15,6 @@ os.environ.setdefault(
     "AUTH__DISCOVERY_ENDPOINT", "https://example.test/.well-known/openid-configuration"
 )
 os.environ.setdefault("AUTH__AUDIENCE", "kanai-api")
+os.environ.setdefault("AI__MODEL_NAME", "test-model")
+os.environ.setdefault("AI__BASE_URL", "https://ai.example.test/v1")
+os.environ.setdefault("AI__API_KEY", "test-api-key")

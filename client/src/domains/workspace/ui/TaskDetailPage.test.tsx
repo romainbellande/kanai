@@ -104,6 +104,94 @@ function column(overrides: Partial<ProjectColumn> = {}): ProjectColumn {
 	};
 }
 
+function a2aStreamResponse(...chunks: string[]): Response {
+	const encoder = new TextEncoder();
+	return new Response(
+		new ReadableStream<Uint8Array>({
+			start(controller) {
+				for (const chunk of chunks) {
+					controller.enqueue(
+						encoder.encode(
+							`${JSON.stringify({
+								jsonrpc: "2.0",
+								id: "request-1",
+								result: {
+									kind: "message",
+									message: {
+										role: "agent",
+										parts: [{ kind: "text", text: chunk }],
+									},
+								},
+							})}\n`,
+						),
+					);
+				}
+				controller.close();
+			},
+		}),
+		{ headers: { "content-type": "application/x-ndjson" }, status: 200 },
+	);
+}
+
+function failingA2aStreamResponse(...chunks: string[]): Response {
+	const encoder = new TextEncoder();
+	return new Response(
+		new ReadableStream<Uint8Array>({
+			start(controller) {
+				for (const chunk of chunks) {
+					controller.enqueue(
+						encoder.encode(
+							`${JSON.stringify({
+								jsonrpc: "2.0",
+								id: "request-1",
+								result: {
+									kind: "message",
+									message: {
+										role: "agent",
+										parts: [{ kind: "text", text: chunk }],
+									},
+								},
+							})}\n`,
+						),
+					);
+				}
+				controller.error(new Error("Stream failed"));
+			},
+		}),
+		{ headers: { "content-type": "application/x-ndjson" }, status: 200 },
+	);
+}
+
+function abortableA2aStreamResponse(
+	chunk: string,
+	onCancel: () => void,
+): Response {
+	const encoder = new TextEncoder();
+	return new Response(
+		new ReadableStream<Uint8Array>({
+			start(controller) {
+				controller.enqueue(
+					encoder.encode(
+						`${JSON.stringify({
+							jsonrpc: "2.0",
+							id: "request-1",
+							result: {
+								kind: "message",
+								message: {
+									role: "agent",
+									parts: [{ kind: "text", text: chunk }],
+								},
+							},
+						})}\n`,
+					),
+				);
+			},
+			cancel: onCancel,
+		}),
+		{ headers: { "content-type": "application/x-ndjson" }, status: 200 },
+	);
+}
+
 function createTestQueryClient() {
 	return new QueryClient({
 		defaultOptions: {
@@ -409,6 +497,291 @@ describe("TaskDetailPage", () => {
 
 		expect(screen.getByDisplayValue("Unsaved Task")).toBeTruthy();
 		expect(screen.queryByDisplayValue("Server Refetch Task")).toBeNull();
+	});
+
+	it("shows the edit acceptance criteria generator and prompts without context", async () => {
+		const { TaskDetailPage } = await import(
+			"#/domains/workspace/ui/TaskDetailPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project(),
+		);
+		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
+			task({ title: "", description: "" }),
+		]);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column(),
+		]);
+		const fetchSpy = vi.fn<typeof fetch>();
+		vi.stubGlobal("fetch", fetchSpy);
+
+		renderTaskDetailPage(<TaskDetailPage />, queryClient);
+
+		expect(screen.getByLabelText("Acceptance Criteria")).toBeTruthy();
+		const generateButton = screen.getByRole<HTMLButtonElement>("button", {
+			name: "Generate with AI",
+		});
+		expect(generateButton.disabled).toBe(true);
+		expect(
+			screen.getByText(
+				"Add a task title or description before generating acceptance criteria.",
+			),
+		).toBeTruthy();
+		fireEvent.click(generateButton);
+		expect(fetchSpy).not.toHaveBeenCalled();
+	});
+
+	it("streams generated criteria into the edit field without saving until submit", async () => {
+		const { TaskDetailPage } = await import(
+			"#/domains/workspace/ui/TaskDetailPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project(),
+		);
+		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
+			task(),
+		]);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column(),
+			column({ id: "done", name: "Released", position: 1 }),
+		]);
+		const updatedTaskJson = {
+			id: "task-1",
+			project_id: "project-1",
+			title: "Original Task",
+			column_id: "todo",
+			priority: "medium",
+			story_points: 3,
+			rank: "U",
+			assignee_id: null,
+			description: "Original notes",
+			acceptance_criteria: "- Generated one\n- Generated two",
+			tag: "Feature",
+			created_at: null,
+			updated_at: null,
+		};
+		const fetchSpy = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(
+				a2aStreamResponse("- Generated one", "\n- Generated two"),
+			)
+			.mockResolvedValueOnce(
+				new Response(JSON.stringify(updatedTaskJson), {
+					headers: { "content-type": "application/json" },
+					status: 200,
+				}),
+			)
+			.mockResolvedValue(
+				new Response(JSON.stringify([updatedTaskJson]), {
+					headers: { "content-type": "application/json" },
+					status: 200,
+				}),
+			);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		renderTaskDetailPage(<TaskDetailPage />, queryClient);
+
+		fireEvent.click(screen.getByRole("button", { name: "Generate with AI" }));
+
+		await waitFor(() => {
+			expect(
+				screen.getByLabelText<HTMLTextAreaElement>("Acceptance Criteria").value,
+			).toBe("- Generated one\n- Generated two");
+		});
+		expect(fetchSpy).toHaveBeenCalledTimes(1);
+		expect(fetchSpy.mock.calls[0][0]).toBe(
+			"https://api.example.test/a2a/acceptance-criteria",
+		);
+		expect(
+			new Headers(fetchSpy.mock.calls[0][1]?.headers).get("Authorization"),
+		).toBe("Bearer task-token");
+		expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toMatchObject({
+			params: {
+				message: {
+					metadata: {
+						projectId: "project-1",
+						task: {
+							title: "Original Task",
+							description: "Original notes",
+							acceptanceCriteria: "Original criteria",
+							priority: "medium",
+							storyPoints: 3,
+							tag: "Feature",
+							workflowColumn: "Ready",
+							mode: "edit",
+						},
+					},
+				},
+			},
+		});
+		expect(screen.queryByText("Task changes saved.")).toBeNull();
+
+		act(() => {
+			queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
+				task({ acceptanceCriteria: "Server refetch criteria" }),
+			]);
+		});
+		expect(
+			screen.getByLabelText<HTMLTextAreaElement>("Acceptance Criteria").value,
+		).toBe("- Generated one\n- Generated two");
+
+		fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+
+		await screen.findByText("Task changes saved.");
+		const updateCall = fetchSpy.mock.calls.find(
+			([url, init]) =>
+				String(url).endsWith("/projects/project-1/tasks/task-1") &&
+				init?.method === "PATCH",
+		);
+		expect(updateCall).toBeTruthy();
+		expect(JSON.parse(String(updateCall?.[1]?.body))).toEqual({
+			column_id: "todo",
+			acceptance_criteria: "- Generated one\n- Generated two",
+			description: "Original notes",
+			priority: "medium",
+			story_points: 3,
+			tag: "Feature",
+			title: "Original Task",
+		});
+	});
+
+	it("recovers from failed edit criteria generation and allows manual save", async () => {
+		const { TaskDetailPage } = await import(
+			"#/domains/workspace/ui/TaskDetailPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project(),
+		);
+		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
+			task(),
+		]);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column(),
+		]);
+		const updatedTaskJson = {
+			id: "task-1",
+			project_id: "project-1",
+			title: "Original Task",
+			column_id: "todo",
+			priority: "medium",
+			story_points: 3,
+			rank: "U",
+			assignee_id: null,
+			description: "Original notes",
+			acceptance_criteria: "Manual recovered criteria",
+			tag: "Feature",
+			created_at: null,
+			updated_at: null,
+		};
+		const fetchSpy = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(failingA2aStreamResponse("- Partial edit"))
+			.mockResolvedValueOnce(
+				new Response(JSON.stringify(updatedTaskJson), {
+					headers: { "content-type": "application/json" },
+					status: 200,
+				}),
+			)
+			.mockResolvedValue(
+				new Response(JSON.stringify([updatedTaskJson]), {
+					headers: { "content-type": "application/json" },
+					status: 200,
+				}),
+			);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		renderTaskDetailPage(<TaskDetailPage />, queryClient);
+
+		fireEvent.click(screen.getByRole("button", { name: "Generate with AI" }));
+
+		const acceptanceCriteria = screen.getByLabelText<HTMLTextAreaElement>(
+			"Acceptance Criteria",
+		);
+		await waitFor(() =>
+			expect(acceptanceCriteria.value).toBe("Original criteria"),
+		);
+		expect(
+			screen.getByText(
+				"Acceptance criteria could not be generated. Please try again.",
+			),
+		).toBeTruthy();
+		expect(acceptanceCriteria.disabled).toBe(false);
+
+		fireEvent.change(acceptanceCriteria, {
+			target: { value: "Manual recovered criteria" },
+		});
+		fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+
+		await screen.findByText("Task changes saved.");
+		const updateCall = fetchSpy.mock.calls.find(
+			([url, init]) =>
+				String(url).endsWith("/projects/project-1/tasks/task-1") &&
+				init?.method === "PATCH",
+		);
+		expect(updateCall).toBeTruthy();
+		expect(JSON.parse(String(updateCall?.[1]?.body))).toEqual({
+			column_id: "todo",
+			acceptance_criteria: "Manual recovered criteria",
+			description: "Original notes",
+			priority: "medium",
+			story_points: 3,
+			tag: "Feature",
+			title: "Original Task",
+		});
+	});
+
+	it("cancels edit criteria generation and unlocks the textarea", async () => {
+		const { TaskDetailPage } = await import(
+			"#/domains/workspace/ui/TaskDetailPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project(),
+		);
+		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
+			task(),
+		]);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column(),
+		]);
+		const cancelSpy = vi.fn();
+		let signal: AbortSignal | null = null;
+		const fetchSpy = vi.fn<typeof fetch>((_, init) => {
+			signal = init?.signal as AbortSignal;
+			return Promise.resolve(
+				abortableA2aStreamResponse("- Partial edit generated", cancelSpy),
+			);
+		});
+		vi.stubGlobal("fetch", fetchSpy);
+
+		renderTaskDetailPage(<TaskDetailPage />, queryClient);
+
+		fireEvent.click(screen.getByRole("button", { name: "Generate with AI" }));
+
+		const acceptanceCriteria = screen.getByLabelText<HTMLTextAreaElement>(
+			"Acceptance Criteria",
+		);
+		await waitFor(() => expect(acceptanceCriteria.disabled).toBe(true));
+		await waitFor(() =>
+			expect(acceptanceCriteria.value).toBe("- Partial edit generated"),
+		);
+
+		fireEvent.click(screen.getByRole("button", { name: /cancel generation/i }));
+
+		await waitFor(() => expect(signal?.aborted).toBe(true));
+		await waitFor(() => expect(cancelSpy).toHaveBeenCalledTimes(1));
+		await waitFor(() => expect(acceptanceCriteria.disabled).toBe(false));
+		expect(acceptanceCriteria.value).toBe("- Partial edit generated");
+		expect(
+			screen.getByRole("button", { name: "Generate with AI" }),
+		).toBeTruthy();
 	});
 
 	it("blocks saving when workflow columns cannot be loaded", async () => {

@@ -298,15 +298,38 @@ export function CreateTaskPage({
 							</Field>
 
 							<Field>
-								<FieldLabel
-									className="text-sm font-semibold text-[var(--on-surface)]"
-									htmlFor="taskAcceptanceCriteria"
-								>
-									Acceptance Criteria
-								</FieldLabel>
+								<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+									<FieldLabel
+										className="text-sm font-semibold text-[var(--on-surface)]"
+										htmlFor="taskAcceptanceCriteria"
+									>
+										Acceptance Criteria
+									</FieldLabel>
+									<Button
+										className="h-auto self-start rounded-full border border-[var(--outline-variant)] bg-[var(--surface)] px-3 py-1.5 text-xs font-semibold text-[var(--primary)] shadow-none transition hover:bg-[var(--primary-container)] sm:self-auto"
+										disabled={
+											!form.acceptanceCriteriaGeneration.canGenerate &&
+											!form.acceptanceCriteriaGeneration.isGenerating
+										}
+										type="button"
+										onClick={() => {
+											if (form.acceptanceCriteriaGeneration.isGenerating) {
+												form.acceptanceCriteriaGeneration.cancel();
+												return;
+											}
+
+											void form.acceptanceCriteriaGeneration.generate();
+										}}
+									>
+										{form.acceptanceCriteriaGeneration.isGenerating
+											? "Cancel generation"
+											: "Generate with AI"}
+									</Button>
+								</div>
 								<Textarea
 									id="taskAcceptanceCriteria"
 									name="taskAcceptanceCriteria"
+									disabled={form.acceptanceCriteriaGeneration.isGenerating}
 									placeholder="List the conditions that must be met for this task to be complete..."
 									rows={4}
 									value={form.values.acceptanceCriteria}
@@ -314,6 +337,11 @@ export function CreateTaskPage({
 										form.setField("acceptanceCriteria", event.target.value)
 									}
 								/>
+								{form.acceptanceCriteriaGeneration.message ? (
+									<FieldDescription className="text-sm font-medium text-[var(--on-surface-variant)]">
+										{form.acceptanceCriteriaGeneration.message}
+									</FieldDescription>
+								) : null}
 							</Field>
 						</section>
 					</div>

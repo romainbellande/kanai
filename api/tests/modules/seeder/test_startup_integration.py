@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import pytest
 
 import app.main as main
-from app.core.config import AuthSettings, Environment, Settings
+from app.core.config import AiSettings, AuthSettings, Environment, Settings
 from app.services import seeder_service as startup_module
 
 
@@ -54,6 +54,11 @@ def build_settings(environment: Environment) -> Settings:
         auth=AuthSettings(
             discovery_endpoint="https://example.test/.well-known/openid-configuration",
             audience="kanai-api",
+        ),
+        ai=AiSettings(
+            model_name="test-model",
+            base_url="https://ai.example.test/v1",
+            api_key="test-api-key",
         ),
         client_origin="http://localhost:5173",
     )

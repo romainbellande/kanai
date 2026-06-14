@@ -16,6 +16,12 @@ const exportScript = [
 const result = spawnSync("uv", ["run", "python", "-c", exportScript], {
 	cwd: apiRoot,
 	encoding: "utf8",
+	env: {
+		...process.env,
+		AI__MODEL_NAME: process.env.AI__MODEL_NAME ?? "openapi-export-model",
+		AI__BASE_URL: process.env.AI__BASE_URL ?? "https://ai.example.test/v1",
+		AI__API_KEY: process.env.AI__API_KEY ?? "openapi-export-api-key",
+	},
 });
 
 if (result.status !== 0) {

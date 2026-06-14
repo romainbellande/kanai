@@ -39,6 +39,7 @@ def test_get_auth_whitelist_paths_matches_public_docs_routes() -> None:
     assert get_auth_whitelist_paths() == {
         "/docs",
         "/docs/oauth2-redirect",
+        "/a2a/acceptance-criteria/.well-known/agent-card.json",
         "/openapi.json",
         "/redoc",
     }

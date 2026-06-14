@@ -71,6 +71,94 @@ function column(overrides: Partial<ProjectColumn>): ProjectColumn {
 	};
 }
 
+function a2aStreamResponse(...chunks: string[]): Response {
+	const encoder = new TextEncoder();
+	return new Response(
+		new ReadableStream<Uint8Array>({
+			start(controller) {
+				for (const chunk of chunks) {
+					controller.enqueue(
+						encoder.encode(
+							`${JSON.stringify({
+								jsonrpc: "2.0",
+								id: "request-1",
+								result: {
+									kind: "message",
+									message: {
+										role: "agent",
+										parts: [{ kind: "text", text: chunk }],
+									},
+								},
+							})}\n`,
+						),
+					);
+				}
+				controller.close();
+			},
+		}),
+		{ headers: { "content-type": "application/x-ndjson" }, status: 200 },
+	);
+}
+
+function failingA2aStreamResponse(...chunks: string[]): Response {
+	const encoder = new TextEncoder();
+	return new Response(
+		new ReadableStream<Uint8Array>({
+			start(controller) {
+				for (const chunk of chunks) {
+					controller.enqueue(
+						encoder.encode(
+							`${JSON.stringify({
+								jsonrpc: "2.0",
+								id: "request-1",
+								result: {
+									kind: "message",
+									message: {
+										role: "agent",
+										parts: [{ kind: "text", text: chunk }],
+									},
+								},
+							})}\n`,
+						),
+					);
+				}
+				controller.error(new Error("Stream failed"));
+			},
+		}),
+		{ headers: { "content-type": "application/x-ndjson" }, status: 200 },
+	);
+}
+
+function abortableA2aStreamResponse(
+	chunk: string,
+	onCancel: () => void,
+): Response {
+	const encoder = new TextEncoder();
+	return new Response(
+		new ReadableStream<Uint8Array>({
+			start(controller) {
+				controller.enqueue(
+					encoder.encode(
+						`${JSON.stringify({
+							jsonrpc: "2.0",
+							id: "request-1",
+							result: {
+								kind: "message",
+								message: {
+									role: "agent",
+									parts: [{ kind: "text", text: chunk }],
+								},
+							},
+						})}\n`,
+					),
+				);
+			},
+			cancel: onCancel,
+		}),
+		{ headers: { "content-type": "application/x-ndjson" }, status: 200 },
+	);
+}
+
 function renderWithQueryClient(
 	ui: ReactNode,
 	columns: ProjectColumn[] | null = [
@@ -251,6 +339,256 @@ describe("CreateTaskPage", () => {
 			to: "/projects/$projectId",
 			params: { projectId: "project-1" },
 		});
+	});
+
+	it("renders and enables acceptance criteria generation from task context", async () => {
+		const { CreateTaskPage } = await import(
+			"#/domains/workspace/ui/CreateTaskPage"
+		);
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		vi.stubGlobal("fetch", vi.fn<typeof fetch>());
+
+		renderWithQueryClient(<CreateTaskPage />);
+		const generateButton = screen.getByRole<HTMLButtonElement>("button", {
+			name: /generate with ai/i,
+		});
+		expect(generateButton.disabled).toBe(true);
+		expect(
+			screen.getByText(
+				"Add a task title or description before generating acceptance criteria.",
+			),
+		).toBeTruthy();
+
+		fireEvent.change(screen.getByLabelText(/task title/i), {
+			target: { value: "Generate criteria" },
+		});
+
+		expect(generateButton.disabled).toBe(false);
+		expect(
+			screen.queryByText(
+				"Add a task title or description before generating acceptance criteria.",
+			),
+		).toBeNull();
+	});
+
+	it("streams criteria into the textarea and persists edits only on create", async () => {
+		const { CreateTaskPage } = await import(
+			"#/domains/workspace/ui/CreateTaskPage"
+		);
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		const fetchSpy = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(
+				a2aStreamResponse("- Generated one", "\n- Generated two"),
+			)
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						id: "task-1",
+						project_id: "project-1",
+						title: "Generated task",
+						column_id: "column-review",
+						priority: "medium",
+						story_points: 3,
+						rank: "0|hzzzzz:",
+						assignee_id: null,
+						description: "Task context",
+						acceptance_criteria: "- Edited generated",
+						tag: "AI",
+						created_at: null,
+						updated_at: null,
+					}),
+					{ headers: { "content-type": "application/json" }, status: 200 },
+				),
+			);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		renderWithQueryClient(<CreateTaskPage />);
+		fireEvent.change(screen.getByLabelText(/task title/i), {
+			target: { value: "Generated task" },
+		});
+		fireEvent.change(screen.getByLabelText(/workflow/i), {
+			target: { value: "column-review" },
+		});
+		fireEvent.change(screen.getByLabelText(/priority/i), {
+			target: { value: "medium" },
+		});
+		fireEvent.change(screen.getByLabelText(/story points/i), {
+			target: { value: "3" },
+		});
+		fireEvent.change(screen.getByLabelText(/description/i), {
+			target: { value: "Task context" },
+		});
+		fireEvent.change(screen.getByLabelText(/acceptance criteria/i), {
+			target: { value: "Existing criteria" },
+		});
+		fireEvent.change(screen.getByLabelText(/tag/i), {
+			target: { value: "AI" },
+		});
+
+		fireEvent.click(screen.getByRole("button", { name: /generate with ai/i }));
+
+		const acceptanceCriteria = screen.getByLabelText(
+			/acceptance criteria/i,
+		) as HTMLTextAreaElement;
+		await waitFor(() =>
+			expect(acceptanceCriteria.value).toBe("- Generated one\n- Generated two"),
+		);
+		expect(acceptanceCriteria.disabled).toBe(false);
+
+		fireEvent.change(acceptanceCriteria, {
+			target: { value: "- Edited generated" },
+		});
+		fireEvent.submit(getCreateTaskForm());
+
+		await waitFor(() =>
+			expect(
+				fetchSpy.mock.calls.some(
+					([url, init]) =>
+						String(url).endsWith("/projects/project-1/tasks") &&
+						init?.method === "POST",
+				),
+			).toBe(true),
+		);
+		const [, init] = fetchSpy.mock.calls.find(
+			([url, init]) =>
+				String(url).endsWith("/projects/project-1/tasks") &&
+				init?.method === "POST",
+		) ?? [null, undefined];
+		expect(JSON.parse(String(init?.body))).toEqual({
+			title: "Generated task",
+			column_id: "column-review",
+			priority: "medium",
+			story_points: 3,
+			description: "Task context",
+			acceptance_criteria: "- Edited generated",
+			tag: "AI",
+		});
+	});
+
+	it("recovers from failed criteria generation and allows manual create", async () => {
+		const { CreateTaskPage } = await import(
+			"#/domains/workspace/ui/CreateTaskPage"
+		);
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		const fetchSpy = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(failingA2aStreamResponse("- Partial generated"))
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						id: "task-1",
+						project_id: "project-1",
+						title: "Recovered task",
+						column_id: "column-review",
+						priority: null,
+						story_points: null,
+						rank: "0|hzzzzz:",
+						assignee_id: null,
+						description: "Task context",
+						acceptance_criteria: "Manual recovered criteria",
+						tag: null,
+						created_at: null,
+						updated_at: null,
+					}),
+					{ headers: { "content-type": "application/json" }, status: 200 },
+				),
+			);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		renderWithQueryClient(<CreateTaskPage />);
+		fireEvent.change(screen.getByLabelText(/task title/i), {
+			target: { value: "Recovered task" },
+		});
+		fireEvent.change(screen.getByLabelText(/workflow/i), {
+			target: { value: "column-review" },
+		});
+		fireEvent.change(screen.getByLabelText(/description/i), {
+			target: { value: "Task context" },
+		});
+		fireEvent.change(screen.getByLabelText(/acceptance criteria/i), {
+			target: { value: "Original criteria" },
+		});
+
+		fireEvent.click(screen.getByRole("button", { name: /generate with ai/i }));
+
+		const acceptanceCriteria =
+			screen.getByLabelText<HTMLTextAreaElement>(/acceptance criteria/i);
+		await waitFor(() =>
+			expect(acceptanceCriteria.value).toBe("Original criteria"),
+		);
+		expect(
+			screen.getByText(
+				"Acceptance criteria could not be generated. Please try again.",
+			),
+		).toBeTruthy();
+		expect(acceptanceCriteria.disabled).toBe(false);
+
+		fireEvent.change(acceptanceCriteria, {
+			target: { value: "Manual recovered criteria" },
+		});
+		fireEvent.submit(getCreateTaskForm());
+
+		await waitFor(() =>
+			expect(
+				fetchSpy.mock.calls.some(
+					([url, init]) =>
+						String(url).endsWith("/projects/project-1/tasks") &&
+						init?.method === "POST",
+				),
+			).toBe(true),
+		);
+		const [, init] = fetchSpy.mock.calls.find(
+			([url, init]) =>
+				String(url).endsWith("/projects/project-1/tasks") &&
+				init?.method === "POST",
+		) ?? [null, undefined];
+		expect(JSON.parse(String(init?.body))).toEqual({
+			title: "Recovered task",
+			column_id: "column-review",
+			description: "Task context",
+			acceptance_criteria: "Manual recovered criteria",
+		});
+	});
+
+	it("cancels create criteria generation and unlocks the textarea", async () => {
+		const { CreateTaskPage } = await import(
+			"#/domains/workspace/ui/CreateTaskPage"
+		);
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		const cancelSpy = vi.fn();
+		let signal: AbortSignal | null = null;
+		const fetchSpy = vi.fn<typeof fetch>((_, init) => {
+			signal = init?.signal as AbortSignal;
+			return Promise.resolve(
+				abortableA2aStreamResponse("- Partial generated", cancelSpy),
+			);
+		});
+		vi.stubGlobal("fetch", fetchSpy);
+
+		renderWithQueryClient(<CreateTaskPage />);
+		fireEvent.change(screen.getByLabelText(/task title/i), {
+			target: { value: "Generated task" },
+		});
+
+		fireEvent.click(screen.getByRole("button", { name: /generate with ai/i }));
+
+		const acceptanceCriteria =
+			screen.getByLabelText<HTMLTextAreaElement>(/acceptance criteria/i);
+		await waitFor(() => expect(acceptanceCriteria.disabled).toBe(true));
+		await waitFor(() =>
+			expect(acceptanceCriteria.value).toBe("- Partial generated"),
+		);
+
+		fireEvent.click(screen.getByRole("button", { name: /cancel generation/i }));
+
+		await waitFor(() => expect(signal?.aborted).toBe(true));
+		await waitFor(() => expect(cancelSpy).toHaveBeenCalledTimes(1));
+		await waitFor(() => expect(acceptanceCriteria.disabled).toBe(false));
+		expect(acceptanceCriteria.value).toBe("- Partial generated");
+		expect(
+			screen.getByRole("button", { name: /generate with ai/i }),
+		).toBeTruthy();
 	});
 
 	it("uses the source board column as the initial workflow column", async () => {

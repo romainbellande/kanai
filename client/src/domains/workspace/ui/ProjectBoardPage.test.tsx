@@ -15,13 +15,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	currentUserQueryOptions,
 	type Project,
+	type ProjectChatMessage,
 	type ProjectColumn,
 	type ProjectDoneColumn,
 	type ProjectSprint,
 	projectAccessUsersQueryKey,
 	projectActiveSprintQueryOptions,
 	projectBacklogQueryOptions,
-	projectChatMessagesQueryOptions,
+	projectChatMessagesInfiniteQueryKey,
 	projectColumnsQueryOptions,
 	projectDoneColumnQueryOptions,
 	projectQueryOptions,
@@ -172,6 +173,24 @@ function chatMessageJson(index: number) {
 	};
 }
 
+function jsonResponse(data: unknown, init: ResponseInit = { status: 200 }) {
+	return new Response(JSON.stringify(data), {
+		headers: { "content-type": "application/json" },
+		...init,
+	});
+}
+
+function seedProjectChatMessages(
+	queryClient: QueryClient,
+	messages: ProjectChatMessage[] = [],
+	nextCursor: string | null = null,
+) {
+	queryClient.setQueryData(projectChatMessagesInfiniteQueryKey("project-1"), {
+		pageParams: [undefined],
+		pages: [{ messages, nextCursor }],
+	});
+}
+
 function seedProjectBoardQueries(queryClient: QueryClient) {
 	queryClient.setQueryData(currentUserQueryOptions().queryKey, {
 		id: "owner-1",
@@ -246,6 +265,16 @@ function renderWithQueryClient(
 	}
 	if (
 		queryClient.getQueryData(
+			projectSprintHistoryQueryOptions("project-1").queryKey,
+		) === undefined
+	) {
+		queryClient.setQueryData(
+			projectSprintHistoryQueryOptions("project-1").queryKey,
+			[],
+		);
+	}
+	if (
+		queryClient.getQueryData(
 			projectBacklogQueryOptions("project-1").queryKey,
 		) === undefined
 	) {
@@ -253,6 +282,13 @@ function renderWithQueryClient(
 			projectBacklogQueryOptions("project-1").queryKey,
 			[],
 		);
+	}
+	if (
+		queryClient.getQueryData(
+			projectChatMessagesInfiniteQueryKey("project-1"),
+		) === undefined
+	) {
+		seedProjectChatMessages(queryClient);
 	}
 
 	return render(
@@ -679,7 +715,6 @@ describe("ProjectBoardPage", () => {
 		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
 			column({ id: "column-todo", name: "Backlog", position: 0 }),
 		]);
-
 		renderWithQueryClient(<ProjectBoardPage />, queryClient);
 
 		expect(screen.getByText("No active sprint")).toBeTruthy();
@@ -1259,7 +1294,6 @@ describe("ProjectBoardPage", () => {
 		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
 			column({ id: "column-todo", name: "Backlog", position: 0 }),
 		]);
-
 		renderWithQueryClient(<ProjectBoardPage />, queryClient);
 
 		expect(screen.getAllByText("Sprint 1").length).toBeGreaterThan(0);
@@ -2837,17 +2871,14 @@ describe("ProjectBoardPage", () => {
 	});
 
 	it("opens project chat and renders recent history with author and timestamps", async () => {
-		const { ProjectBoardPage } = await import(
-			"#/domains/workspace/ui/ProjectBoardPage"
-		);
 		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
 		window.sessionStorage.setItem(
 			"kanai.openid-client.auth-session",
 			JSON.stringify({ accessToken: "chat-token" }),
 		);
-		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
-			new Response(
-				JSON.stringify([
+		const fetchSpy = vi.fn<typeof fetch>().mockImplementation(() =>
+			Promise.resolve(
+				jsonResponse([
 					{
 						author: {
 							deleted: false,
@@ -2873,10 +2904,12 @@ describe("ProjectBoardPage", () => {
 						project_id: "project-1",
 					},
 				]),
-				{ headers: { "content-type": "application/json" }, status: 200 },
 			),
 		);
 		vi.stubGlobal("fetch", fetchSpy);
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
 		const queryClient = createTestQueryClient();
 		queryClient.setQueryData(currentUserQueryOptions().queryKey, {
 			id: "owner-1",
@@ -2918,9 +2951,6 @@ describe("ProjectBoardPage", () => {
 	});
 
 	it("renders deleted project chat authors with the persisted label", async () => {
-		const { ProjectBoardPage } = await import(
-			"#/domains/workspace/ui/ProjectBoardPage"
-		);
 		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
 		window.sessionStorage.setItem(
 			"kanai.openid-client.auth-session",
@@ -2928,9 +2958,9 @@ describe("ProjectBoardPage", () => {
 		);
 		vi.stubGlobal(
 			"fetch",
-			vi.fn<typeof fetch>().mockResolvedValue(
-				new Response(
-					JSON.stringify([
+			vi.fn<typeof fetch>().mockImplementation(() =>
+				Promise.resolve(
+					jsonResponse([
 						{
 							author: {
 								deleted: true,
@@ -2944,9 +2974,11 @@ describe("ProjectBoardPage", () => {
 							project_id: "project-1",
 						},
 					]),
-					{ headers: { "content-type": "application/json" }, status: 200 },
 				),
 			),
+		);
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
 		);
 		const queryClient = createTestQueryClient();
 		queryClient.setQueryData(currentUserQueryOptions().queryKey, {
@@ -2975,9 +3007,6 @@ describe("ProjectBoardPage", () => {
 	});
 
 	it("sends project chat with Enter and preserves multiline drafts on failed sends", async () => {
-		const { ProjectBoardPage } = await import(
-			"#/domains/workspace/ui/ProjectBoardPage"
-		);
 		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
 		window.sessionStorage.setItem(
 			"kanai.openid-client.auth-session",
@@ -2985,12 +3014,12 @@ describe("ProjectBoardPage", () => {
 		);
 		vi.stubGlobal(
 			"fetch",
-			vi.fn<typeof fetch>().mockResolvedValue(
-				new Response(JSON.stringify([]), {
-					headers: { "content-type": "application/json" },
-					status: 200,
-				}),
-			),
+			vi
+				.fn<typeof fetch>()
+				.mockImplementation(() => Promise.resolve(jsonResponse([]))),
+		);
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
 		);
 		const queryClient = createTestQueryClient();
 		seedProjectBoardQueries(queryClient);
@@ -3053,9 +3082,6 @@ describe("ProjectBoardPage", () => {
 	});
 
 	it("refetches fresh project chat history each time chat opens", async () => {
-		const { ProjectBoardPage } = await import(
-			"#/domains/workspace/ui/ProjectBoardPage"
-		);
 		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
 		window.sessionStorage.setItem(
 			"kanai.openid-client.auth-session",
@@ -3063,9 +3089,9 @@ describe("ProjectBoardPage", () => {
 		);
 		const fetchSpy = vi
 			.fn<typeof fetch>()
-			.mockResolvedValue(
-				new Response(
-					JSON.stringify([
+			.mockImplementation(() =>
+				Promise.resolve(
+					jsonResponse([
 						{
 							author: {
 								deleted: false,
@@ -3079,29 +3105,28 @@ describe("ProjectBoardPage", () => {
 							project_id: "project-1",
 						},
 					]),
-					{ headers: { "content-type": "application/json" }, status: 200 },
 				),
 			)
 			.mockResolvedValueOnce(
-				new Response(
-					JSON.stringify([
-						{
-							author: {
-								deleted: false,
-								display_name: "Jane Owner",
-								id: "owner-1",
-								initials: "JO",
-							},
-							body: "Second open",
-							created_at: "2026-01-01T09:35:00Z",
-							id: "message-2",
-							project_id: "project-1",
+				jsonResponse([
+					{
+						author: {
+							deleted: false,
+							display_name: "Jane Owner",
+							id: "owner-1",
+							initials: "JO",
 						},
-					]),
-					{ headers: { "content-type": "application/json" }, status: 200 },
-				),
+						body: "Second open",
+						created_at: "2026-01-01T09:35:00Z",
+						id: "message-2",
+						project_id: "project-1",
+					},
+				]),
 			);
 		vi.stubGlobal("fetch", fetchSpy);
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
 		const queryClient = createTestQueryClient();
 		queryClient.setQueryData(currentUserQueryOptions().queryKey, {
 			id: "owner-1",
@@ -3134,9 +3159,6 @@ describe("ProjectBoardPage", () => {
 	});
 
 	it("shows reconnecting chat state after a socket disconnect", async () => {
-		const { ProjectBoardPage } = await import(
-			"#/domains/workspace/ui/ProjectBoardPage"
-		);
 		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
 		window.sessionStorage.setItem(
 			"kanai.openid-client.auth-session",
@@ -3144,12 +3166,12 @@ describe("ProjectBoardPage", () => {
 		);
 		vi.stubGlobal(
 			"fetch",
-			vi.fn<typeof fetch>().mockResolvedValue(
-				new Response(JSON.stringify([]), {
-					headers: { "content-type": "application/json" },
-					status: 200,
-				}),
-			),
+			vi
+				.fn<typeof fetch>()
+				.mockImplementation(() => Promise.resolve(jsonResponse([]))),
+		);
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
 		);
 		const queryClient = createTestQueryClient();
 		seedProjectBoardQueries(queryClient);
@@ -3184,9 +3206,6 @@ describe("ProjectBoardPage", () => {
 	});
 
 	it("auto-scrolls live project chat messages only near the bottom", async () => {
-		const { ProjectBoardPage } = await import(
-			"#/domains/workspace/ui/ProjectBoardPage"
-		);
 		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
 		window.sessionStorage.setItem(
 			"kanai.openid-client.auth-session",
@@ -3194,12 +3213,14 @@ describe("ProjectBoardPage", () => {
 		);
 		vi.stubGlobal(
 			"fetch",
-			vi.fn<typeof fetch>().mockResolvedValue(
-				new Response(JSON.stringify([chatMessageJson(1)]), {
-					headers: { "content-type": "application/json" },
-					status: 200,
-				}),
-			),
+			vi
+				.fn<typeof fetch>()
+				.mockImplementation(() =>
+					Promise.resolve(jsonResponse([chatMessageJson(1)])),
+				),
+		);
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
 		);
 		const queryClient = createTestQueryClient();
 		seedProjectBoardQueries(queryClient);
@@ -3252,9 +3273,6 @@ describe("ProjectBoardPage", () => {
 	});
 
 	it("preserves project chat reader position when older pages load", async () => {
-		const { ProjectBoardPage } = await import(
-			"#/domains/workspace/ui/ProjectBoardPage"
-		);
 		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
 		window.sessionStorage.setItem(
 			"kanai.openid-client.auth-session",
@@ -3266,19 +3284,22 @@ describe("ProjectBoardPage", () => {
 		});
 		vi.stubGlobal(
 			"fetch",
-			vi
-				.fn<typeof fetch>()
-				.mockResolvedValueOnce(
-					new Response(
-						JSON.stringify(
-							Array.from({ length: 50 }, (_, index) =>
-								chatMessageJson(index + 50),
-							),
+			vi.fn<typeof fetch>().mockImplementation((url) => {
+				if (String(url).includes("cursor=message-50")) {
+					return olderMessagesResponse;
+				}
+
+				return Promise.resolve(
+					jsonResponse(
+						Array.from({ length: 50 }, (_, index) =>
+							chatMessageJson(index + 50),
 						),
-						{ headers: { "content-type": "application/json" }, status: 200 },
 					),
-				)
-				.mockReturnValueOnce(olderMessagesResponse),
+				);
+			}),
+		);
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
 		);
 		const queryClient = createTestQueryClient();
 		seedProjectBoardQueries(queryClient);
@@ -3324,10 +3345,6 @@ describe("ProjectBoardPage", () => {
 		queryClient.setQueryData(
 			projectQueryOptions("project-1").queryKey,
 			project({ name: "API Board" }),
-		);
-		queryClient.setQueryData(
-			projectChatMessagesQueryOptions("project-1").queryKey,
-			{ messages: [], nextCursor: null },
 		);
 		queryClient.setQueryData(
 			projectTasksQueryOptions("project-1").queryKey,
@@ -3376,7 +3393,7 @@ describe("ProjectBoardPage", () => {
 				"This task references a project column that no longer exists.",
 			),
 		).toBeTruthy();
-		expect(screen.getByText("Backlog")).toBeTruthy();
+		expect(screen.getByRole("heading", { name: "Backlog" })).toBeTruthy();
 		expect(screen.getByText("API Todo")).toBeTruthy();
 		expect(screen.getAllByRole("button", { name: "Move task" })).toHaveLength(
 			1,

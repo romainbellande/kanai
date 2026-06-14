@@ -29,6 +29,14 @@ class AuthSettings(BaseModel):
     audience: str
 
 
+class AiSettings(BaseModel):
+    """AI provider configuration required by agent features."""
+
+    model_name: str
+    base_url: str
+    api_key: str
+
+
 class Settings(BaseSettings):
     """Environment-backed application settings.
 
@@ -37,6 +45,7 @@ class Settings(BaseSettings):
         redis_url: Redis connection URL.
         environment: Current deployment environment.
         auth: Authentication provider settings.
+        ai: AI provider settings.
         client_origin: Allowed client application origin.
     """
 
@@ -48,6 +57,7 @@ class Settings(BaseSettings):
     redis_url: str
     environment: Environment
     auth: AuthSettings
+    ai: AiSettings
     client_origin: str
 
     def is_local(self) -> bool:

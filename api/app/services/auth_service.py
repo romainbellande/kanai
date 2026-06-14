@@ -346,4 +346,10 @@ def get_auth_whitelist_paths() -> set[str]:
     Returns:
         Set of documentation and OpenAPI paths allowed without authentication.
     """
-    return {"/docs", "/docs/oauth2-redirect", "/openapi.json", "/redoc"}
+    return {
+        "/docs",
+        "/docs/oauth2-redirect",
+        "/a2a/acceptance-criteria/.well-known/agent-card.json",
+        "/openapi.json",
+        "/redoc",
+    }

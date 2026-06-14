@@ -3,6 +3,7 @@ import sys
 from typing import cast
 
 import pytest
+from fastapi.testclient import TestClient
 
 from app.core.security import AuthMiddleware, JoserfcTokenVerifier
 from app.schemas.auth import AuthenticatedContext
@@ -27,6 +28,28 @@ def test_authenticate_request_wires_configured_audience_into_verifier() -> None:
 
     assert isinstance(verifier, JoserfcTokenVerifier)
     assert verifier.expected_audience == main.settings.auth.audience
+
+
+def test_main_serves_a2a_agent_card_without_bearer_auth() -> None:
+    sys.modules.pop("app.main", None)
+    main = importlib.import_module("app.main")
+    client = TestClient(main.app)
+
+    response = client.get("/a2a/acceptance-criteria/.well-known/agent-card.json")
+
+    assert response.status_code == 200
+    assert response.json()["url"] == "/a2a/acceptance-criteria"
+
+
+def test_main_protects_a2a_invocation_route_convention() -> None:
+    sys.modules.pop("app.main", None)
+    main = importlib.import_module("app.main")
+    client = TestClient(main.app)
+
+    response = client.post("/a2a/acceptance-criteria")
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Missing Authorization header"}
 
 
 def test_main_builds_auth_middleware_from_bootstrap_helpers(
