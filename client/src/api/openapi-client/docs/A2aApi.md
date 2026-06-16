@@ -79,11 +79,11 @@ No authorization required
 
 ## invokeAgentA2aAgentSlugPost
 
-> any invokeAgentA2aAgentSlugPost(agentSlug, requestBody)
+> any invokeAgentA2aAgentSlugPost(agentSlug)
 
 Invoke Agent
 
-Stream generated acceptance criteria through A2A message chunks.
+Delegate Acceptance Criteria invocation to the A2A SDK JSON-RPC route.
 
 ### Example
 
@@ -101,8 +101,6 @@ async function example() {
   const body = {
     // string
     agentSlug: agentSlug_example,
-    // { [key: string]: any; }
-    requestBody: Object,
   } satisfies InvokeAgentA2aAgentSlugPostRequest;
 
   try {
@@ -123,7 +121,6 @@ example().catch(console.error);
 | Name | Type | Description  | Notes |
 |------------- | ------------- | ------------- | -------------|
 | **agentSlug** | `string` |  | [Defaults to `undefined`] |
-| **requestBody** | `{ [key: string]: any; }` |  | |
 
 ### Return type
 
@@ -135,7 +132,7 @@ No authorization required
 
 ### HTTP request headers
 
-- **Content-Type**: `application/json`
+- **Content-Type**: Not defined
 - **Accept**: `application/json`
 
 

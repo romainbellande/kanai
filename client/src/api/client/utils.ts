@@ -33,7 +33,7 @@ export async function getAccessToken(): Promise<string> {
 	}
 }
 
-async function refreshAccessToken(): Promise<string> {
+export async function refreshAccessToken(): Promise<string> {
 	try {
 		return await createAuthBoundary().refreshAccessToken();
 	} catch {

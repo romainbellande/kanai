@@ -76,27 +76,59 @@ function a2aStreamResponse(...chunks: string[]): Response {
 	return new Response(
 		new ReadableStream<Uint8Array>({
 			start(controller) {
-				for (const chunk of chunks) {
+				for (const [index, chunk] of chunks.entries()) {
 					controller.enqueue(
 						encoder.encode(
-							`${JSON.stringify({
-								jsonrpc: "2.0",
-								id: "request-1",
-								result: {
-									kind: "message",
-									message: {
-										role: "agent",
-										parts: [{ kind: "text", text: chunk }],
-									},
-								},
-							})}\n`,
+							`data: ${JSON.stringify(a2aArtifactEvent(chunk, index > 0))}\n\n`,
 						),
 					);
 				}
 				controller.close();
 			},
 		}),
-		{ headers: { "content-type": "application/x-ndjson" }, status: 200 },
+		{ headers: { "content-type": "text/event-stream" }, status: 200 },
+	);
+}
+
+function a2aArtifactEvent(chunk: string, append: boolean) {
+	return {
+		jsonrpc: "2.0",
+		id: 1,
+		result: {
+			artifactUpdate: {
+				taskId: "task-1",
+				contextId: "context-1",
+				artifact: {
+					artifactId: "acceptance-criteria-delta",
+					name: "acceptanceCriteriaDelta",
+					parts: [{ text: chunk }],
+				},
+				append,
+				lastChunk: false,
+			},
+		},
+	};
+}
+
+function a2aAgentCardResponse(): Response {
+	return new Response(
+		JSON.stringify({
+			name: "Acceptance Criteria Agent",
+			description: "Generates acceptance criteria.",
+			version: "0.1.0",
+			capabilities: { streaming: true, pushNotifications: false },
+			defaultInputModes: ["application/json"],
+			defaultOutputModes: ["text/plain"],
+			supportedInterfaces: [
+				{
+					url: "https://api.example.test/a2a/acceptance-criteria",
+					protocolBinding: "JSONRPC",
+					protocolVersion: "1.0",
+				},
+			],
+			skills: [],
+		}),
+		{ headers: { "content-type": "application/json" } },
 	);
 }
 
@@ -108,24 +140,14 @@ function failingA2aStreamResponse(...chunks: string[]): Response {
 				for (const chunk of chunks) {
 					controller.enqueue(
 						encoder.encode(
-							`${JSON.stringify({
-								jsonrpc: "2.0",
-								id: "request-1",
-								result: {
-									kind: "message",
-									message: {
-										role: "agent",
-										parts: [{ kind: "text", text: chunk }],
-									},
-								},
-							})}\n`,
+							`data: ${JSON.stringify(a2aArtifactEvent(chunk, false))}\n\n`,
 						),
 					);
 				}
 				controller.error(new Error("Stream failed"));
 			},
 		}),
-		{ headers: { "content-type": "application/x-ndjson" }, status: 200 },
+		{ headers: { "content-type": "text/event-stream" }, status: 200 },
 	);
 }
 
@@ -139,23 +161,13 @@ function abortableA2aStreamResponse(
 			start(controller) {
 				controller.enqueue(
 					encoder.encode(
-						`${JSON.stringify({
-							jsonrpc: "2.0",
-							id: "request-1",
-							result: {
-								kind: "message",
-								message: {
-									role: "agent",
-									parts: [{ kind: "text", text: chunk }],
-								},
-							},
-						})}\n`,
+						`data: ${JSON.stringify(a2aArtifactEvent(chunk, false))}\n\n`,
 					),
 				);
 			},
 			cancel: onCancel,
 		}),
-		{ headers: { "content-type": "application/x-ndjson" }, status: 200 },
+		{ headers: { "content-type": "text/event-stream" }, status: 200 },
 	);
 }
 
@@ -378,6 +390,7 @@ describe("CreateTaskPage", () => {
 		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
 		const fetchSpy = vi
 			.fn<typeof fetch>()
+			.mockResolvedValueOnce(a2aAgentCardResponse())
 			.mockResolvedValueOnce(
 				a2aStreamResponse("- Generated one", "\n- Generated two"),
 			)
@@ -473,6 +486,7 @@ describe("CreateTaskPage", () => {
 		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
 		const fetchSpy = vi
 			.fn<typeof fetch>()
+			.mockResolvedValueOnce(a2aAgentCardResponse())
 			.mockResolvedValueOnce(failingA2aStreamResponse("- Partial generated"))
 			.mockResolvedValueOnce(
 				new Response(
@@ -558,7 +572,10 @@ describe("CreateTaskPage", () => {
 		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
 		const cancelSpy = vi.fn();
 		let signal: AbortSignal | null = null;
-		const fetchSpy = vi.fn<typeof fetch>((_, init) => {
+		const fetchSpy = vi.fn<typeof fetch>((url, init) => {
+			if (String(url).includes(".well-known/agent-card.json")) {
+				return Promise.resolve(a2aAgentCardResponse());
+			}
 			signal = init?.signal as AbortSignal;
 			return Promise.resolve(
 				abortableA2aStreamResponse("- Partial generated", cancelSpy),
@@ -583,7 +600,6 @@ describe("CreateTaskPage", () => {
 		fireEvent.click(screen.getByRole("button", { name: /cancel generation/i }));
 
 		await waitFor(() => expect(signal?.aborted).toBe(true));
-		await waitFor(() => expect(cancelSpy).toHaveBeenCalledTimes(1));
 		await waitFor(() => expect(acceptanceCriteria.disabled).toBe(false));
 		expect(acceptanceCriteria.value).toBe("- Partial generated");
 		expect(

@@ -1,4 +1,17 @@
-import { fetchAuthenticatedApi } from "./utils";
+import type { Part, SendMessageRequest, StreamResponse } from "@a2a-js/sdk";
+import { Role } from "@a2a-js/sdk";
+import type { Client } from "@a2a-js/sdk/client";
+import {
+	ClientFactory,
+	ClientFactoryOptions,
+	createAuthenticatingFetchWithRetry,
+	JsonRpcTransportFactory,
+} from "@a2a-js/sdk/client";
+
+import { getAccessToken, getApiBaseUrl, refreshAccessToken } from "./utils";
+
+const ACCEPTANCE_CRITERIA_DELTA_ARTIFACT_ID = "acceptance-criteria-delta";
+const ACCEPTANCE_CRITERIA_DELTA_ARTIFACT_NAME = "acceptanceCriteriaDelta";
 
 export type AcceptanceCriteriaTaskMetadata = {
 	title: string | null;
@@ -18,18 +31,11 @@ export type GenerateAcceptanceCriteriaInput = {
 	signal?: AbortSignal;
 };
 
-type A2ATextPart = {
-	kind: string;
-	text?: unknown;
-};
-
-type A2AStreamMessage = {
-	result?: {
-		message?: {
-			parts?: A2ATextPart[];
-		};
-	};
-};
+let cachedClient: {
+	apiBaseUrl: string;
+	fetchImpl: typeof fetch;
+	client: Promise<Client>;
+} | null = null;
 
 export async function generateAcceptanceCriteria({
 	projectId,
@@ -37,96 +43,139 @@ export async function generateAcceptanceCriteria({
 	task,
 	onChunk,
 }: GenerateAcceptanceCriteriaInput): Promise<void> {
-	const response = await fetchAuthenticatedApi("/a2a/acceptance-criteria", {
-		method: "POST",
-		signal,
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({
-			jsonrpc: "2.0",
-			id: crypto.randomUUID(),
-			method: "message/stream",
-			params: {
-				message: {
-					role: "user",
-					parts: [{ kind: "text", text: "Generate acceptance criteria" }],
-					metadata: {
-						projectId,
-						task,
-					},
-				},
-			},
-		}),
-	});
-
-	if (!response.ok) {
-		throw new Error(
-			`Acceptance criteria generation failed with ${response.status}.`,
-		);
-	}
-
-	if (!response.body) {
-		return;
-	}
-
-	await readNdjsonTextParts(response.body, onChunk, signal);
-}
-
-async function readNdjsonTextParts(
-	body: ReadableStream<Uint8Array>,
-	onChunk: (text: string) => void,
-	signal?: AbortSignal,
-): Promise<void> {
-	const reader = body.getReader();
-	const decoder = new TextDecoder();
-	let buffer = "";
-	const cancelReader = () => {
-		void reader.cancel();
-	};
-	signal?.addEventListener("abort", cancelReader, { once: true });
+	const client = await getAcceptanceCriteriaClient();
+	const stream = client.sendMessageStream(
+		buildAcceptanceCriteriaRequest(projectId, task),
+		{ signal },
+	);
+	const iterator = stream[Symbol.asyncIterator]();
+	let abortStream: (() => void) | null = null;
+	const abortPromise = new Promise<IteratorResult<StreamResponse>>(
+		(resolve) => {
+			abortStream = () => resolve({ done: true, value: undefined });
+			signal?.addEventListener("abort", abortStream, { once: true });
+		},
+	);
 
 	try {
 		while (!signal?.aborted) {
-			const { done, value } = await reader.read();
-			if (done) {
+			const result = await Promise.race([iterator.next(), abortPromise]);
+			if (result.done) {
 				break;
 			}
 
-			buffer += decoder.decode(value, { stream: true });
-			buffer = emitCompleteLines(buffer, onChunk);
-		}
-
-		buffer += decoder.decode();
-		if (buffer.trim()) {
-			emitLine(buffer, onChunk);
+			const text = extractArtifactDeltaText(result.value);
+			if (text) {
+				onChunk(text);
+			}
 		}
 	} finally {
-		signal?.removeEventListener("abort", cancelReader);
-	}
-}
-
-function emitCompleteLines(
-	buffer: string,
-	onChunk: (text: string) => void,
-): string {
-	const lines = buffer.split("\n");
-	const remainder = lines.pop() ?? "";
-
-	for (const line of lines) {
-		emitLine(line, onChunk);
-	}
-
-	return remainder;
-}
-
-function emitLine(line: string, onChunk: (text: string) => void): void {
-	if (!line.trim()) {
-		return;
-	}
-
-	const message = JSON.parse(line) as A2AStreamMessage;
-	for (const part of message.result?.message?.parts ?? []) {
-		if (part.kind === "text" && typeof part.text === "string") {
-			onChunk(part.text);
+		if (abortStream) {
+			signal?.removeEventListener("abort", abortStream);
 		}
+		void iterator.return?.();
 	}
+}
+
+function getAcceptanceCriteriaClient(): Promise<Client> {
+	const apiBaseUrl = getApiBaseUrl();
+	if (
+		cachedClient?.apiBaseUrl === apiBaseUrl &&
+		cachedClient.fetchImpl === fetch
+	) {
+		return cachedClient.client;
+	}
+
+	const authFetch = createAuthenticatingFetchWithRetry(fetch, {
+		headers: async () => ({
+			Authorization: `Bearer ${await getAccessToken()}`,
+		}),
+		shouldRetryWithHeaders: async (_request, response) => {
+			if (response.status !== 401) {
+				return undefined;
+			}
+
+			return { Authorization: `Bearer ${await refreshAccessToken()}` };
+		},
+	});
+	const factory = new ClientFactory(
+		ClientFactoryOptions.createFrom(ClientFactoryOptions.default, {
+			transports: [new JsonRpcTransportFactory({ fetchImpl: authFetch })],
+		}),
+	);
+	const client = factory.createFromUrl(
+		apiBaseUrl,
+		"/a2a/acceptance-criteria/.well-known/agent-card.json",
+	);
+	cachedClient = { apiBaseUrl, fetchImpl: fetch, client };
+	return client;
+}
+
+function buildAcceptanceCriteriaRequest(
+	projectId: string,
+	task: AcceptanceCriteriaTaskMetadata,
+): SendMessageRequest {
+	return {
+		tenant: "",
+		message: {
+			messageId: crypto.randomUUID(),
+			contextId: "",
+			taskId: "",
+			role: Role.ROLE_USER,
+			parts: [
+				textPart("Generate acceptance criteria"),
+				dataPart({ projectId, projectTask: task }),
+			],
+			metadata: undefined,
+			extensions: [],
+			referenceTaskIds: [],
+		},
+		configuration: {
+			acceptedOutputModes: ["text/plain"],
+			taskPushNotificationConfig: undefined,
+			returnImmediately: false,
+		},
+		metadata: undefined,
+	};
+}
+
+function textPart(text: string): Part {
+	return {
+		content: { $case: "text", value: text },
+		metadata: undefined,
+		filename: "",
+		mediaType: "text/plain",
+	};
+}
+
+function dataPart(data: Record<string, unknown>): Part {
+	return {
+		content: { $case: "data", value: data },
+		metadata: undefined,
+		filename: "",
+		mediaType: "application/json",
+	};
+}
+
+function extractArtifactDeltaText(event: StreamResponse): string | null {
+	if (event.payload?.$case !== "artifactUpdate") {
+		return null;
+	}
+
+	const update = event.payload.value;
+	if (
+		update.artifact?.artifactId !== ACCEPTANCE_CRITERIA_DELTA_ARTIFACT_ID &&
+		update.artifact?.name !== ACCEPTANCE_CRITERIA_DELTA_ARTIFACT_NAME
+	) {
+		return null;
+	}
+
+	return (
+		update.artifact?.parts
+			.map((part) =>
+				part.content?.$case === "text" ? part.content.value : null,
+			)
+			.filter((text): text is string => text !== null)
+			.join("") ?? null
+	);
 }

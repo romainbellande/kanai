@@ -18,6 +18,7 @@
     "gen:openapi:client": "node scripts/export-openapi-schema.mjs && bunx @openapitools/openapi-generator-cli generate -i .generated/openapi.json -g typescript-fetch -o src/api/openapi-client && node scripts/mark-openapi-client-ts-nocheck.mjs"
   },
   "dependencies": {
+    "@a2a-js/sdk": "1.0.0-alpha.0",
     "@atlaskit/pragmatic-drag-and-drop": "^1.8.1",
     "@atlaskit/pragmatic-drag-and-drop-hitbox": "^1.1.0",
     "@base-ui/react": "^1.5.0",

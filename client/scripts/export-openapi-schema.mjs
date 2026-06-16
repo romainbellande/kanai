@@ -21,6 +21,8 @@ const result = spawnSync("uv", ["run", "python", "-c", exportScript], {
 		AI__MODEL_NAME: process.env.AI__MODEL_NAME ?? "openapi-export-model",
 		AI__BASE_URL: process.env.AI__BASE_URL ?? "https://ai.example.test/v1",
 		AI__API_KEY: process.env.AI__API_KEY ?? "openapi-export-api-key",
+		PUBLIC_API_BASE_URL:
+			process.env.PUBLIC_API_BASE_URL ?? "https://api.example.test",
 	},
 });
 

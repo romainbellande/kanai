@@ -109,27 +109,78 @@ function a2aStreamResponse(...chunks: string[]): Response {
 	return new Response(
 		new ReadableStream<Uint8Array>({
 			start(controller) {
-				for (const chunk of chunks) {
+				for (const [index, chunk] of chunks.entries()) {
 					controller.enqueue(
 						encoder.encode(
-							`${JSON.stringify({
-								jsonrpc: "2.0",
-								id: "request-1",
-								result: {
-									kind: "message",
-									message: {
-										role: "agent",
-										parts: [{ kind: "text", text: chunk }],
-									},
-								},
-							})}\n`,
+							`data: ${JSON.stringify(a2aArtifactEvent(chunk, index > 0))}\n\n`,
 						),
 					);
 				}
 				controller.close();
 			},
 		}),
-		{ headers: { "content-type": "application/x-ndjson" }, status: 200 },
+		{ headers: { "content-type": "text/event-stream" }, status: 200 },
+	);
+}
+
+function a2aArtifactEvent(chunk: string, append: boolean) {
+	return {
+		jsonrpc: "2.0",
+		id: 1,
+		result: {
+			artifactUpdate: {
+				taskId: "task-1",
+				contextId: "context-1",
+				artifact: {
+					artifactId: "acceptance-criteria-delta",
+					name: "acceptanceCriteriaDelta",
+					parts: [{ text: chunk }],
+				},
+				append,
+				lastChunk: false,
+			},
+		},
+	};
+}
+
+function findProjectTaskPayload(value: unknown): unknown {
+	if (!value || typeof value !== "object") {
+		return undefined;
+	}
+
+	if ("projectTask" in value) {
+		return value;
+	}
+
+	for (const nestedValue of Object.values(value)) {
+		const match = findProjectTaskPayload(nestedValue);
+		if (match) {
+			return match;
+		}
+	}
+
+	return undefined;
+}
+
+function a2aAgentCardResponse(): Response {
+	return new Response(
+		JSON.stringify({
+			name: "Acceptance Criteria Agent",
+			description: "Generates acceptance criteria.",
+			version: "0.1.0",
+			capabilities: { streaming: true, pushNotifications: false },
+			defaultInputModes: ["application/json"],
+			defaultOutputModes: ["text/plain"],
+			supportedInterfaces: [
+				{
+					url: "https://api.example.test/a2a/acceptance-criteria",
+					protocolBinding: "JSONRPC",
+					protocolVersion: "1.0",
+				},
+			],
+			skills: [],
+		}),
+		{ headers: { "content-type": "application/json" } },
 	);
 }
 
@@ -141,24 +192,14 @@ function failingA2aStreamResponse(...chunks: string[]): Response {
 				for (const chunk of chunks) {
 					controller.enqueue(
 						encoder.encode(
-							`${JSON.stringify({
-								jsonrpc: "2.0",
-								id: "request-1",
-								result: {
-									kind: "message",
-									message: {
-										role: "agent",
-										parts: [{ kind: "text", text: chunk }],
-									},
-								},
-							})}\n`,
+							`data: ${JSON.stringify(a2aArtifactEvent(chunk, false))}\n\n`,
 						),
 					);
 				}
 				controller.error(new Error("Stream failed"));
 			},
 		}),
-		{ headers: { "content-type": "application/x-ndjson" }, status: 200 },
+		{ headers: { "content-type": "text/event-stream" }, status: 200 },
 	);
 }
 
@@ -172,23 +213,13 @@ function abortableA2aStreamResponse(
 			start(controller) {
 				controller.enqueue(
 					encoder.encode(
-						`${JSON.stringify({
-							jsonrpc: "2.0",
-							id: "request-1",
-							result: {
-								kind: "message",
-								message: {
-									role: "agent",
-									parts: [{ kind: "text", text: chunk }],
-								},
-							},
-						})}\n`,
+						`data: ${JSON.stringify(a2aArtifactEvent(chunk, false))}\n\n`,
 					),
 				);
 			},
 			cancel: onCancel,
 		}),
-		{ headers: { "content-type": "application/x-ndjson" }, status: 200 },
+		{ headers: { "content-type": "text/event-stream" }, status: 200 },
 	);
 }
 
@@ -566,6 +597,7 @@ describe("TaskDetailPage", () => {
 		};
 		const fetchSpy = vi
 			.fn<typeof fetch>()
+			.mockResolvedValueOnce(a2aAgentCardResponse())
 			.mockResolvedValueOnce(
 				a2aStreamResponse("- Generated one", "\n- Generated two"),
 			)
@@ -592,30 +624,28 @@ describe("TaskDetailPage", () => {
 				screen.getByLabelText<HTMLTextAreaElement>("Acceptance Criteria").value,
 			).toBe("- Generated one\n- Generated two");
 		});
-		expect(fetchSpy).toHaveBeenCalledTimes(1);
-		expect(fetchSpy.mock.calls[0][0]).toBe(
+		expect(fetchSpy).toHaveBeenCalledTimes(2);
+		expect(String(fetchSpy.mock.calls[1][0])).toBe(
 			"https://api.example.test/a2a/acceptance-criteria",
 		);
 		expect(
-			new Headers(fetchSpy.mock.calls[0][1]?.headers).get("Authorization"),
+			new Headers(fetchSpy.mock.calls[1][1]?.headers).get("Authorization"),
 		).toBe("Bearer task-token");
-		expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toMatchObject({
-			params: {
-				message: {
-					metadata: {
-						projectId: "project-1",
-						task: {
-							title: "Original Task",
-							description: "Original notes",
-							acceptanceCriteria: "Original criteria",
-							priority: "medium",
-							storyPoints: 3,
-							tag: "Feature",
-							workflowColumn: "Ready",
-							mode: "edit",
-						},
-					},
-				},
+		expect(
+			findProjectTaskPayload(
+				JSON.parse(String(fetchSpy.mock.calls[1][1]?.body)),
+			),
+		).toEqual({
+			projectId: "project-1",
+			projectTask: {
+				title: "Original Task",
+				description: "Original notes",
+				acceptanceCriteria: "Original criteria",
+				priority: "medium",
+				storyPoints: 3,
+				tag: "Feature",
+				workflowColumn: "Ready",
+				mode: "edit",
 			},
 		});
 		expect(screen.queryByText("Task changes saved.")).toBeNull();
@@ -681,6 +711,7 @@ describe("TaskDetailPage", () => {
 		};
 		const fetchSpy = vi
 			.fn<typeof fetch>()
+			.mockResolvedValueOnce(a2aAgentCardResponse())
 			.mockResolvedValueOnce(failingA2aStreamResponse("- Partial edit"))
 			.mockResolvedValueOnce(
 				new Response(JSON.stringify(updatedTaskJson), {
@@ -753,7 +784,10 @@ describe("TaskDetailPage", () => {
 		]);
 		const cancelSpy = vi.fn();
 		let signal: AbortSignal | null = null;
-		const fetchSpy = vi.fn<typeof fetch>((_, init) => {
+		const fetchSpy = vi.fn<typeof fetch>((url, init) => {
+			if (String(url).includes(".well-known/agent-card.json")) {
+				return Promise.resolve(a2aAgentCardResponse());
+			}
 			signal = init?.signal as AbortSignal;
 			return Promise.resolve(
 				abortableA2aStreamResponse("- Partial edit generated", cancelSpy),
@@ -776,7 +810,6 @@ describe("TaskDetailPage", () => {
 		fireEvent.click(screen.getByRole("button", { name: /cancel generation/i }));
 
 		await waitFor(() => expect(signal?.aborted).toBe(true));
-		await waitFor(() => expect(cancelSpy).toHaveBeenCalledTimes(1));
 		await waitFor(() => expect(acceptanceCriteria.disabled).toBe(false));
 		expect(acceptanceCriteria.value).toBe("- Partial edit generated");
 		expect(

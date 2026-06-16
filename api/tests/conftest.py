@@ -11,6 +11,7 @@ if str(ROOT) not in sys.path:
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///./test.db")
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 os.environ.setdefault("ENVIRONMENT", "local")
+os.environ.setdefault("PUBLIC_API_BASE_URL", "https://api.example.test")
 os.environ.setdefault(
     "AUTH__DISCOVERY_ENDPOINT", "https://example.test/.well-known/openid-configuration"
 )

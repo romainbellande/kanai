@@ -30,6 +30,11 @@ from app.models.user import User
 from app.schemas.auth import AuthenticatedContext
 from app.services.auth_service import RequestAuthBoundary
 
+A2A_HEADERS = {
+    "Authorization": "Bearer member-token",
+    "A2A-Version": "1.0",
+}
+
 
 class StubAuthenticateRequest:
     async def execute(self, bearer_token: str) -> AuthenticatedContext:
@@ -168,8 +173,19 @@ def test_acceptance_criteria_agent_card_is_reachable_without_bearer_auth() -> No
 
     assert response.status_code == 200
     body = response.json()
-    assert body["url"] == "/a2a/acceptance-criteria"
-    assert body["skills"][0]["id"] == "acceptance-criteria"
+    assert body["supportedInterfaces"] == [
+        {
+            "url": "https://api.example.test/a2a/acceptance-criteria",
+            "protocolBinding": "JSONRPC",
+            "protocolVersion": "1.0",
+        }
+    ]
+    assert body["defaultInputModes"] == ["application/json"]
+    assert body["defaultOutputModes"] == ["text/plain"]
+    skill = body["skills"][0]
+    assert skill["id"] == "acceptance-criteria"
+    assert skill["inputModes"] == ["application/json"]
+    assert skill["outputModes"] == ["text/plain"]
 
 
 def test_unknown_a2a_agent_card_slug_returns_not_found() -> None:
@@ -207,19 +223,53 @@ async def test_acceptance_criteria_invocation_requires_bearer_auth(
 
 
 @pytest.mark.asyncio
-async def test_project_id_metadata_is_required_before_model_invocation(
+async def test_acceptance_criteria_invocation_preserves_invalid_token_auth_response(
     protected_client: tuple[AsyncClient, StubAcceptanceCriteriaGenerator],
 ) -> None:
     client, stub_generator = protected_client
 
     response = await client.post(
         "/a2a/acceptance-criteria",
-        headers={"Authorization": "Bearer member-token"},
-        json=build_a2a_request(metadata={"task": {"title": "Ship task form"}}),
+        headers={"Authorization": "Bearer invalid-token", "A2A-Version": "1.0"},
+        json={},
     )
 
-    assert response.status_code == 400
-    assert response.json() == {"detail": "projectId metadata is required"}
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Token is invalid"}
+    assert stub_generator.contexts == []
+
+
+@pytest.mark.asyncio
+async def test_malformed_a2a_message_returns_protocol_error(
+    protected_client: tuple[AsyncClient, StubAcceptanceCriteriaGenerator],
+) -> None:
+    client, stub_generator = protected_client
+
+    response = await client.post(
+        "/a2a/acceptance-criteria",
+        headers=A2A_HEADERS,
+        json={"jsonrpc": "2.0", "id": "request-1", "method": "SendStreamingMessage"},
+    )
+
+    assert response.status_code == 200
+    assert_stream_error(response.text, "message")
+    assert stub_generator.contexts == []
+
+
+@pytest.mark.asyncio
+async def test_project_id_data_is_required_before_model_invocation(
+    protected_client: tuple[AsyncClient, StubAcceptanceCriteriaGenerator],
+) -> None:
+    client, stub_generator = protected_client
+
+    response = await client.post(
+        "/a2a/acceptance-criteria",
+        headers=A2A_HEADERS,
+        json=build_a2a_request(project_task={"title": "Ship task form"}),
+    )
+
+    assert response.status_code == 200
+    assert_stream_error(response.text, "projectId data is required")
     assert stub_generator.contexts == []
 
 
@@ -232,12 +282,10 @@ async def test_project_access_is_required_before_model_invocation(
 
     response = await client.post(
         "/a2a/acceptance-criteria",
-        headers={"Authorization": "Bearer outsider-token"},
+        headers={"Authorization": "Bearer outsider-token", "A2A-Version": "1.0"},
         json=build_a2a_request(
-            metadata={
-                "projectId": str(seeded_project),
-                "task": {"title": "Ship task form"},
-            }
+            project_id=str(seeded_project),
+            project_task={"title": "Ship task form"},
         ),
     )
 
@@ -247,7 +295,7 @@ async def test_project_access_is_required_before_model_invocation(
 
 
 @pytest.mark.asyncio
-async def test_malformed_metadata_returns_safe_client_error(
+async def test_unknown_project_task_field_returns_safe_client_error(
     protected_client: tuple[AsyncClient, StubAcceptanceCriteriaGenerator],
     seeded_project: UUID,
 ) -> None:
@@ -255,83 +303,89 @@ async def test_malformed_metadata_returns_safe_client_error(
 
     response = await client.post(
         "/a2a/acceptance-criteria",
-        headers={"Authorization": "Bearer member-token"},
+        headers=A2A_HEADERS,
         json=build_a2a_request(
-            metadata={
-                "projectId": str(seeded_project),
-                "task": {"title": "Ship task form", "projectDescription": "Nope"},
-            }
-        ),
-    )
-
-    assert response.status_code == 400
-    assert response.json() == {"detail": "Unsupported task metadata field"}
-    assert stub_generator.contexts == []
-
-
-@pytest.mark.asyncio
-async def test_insufficient_metadata_returns_safe_client_error(
-    protected_client: tuple[AsyncClient, StubAcceptanceCriteriaGenerator],
-    seeded_project: UUID,
-) -> None:
-    client, stub_generator = protected_client
-
-    response = await client.post(
-        "/a2a/acceptance-criteria",
-        headers={"Authorization": "Bearer member-token"},
-        json=build_a2a_request(
-            metadata={
-                "projectId": str(seeded_project),
-                "task": {"priority": "high"},
-            }
-        ),
-    )
-
-    assert response.status_code == 400
-    assert response.json() == {
-        "detail": "Task title or description metadata is required"
-    }
-    assert stub_generator.contexts == []
-
-
-@pytest.mark.asyncio
-async def test_stubbed_output_streams_markdown_through_a2a_message_chunks(
-    protected_client: tuple[AsyncClient, StubAcceptanceCriteriaGenerator],
-    seeded_project: UUID,
-) -> None:
-    client, stub_generator = protected_client
-
-    response = await client.post(
-        "/a2a/acceptance-criteria",
-        headers={"Authorization": "Bearer member-token"},
-        json=build_a2a_request(
-            metadata={
-                "projectId": str(seeded_project),
-                "task": {
-                    "title": "Ship task form",
-                    "description": "Users create tasks from the project board.",
-                    "acceptanceCriteria": "- Existing draft can be refined",
-                    "priority": "high",
-                    "storyPoints": 3,
-                    "tag": "tasks",
-                    "workflowColumn": "Todo",
-                    "mode": "create",
-                },
-            }
+            project_id=str(seeded_project),
+            project_task={"title": "Ship task form", "projectDescription": "Nope"},
         ),
     )
 
     assert response.status_code == 200
-    assert response.headers["content-type"].startswith("application/x-ndjson")
-    chunks = [line for line in response.text.splitlines() if line]
-    decoded = [cast("dict[str, Any]", json.loads(line)) for line in chunks]
-    assert [
-        decoded[0]["result"]["message"]["parts"][0]["text"],
-        decoded[1]["result"]["message"]["parts"][0]["text"],
-    ] == [
-        "- Users can create tasks",
-        "\n- Saved tasks show on the board",
-    ]
+    assert_stream_error(response.text, "Unsupported projectTask data field")
+    assert stub_generator.contexts == []
+
+
+@pytest.mark.asyncio
+async def test_invalid_project_task_data_returns_safe_protocol_error(
+    protected_client: tuple[AsyncClient, StubAcceptanceCriteriaGenerator],
+    seeded_project: UUID,
+) -> None:
+    client, stub_generator = protected_client
+
+    response = await client.post(
+        "/a2a/acceptance-criteria",
+        headers=A2A_HEADERS,
+        json=build_a2a_request(
+            project_id=str(seeded_project),
+            project_task="not-an-object",
+        ),
+    )
+
+    assert response.status_code == 200
+    assert_stream_error(response.text, "projectTask data is required")
+    assert stub_generator.contexts == []
+
+
+@pytest.mark.asyncio
+async def test_insufficient_project_task_data_returns_safe_client_error(
+    protected_client: tuple[AsyncClient, StubAcceptanceCriteriaGenerator],
+    seeded_project: UUID,
+) -> None:
+    client, stub_generator = protected_client
+
+    response = await client.post(
+        "/a2a/acceptance-criteria",
+        headers=A2A_HEADERS,
+        json=build_a2a_request(
+            project_id=str(seeded_project),
+            project_task={"priority": "high"},
+        ),
+    )
+
+    assert response.status_code == 200
+    assert_stream_error(response.text, "Task title or description data is required")
+    assert stub_generator.contexts == []
+
+
+@pytest.mark.asyncio
+async def test_stubbed_output_streams_markdown_through_a2a_artifact_updates(
+    protected_client: tuple[AsyncClient, StubAcceptanceCriteriaGenerator],
+    seeded_project: UUID,
+) -> None:
+    client, stub_generator = protected_client
+
+    response = await client.post(
+        "/a2a/acceptance-criteria",
+        headers=A2A_HEADERS,
+        json=build_a2a_request(
+            project_id=str(seeded_project),
+            project_task={
+                "title": "Ship task form",
+                "description": "Users create tasks from the project board.",
+                "acceptanceCriteria": "- Existing draft can be refined",
+                "priority": "high",
+                "storyPoints": 3,
+                "tag": "tasks",
+                "workflowColumn": "Todo",
+                "mode": "create",
+            },
+        ),
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert "- Users can create tasks" in response.text
+    assert "\\n- Saved tasks show on the board" in response.text
     assert len(stub_generator.contexts) == 1
     context = stub_generator.contexts[0]
     assert context.project_id == seeded_project
@@ -383,21 +437,79 @@ def test_ai_settings_are_required_at_settings_construction(
                 audience="kanai-api",
             ),
             client_origin="http://localhost:5173",
+            public_api_base_url="https://api.example.test",
         )
 
     assert {error["loc"] for error in exc_info.value.errors()} == {("ai",)}
 
 
-def build_a2a_request(metadata: dict[str, Any]) -> dict[str, Any]:
+def test_public_api_base_url_is_required_at_settings_construction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("PUBLIC_API_BASE_URL", raising=False)
+
+    with pytest.raises(ValidationError) as exc_info:
+        cast("Any", Settings)(
+            _env_file=None,
+            database_url="sqlite+aiosqlite:///./test.db",
+            redis_url="redis://localhost:6379/0",
+            environment=Environment.LOCAL,
+            auth=AuthSettings(
+                discovery_endpoint="https://example.test/.well-known/openid-configuration",
+                audience="kanai-api",
+            ),
+            ai={
+                "model_name": "test-model",
+                "base_url": "https://ai.example.test/v1",
+                "api_key": "test-api-key",
+            },
+            client_origin="http://localhost:5173",
+        )
+
+    assert {error["loc"] for error in exc_info.value.errors()} == {
+        ("public_api_base_url",)
+    }
+
+
+def build_a2a_request(
+    *, project_task: Any, project_id: str | None = None
+) -> dict[str, Any]:
+    data: dict[str, Any] = {"projectTask": project_task}
+    if project_id is not None:
+        data["projectId"] = project_id
+
     return {
         "jsonrpc": "2.0",
         "id": "request-1",
-        "method": "message/stream",
+        "method": "SendStreamingMessage",
         "params": {
             "message": {
-                "role": "user",
-                "parts": [{"kind": "text", "text": "Generate acceptance criteria"}],
-                "metadata": metadata,
+                "messageId": "message-1",
+                "role": "ROLE_USER",
+                "parts": [
+                    {"text": "Generate acceptance criteria"},
+                    {"data": data},
+                ],
             }
         },
     }
+
+
+def parse_sse_jsonrpc_messages(body: str) -> list[dict[str, Any]]:
+    if body.startswith("{"):
+        return [cast("dict[str, Any]", json.loads(body))]
+
+    messages = []
+    for line in body.splitlines():
+        if line.startswith("data: "):
+            messages.append(
+                cast("dict[str, Any]", json.loads(line.removeprefix("data: ")))
+            )
+    return messages
+
+
+def assert_stream_error(body: str, expected_message: str) -> None:
+    messages = parse_sse_jsonrpc_messages(body)
+    errors = [message["error"] for message in messages if "error" in message]
+    assert errors
+    assert expected_message in json.dumps(errors)

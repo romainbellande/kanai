@@ -38,7 +38,9 @@ def test_main_serves_a2a_agent_card_without_bearer_auth() -> None:
     response = client.get("/a2a/acceptance-criteria/.well-known/agent-card.json")
 
     assert response.status_code == 200
-    assert response.json()["url"] == "/a2a/acceptance-criteria"
+    assert response.json()["supportedInterfaces"][0]["url"] == (
+        "https://api.example.test/a2a/acceptance-criteria"
+    )
 
 
 def test_main_protects_a2a_invocation_route_convention() -> None:

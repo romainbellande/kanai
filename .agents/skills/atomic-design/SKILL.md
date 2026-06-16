@@ -1,3 +1,8 @@
+---
+name: atomic-design
+description: Use when organizing or refactoring UI components with atomic design in the Kanai client, especially alongside domain-driven UI work.
+---
+
 # Atomic Design For This Client Project
 
 Use this skill when working on UI structure in this client app and you want components to be organized with atomic design without fighting the current React + TanStack Router + Tailwind setup.

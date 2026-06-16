@@ -29,6 +29,7 @@ def build_settings(environment: Environment) -> Settings:
             api_key="test-api-key",
         ),
         client_origin="http://localhost:5173",
+        public_api_base_url="https://api.example.test",
     )
 
 

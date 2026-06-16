@@ -3,8 +3,9 @@
 from enum import StrEnum
 from functools import cache
 from typing import Any, cast
+from urllib.parse import urlsplit
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -47,6 +48,7 @@ class Settings(BaseSettings):
         auth: Authentication provider settings.
         ai: AI provider settings.
         client_origin: Allowed client application origin.
+        public_api_base_url: Public absolute API origin used in discoverable URLs.
     """
 
     model_config = SettingsConfigDict(
@@ -59,6 +61,17 @@ class Settings(BaseSettings):
     auth: AuthSettings
     ai: AiSettings
     client_origin: str
+    public_api_base_url: str
+
+    @field_validator("public_api_base_url")
+    @classmethod
+    def require_absolute_public_api_base_url(cls, value: str) -> str:
+        """Validate the public API base URL used in agent cards."""
+
+        parsed = urlsplit(value)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("PUBLIC_API_BASE_URL must be an absolute HTTP(S) URL")
+        return value.rstrip("/")
 
     def is_local(self) -> bool:
         """Return whether the application is running locally.

@@ -1,3 +1,8 @@
+---
+name: domain-ui-composition
+description: Use when a feature combines domain-driven design with atomic UI composition, mapping business states into modular frontend components.
+---
+
 # Domain UI Composition
 
 Use this meta-skill when a task needs both domain-driven design and atomic design in the same feature.

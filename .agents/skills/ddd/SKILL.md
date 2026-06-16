@@ -1,3 +1,8 @@
+---
+name: ddd
+description: Use when modeling business rules, bounded contexts, aggregates, entities, value objects, repositories, or application services with Domain-Driven Design.
+---
+
 # Domain-Driven Development
 
 Use this skill when the task involves business rules, domain modeling, bounded contexts, aggregates, entities, value objects, domain services, repositories, or application services.

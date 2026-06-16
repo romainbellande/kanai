@@ -1,10 +1,12 @@
 """Acceptance-criteria A2A invocation service boundary."""
 
 from collections.abc import AsyncIterator
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 from uuid import UUID
 
-from fastapi import HTTPException, status
+from a2a.server.agent_execution import RequestContext
+from a2a.types import InvalidParamsError
+from google.protobuf.json_format import MessageToDict
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from app.core.config import settings
@@ -81,41 +83,26 @@ class PydanticAiAcceptanceCriteriaGenerator:
 
 
 def parse_acceptance_criteria_context(
-    payload: dict[str, Any],
-) -> tuple[Any, AcceptanceCriteriaGenerationContext]:
-    """Parse A2A JSON-RPC payload metadata into generation context."""
+    context: RequestContext,
+) -> AcceptanceCriteriaGenerationContext:
+    """Parse structured A2A projectTask data into generation context."""
 
-    request_id = payload.get("id")
-    if payload.get("jsonrpc") != "2.0" or payload.get("method") != "message/stream":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Unsupported A2A request",
-        )
+    data = _extract_project_task_data(context)
+    project_id = data.get("projectId")
+    if not isinstance(project_id, str) or not project_id.strip():
+        raise InvalidParamsError(message="projectId data is required")
 
-    metadata = _extract_message_metadata(payload)
-    if "projectId" not in metadata:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="projectId metadata is required",
-        )
-
-    task_metadata = metadata.get("task")
+    task_metadata = data.get("projectTask")
     if not isinstance(task_metadata, dict):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Task metadata is required",
-        )
+        raise InvalidParamsError(message="projectTask data is required")
 
     unknown_fields = set(task_metadata) - ALLOWED_TASK_METADATA_FIELDS
     if unknown_fields:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Unsupported task metadata field",
-        )
+        raise InvalidParamsError(message="Unsupported projectTask data field")
 
     try:
-        context = AcceptanceCriteriaGenerationContext.model_validate(
-            {"projectId": metadata["projectId"], **task_metadata}
+        generation_context = AcceptanceCriteriaGenerationContext.model_validate(
+            {"projectId": project_id, **task_metadata}
         )
     except ValidationError as exc:
         if any(
@@ -123,16 +110,12 @@ def parse_acceptance_criteria_context(
             and "Task title or description metadata is required" in str(error["msg"])
             for error in exc.errors()
         ):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Task title or description metadata is required",
+            raise InvalidParamsError(
+                message="Task title or description data is required"
             ) from exc
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid A2A message metadata",
-        ) from exc
+        raise InvalidParamsError(message="Invalid projectTask data") from exc
 
-    return request_id, context
+    return generation_context
 
 
 def build_acceptance_criteria_prompt(
@@ -174,26 +157,19 @@ def get_acceptance_criteria_generator() -> AcceptanceCriteriaGenerator:
     return PydanticAiAcceptanceCriteriaGenerator()
 
 
-def _extract_message_metadata(payload: dict[str, Any]) -> dict[str, Any]:
-    params = payload.get("params")
-    if not isinstance(params, dict):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="A2A message metadata is required",
-        )
-    message = params.get("message")
-    if not isinstance(message, dict):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="A2A message metadata is required",
-        )
-    metadata = message.get("metadata")
-    if not isinstance(metadata, dict):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="A2A message metadata is required",
-        )
-    return metadata
+def _extract_project_task_data(context: RequestContext) -> dict[str, Any]:
+    message = context.message
+    if message is None:
+        raise InvalidParamsError(message="A2A message is required")
+
+    for part in message.parts:
+        part_data = MessageToDict(part, preserving_proto_field_name=False).get("data")
+        if not isinstance(part_data, dict):
+            continue
+        if "projectTask" in part_data:
+            return cast("dict[str, Any]", part_data)
+
+    raise InvalidParamsError(message="projectTask data part is required")
 
 
 def _has_text(value: str | None) -> bool:

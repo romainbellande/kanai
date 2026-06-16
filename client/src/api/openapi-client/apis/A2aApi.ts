@@ -29,7 +29,6 @@ export interface GetAgentCardA2aAgentSlugWellKnownAgentCardJsonGetRequest {
 
 export interface InvokeAgentA2aAgentSlugPostRequest {
     agentSlug: string;
-    requestBody: { [key: string]: any; };
 }
 
 /**
@@ -95,18 +94,9 @@ export class A2aApi extends runtime.BaseAPI {
             );
         }
 
-        if (requestParameters['requestBody'] == null) {
-            throw new runtime.RequiredError(
-                'requestBody',
-                'Required parameter "requestBody" was null or undefined when calling invokeAgentA2aAgentSlugPost().'
-            );
-        }
-
         const queryParameters: any = {};
 
         const headerParameters: runtime.HTTPHeaders = {};
-
-        headerParameters['Content-Type'] = 'application/json';
 
 
         let urlPath = `/a2a/{agent_slug}`;
@@ -117,12 +107,11 @@ export class A2aApi extends runtime.BaseAPI {
             method: 'POST',
             headers: headerParameters,
             query: queryParameters,
-            body: requestParameters['requestBody'],
         };
     }
 
     /**
-     * Stream generated acceptance criteria through A2A message chunks.
+     * Delegate Acceptance Criteria invocation to the A2A SDK JSON-RPC route.
      * Invoke Agent
      */
     async invokeAgentA2aAgentSlugPostRaw(requestParameters: InvokeAgentA2aAgentSlugPostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<any>> {
@@ -137,7 +126,7 @@ export class A2aApi extends runtime.BaseAPI {
     }
 
     /**
-     * Stream generated acceptance criteria through A2A message chunks.
+     * Delegate Acceptance Criteria invocation to the A2A SDK JSON-RPC route.
      * Invoke Agent
      */
     async invokeAgentA2aAgentSlugPost(requestParameters: InvokeAgentA2aAgentSlugPostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<any> {
