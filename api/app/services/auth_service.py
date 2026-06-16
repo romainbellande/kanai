@@ -350,6 +350,7 @@ def get_auth_whitelist_paths() -> set[str]:
         "/docs",
         "/docs/oauth2-redirect",
         "/a2a/acceptance-criteria/.well-known/agent-card.json",
+        "/a2a/grill-me/.well-known/agent-card.json",
         "/openapi.json",
         "/redoc",
     }
