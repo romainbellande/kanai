@@ -16,6 +16,7 @@ import {
 	STORY_POINT_OPTIONS,
 	useTaskForm,
 } from "#/domains/workspace/model/useTaskForm";
+import { TaskShapingChat } from "#/domains/workspace/ui/TaskShapingChat";
 import { WorkspaceLayout } from "#/domains/workspace/ui/templates/WorkspaceLayout";
 
 export function TaskDetailPage({
@@ -69,6 +70,10 @@ export function TaskDetailPage({
 
 		setSavedMessage(null);
 		void form.acceptanceCriteriaGeneration.generate();
+	}
+
+	function handleTaskShapingDraftApplied() {
+		setSavedMessage(null);
 	}
 
 	return (
@@ -266,15 +271,31 @@ export function TaskDetailPage({
 						</section>
 
 						<section className="grid grid-cols-1 gap-5">
-							<div>
-								<h2 className="text-sm font-bold uppercase tracking-[0.18em] text-[var(--primary)]">
-									Work Notes
-								</h2>
-								<p className="mt-1 text-sm text-[var(--on-surface-variant)]">
-									Keep context and completion criteria available from the task
-									view.
-								</p>
+							<div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+								<div>
+									<h2 className="text-sm font-bold uppercase tracking-[0.18em] text-[var(--primary)]">
+										Work Notes
+									</h2>
+									<p className="mt-1 text-sm text-[var(--on-surface-variant)]">
+										Keep context and completion criteria available from the task
+										view.
+									</p>
+								</div>
 							</div>
+
+							<TaskShapingChat
+								projectId={projectId}
+								mode="edit"
+								values={form.values}
+								workflowColumnName={
+									columnsQuery.data?.find(
+										(column) =>
+											column.id === form.workflowState.selectedColumnId,
+									)?.name ?? null
+								}
+								draftApplication={form.taskShapingDraftApplication}
+								onDraftApplied={handleTaskShapingDraftApplied}
+							/>
 
 							<Field>
 								<FieldLabel

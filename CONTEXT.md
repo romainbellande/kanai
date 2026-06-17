@@ -36,6 +36,18 @@ _Avoid_: Task notes, work notes, task body
 An agent-assisted conversation that interviews a Project Member to refine a Project Task before it is saved.
 _Avoid_: Grill Me, Task Coach, Project chat
 
+**Task Shaping Interview Question**:
+The current focused question asked by Task Shaping Chat to gather the next useful detail about a Project Task.
+_Avoid_: Assistant message, prompt, chat text
+
+**Task Shaping Answer Option**:
+A selectable response offered by Task Shaping Chat for the current interview question, including a custom response option for the Project Member's own answer.
+_Avoid_: Suggestion, recommendation, quick reply
+
+**Task Shaping Transcript**:
+The visible history of Task Shaping Chat questions, assistant framing, and Project Member answers during a form-local shaping session.
+_Avoid_: A2A history, chat log, persisted conversation
+
 **A2A Task**:
 A protocol-level agent execution state used for A2A streaming and interoperability.
 _Avoid_: Project Task, backlog task, sprint task

@@ -46,6 +46,25 @@ vi.mock("@tanstack/react-router", () => ({
 	useParams: () => ({ projectId: "project-1" }),
 }));
 
+function findProjectTaskPayload(value: unknown): unknown {
+	if (!value || typeof value !== "object") {
+		return undefined;
+	}
+
+	if ("projectTask" in value || "taskShapingTurn" in value) {
+		return value;
+	}
+
+	for (const nestedValue of Object.values(value)) {
+		const match = findProjectTaskPayload(nestedValue);
+		if (match) {
+			return match;
+		}
+	}
+
+	return undefined;
+}
+
 function getCreateTaskForm(): HTMLFormElement {
 	const form = screen
 		.getByRole("button", { name: /create task/i })
@@ -108,6 +127,70 @@ function a2aArtifactEvent(chunk: string, append: boolean) {
 			},
 		},
 	};
+}
+
+function taskShapingStreamResponse(turn: unknown, id = 1): Response {
+	const encoder = new TextEncoder();
+	return new Response(
+		new ReadableStream<Uint8Array>({
+			start(controller) {
+				controller.enqueue(
+					encoder.encode(
+						`data: ${JSON.stringify({
+							jsonrpc: "2.0",
+							id,
+							result: {
+								artifactUpdate: {
+									taskId: "task-shaping-1",
+									contextId: "task-shaping-1",
+									artifact: {
+										artifactId: "task-shaping-turn",
+										name: "taskShapingTurn",
+										parts: [{ data: turn }],
+									},
+									append: false,
+									lastChunk: true,
+								},
+							},
+						})}\n\n`,
+					),
+				);
+				controller.close();
+			},
+		}),
+		{ headers: { "content-type": "text/event-stream" }, status: 200 },
+	);
+}
+
+function taskShapingPayloadAt(
+	fetchSpy: ReturnType<typeof vi.fn>,
+	index: number,
+) {
+	return findProjectTaskPayload(
+		JSON.parse(String(fetchSpy.mock.calls[index][1]?.body)),
+	);
+}
+
+function taskShapingAgentCardResponse(): Response {
+	return new Response(
+		JSON.stringify({
+			name: "Task Shaping Chat Agent",
+			description: "Starts task shaping.",
+			version: "0.1.0",
+			capabilities: { streaming: true, pushNotifications: false },
+			defaultInputModes: ["application/json"],
+			defaultOutputModes: ["text/plain"],
+			supportedInterfaces: [
+				{
+					url: "https://api.example.test/a2a/task-shaping",
+					protocolBinding: "JSONRPC",
+					protocolVersion: "1.0",
+				},
+			],
+			skills: [],
+		}),
+		{ headers: { "content-type": "application/json" } },
+	);
 }
 
 function a2aAgentCardResponse(): Response {
@@ -379,6 +462,588 @@ describe("CreateTaskPage", () => {
 		expect(
 			screen.queryByText(
 				"Add a task title or description before generating acceptance criteria.",
+			),
+		).toBeNull();
+	});
+
+	it("opens Task Shaping Chat without invoking A2A and starts on explicit action", async () => {
+		const { CreateTaskPage } = await import(
+			"#/domains/workspace/ui/CreateTaskPage"
+		);
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		const fetchSpy = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(taskShapingAgentCardResponse())
+			.mockResolvedValueOnce(
+				taskShapingStreamResponse({
+					assistantMessage: "What outcome should this task improve?",
+					recommendedAnswer: "Describe the user pain.",
+					fieldDrafts: {
+						title: "Outcome task",
+						description: "Capture the workflow pain.",
+						acceptanceCriteria: "- Outcome is testable",
+					},
+					metadata: {
+						isReady: false,
+						readinessReason: "Needs one answer",
+						staleFieldNames: [],
+					},
+				}),
+			);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		renderWithQueryClient(<CreateTaskPage />);
+
+		fireEvent.click(
+			screen.getByRole("button", { name: /^task shaping chat$/i }),
+		);
+		expect(fetchSpy).not.toHaveBeenCalled();
+		expect(
+			screen.getByText(
+				"Start from the current form fields. Opening this drawer does not call AI.",
+			),
+		).toBeTruthy();
+
+		fireEvent.click(
+			screen.getByRole("button", { name: /close task shaping chat/i }),
+		);
+		expect(fetchSpy).not.toHaveBeenCalled();
+
+		fireEvent.click(
+			screen.getByRole("button", { name: /^task shaping chat$/i }),
+		);
+		fireEvent.click(screen.getByRole("button", { name: /start shaping/i }));
+
+		await screen.findByText("What outcome should this task improve?");
+		expect(
+			screen.getByText("Recommended: Describe the user pain."),
+		).toBeTruthy();
+		expect(screen.getByText(/Outcome task/)).toBeTruthy();
+		expect(screen.getByText(/Capture the workflow pain/)).toBeTruthy();
+		expect(screen.getByText(/Outcome is testable/)).toBeTruthy();
+		expect(String(fetchSpy.mock.calls[0][0])).toBe(
+			"https://api.example.test/a2a/task-shaping/.well-known/agent-card.json",
+		);
+		expect(String(fetchSpy.mock.calls[1][0])).toBe(
+			"https://api.example.test/a2a/task-shaping",
+		);
+		expect(
+			findProjectTaskPayload(
+				JSON.parse(String(fetchSpy.mock.calls[1][1]?.body)),
+			),
+		).toEqual({
+			projectId: "project-1",
+			taskShapingTurn: {
+				form: {
+					title: null,
+					description: null,
+					acceptanceCriteria: null,
+					priority: null,
+					storyPoints: null,
+					workflowColumn: "Backlog",
+					mode: "create",
+				},
+				drafts: {},
+				transcript: [],
+			},
+		});
+	});
+
+	it("progresses Task Shaping Chat across multiple visible turns", async () => {
+		const { CreateTaskPage } = await import(
+			"#/domains/workspace/ui/CreateTaskPage"
+		);
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		const fetchSpy = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(taskShapingAgentCardResponse())
+			.mockResolvedValueOnce(
+				taskShapingStreamResponse({
+					assistantMessage: "What user problem should this solve?",
+					recommendedAnswer: "Name the blocked workflow.",
+					fieldDrafts: { title: "Shape onboarding task" },
+					metadata: {
+						isReady: false,
+						readinessReason: "Needs impact",
+						staleFieldNames: [],
+					},
+				}),
+			)
+			.mockResolvedValueOnce(
+				taskShapingStreamResponse(
+					{
+						assistantMessage: "What outcome confirms the fix worked?",
+						recommendedAnswer: "Use one measurable result.",
+						fieldDrafts: {
+							description: "Reduce onboarding confusion for project members.",
+							acceptanceCriteria: "- Members can complete onboarding",
+						},
+						metadata: {
+							isReady: true,
+							readinessReason: "Ready to review",
+							staleFieldNames: [],
+						},
+					},
+					2,
+				),
+			);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		renderWithQueryClient(<CreateTaskPage />);
+		fireEvent.change(screen.getByLabelText(/task title/i), {
+			target: { value: "Existing title" },
+		});
+		fireEvent.change(screen.getByLabelText(/tag/i), {
+			target: { value: "Do not send" },
+		});
+		fireEvent.click(
+			screen.getByRole("button", { name: /^task shaping chat$/i }),
+		);
+		fireEvent.click(screen.getByRole("button", { name: /start shaping/i }));
+
+		await screen.findByText("What user problem should this solve?");
+		expect(
+			screen.getByText("Recommended: Name the blocked workflow."),
+		).toBeTruthy();
+		expect(screen.getByText(/Shape onboarding task/)).toBeTruthy();
+
+		fireEvent.change(screen.getByLabelText(/answer the focused question/i), {
+			target: { value: "New members get lost before creating tasks." },
+		});
+		fireEvent.click(screen.getByRole("button", { name: /send answer/i }));
+
+		await screen.findByText("What outcome confirms the fix worked?");
+		expect(
+			screen.getByText("Recommended: Use one measurable result."),
+		).toBeTruthy();
+		expect(
+			screen.getByText("New members get lost before creating tasks."),
+		).toBeTruthy();
+		expect(screen.getByText(/Reduce onboarding confusion/)).toBeTruthy();
+
+		expect(taskShapingPayloadAt(fetchSpy, 2)).toEqual({
+			projectId: "project-1",
+			taskShapingTurn: {
+				form: {
+					title: "Existing title",
+					description: null,
+					acceptanceCriteria: null,
+					priority: null,
+					storyPoints: null,
+					workflowColumn: "Backlog",
+					mode: "create",
+				},
+				drafts: { title: "Shape onboarding task" },
+				transcript: [
+					{
+						role: "assistant",
+						message: "What user problem should this solve?",
+					},
+					{
+						role: "user",
+						message: "New members get lost before creating tasks.",
+					},
+				],
+			},
+		});
+		expect(
+			JSON.stringify(JSON.parse(String(fetchSpy.mock.calls[2][1]?.body))),
+		).not.toContain("tag");
+		expect(
+			JSON.stringify(JSON.parse(String(fetchSpy.mock.calls[2][1]?.body))),
+		).not.toContain("Do not send");
+		expect(
+			JSON.stringify(JSON.parse(String(fetchSpy.mock.calls[2][1]?.body))),
+		).not.toContain("projectChat");
+	});
+
+	it("applies Task Shaping field drafts individually without creating a task", async () => {
+		const { CreateTaskPage } = await import(
+			"#/domains/workspace/ui/CreateTaskPage"
+		);
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		const fetchSpy = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(taskShapingAgentCardResponse())
+			.mockResolvedValueOnce(
+				taskShapingStreamResponse({
+					assistantMessage: "Review these drafts.",
+					recommendedAnswer: "Apply the useful parts.",
+					fieldDrafts: {
+						title: "Draft title",
+						description: "Draft description",
+						acceptanceCriteria: "- Draft criterion",
+						tag: "Do not apply",
+					},
+					metadata: {
+						isReady: true,
+						readinessReason: "Ready to apply",
+						staleFieldNames: [],
+					},
+				}),
+			);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		renderWithQueryClient(<CreateTaskPage />);
+		fireEvent.change(screen.getByLabelText(/task title/i), {
+			target: { value: "Existing title" },
+		});
+		fireEvent.change(screen.getByLabelText(/description/i), {
+			target: { value: "Existing description" },
+		});
+		fireEvent.change(screen.getByLabelText(/acceptance criteria/i), {
+			target: { value: "Existing criteria" },
+		});
+		fireEvent.click(
+			screen.getByRole("button", { name: /^task shaping chat$/i }),
+		);
+		fireEvent.click(screen.getByRole("button", { name: /start shaping/i }));
+
+		await screen.findByText("Review these drafts.");
+		expect(screen.queryByText(/Do not apply/)).toBeNull();
+		fireEvent.click(screen.getByRole("button", { name: /apply title draft/i }));
+		fireEvent.click(
+			screen.getByRole("button", { name: /apply description draft/i }),
+		);
+		fireEvent.click(
+			screen.getByRole("button", { name: /apply acceptance criteria draft/i }),
+		);
+
+		expect(screen.getByLabelText<HTMLInputElement>(/task title/i).value).toBe(
+			"Draft title",
+		);
+		expect(
+			screen.getByLabelText<HTMLTextAreaElement>(/description/i).value,
+		).toBe("Draft description");
+		expect(
+			screen.getByLabelText<HTMLTextAreaElement>(/acceptance criteria/i).value,
+		).toBe("- Draft criterion");
+		expect(
+			fetchSpy.mock.calls.some(
+				([url, init]) =>
+					String(url).endsWith("/projects/project-1/tasks") &&
+					init?.method === "POST",
+			),
+		).toBe(false);
+	});
+
+	it("warns per stale Task Shaping draft and resets chat without changing create fields", async () => {
+		const { CreateTaskPage } = await import(
+			"#/domains/workspace/ui/CreateTaskPage"
+		);
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		const fetchSpy = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(taskShapingAgentCardResponse())
+			.mockResolvedValueOnce(
+				taskShapingStreamResponse({
+					assistantMessage: "Review stale-safe drafts.",
+					fieldDrafts: {
+						title: "Generated title",
+						description: "Generated description",
+						acceptanceCriteria: "- Generated criterion",
+					},
+					metadata: {
+						isReady: true,
+						readinessReason: "Ready to apply",
+						staleFieldNames: [],
+					},
+				}),
+			);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		renderWithQueryClient(<CreateTaskPage />);
+		fireEvent.change(screen.getByLabelText(/task title/i), {
+			target: { value: "Original title" },
+		});
+		fireEvent.change(screen.getByLabelText(/description/i), {
+			target: { value: "Original description" },
+		});
+		fireEvent.change(screen.getByLabelText(/acceptance criteria/i), {
+			target: { value: "Original criteria" },
+		});
+		fireEvent.click(
+			screen.getByRole("button", { name: /^task shaping chat$/i }),
+		);
+		fireEvent.click(screen.getByRole("button", { name: /start shaping/i }));
+
+		await screen.findByText("Review stale-safe drafts.");
+		fireEvent.change(screen.getByLabelText(/task title/i), {
+			target: { value: "Manually edited title" },
+		});
+
+		expect(
+			screen.getByText(
+				"This Title draft may be stale because Title changed after it was drafted. You can still apply it.",
+			),
+		).toBeTruthy();
+		expect(
+			screen.queryByText(
+				"This Description draft may be stale because Description changed after it was drafted. You can still apply it.",
+			),
+		).toBeNull();
+		expect(
+			screen.queryByText(
+				"This Acceptance Criteria draft may be stale because Acceptance Criteria changed after it was drafted. You can still apply it.",
+			),
+		).toBeNull();
+
+		fireEvent.click(screen.getByRole("button", { name: /apply title draft/i }));
+		expect(screen.getByLabelText<HTMLInputElement>(/task title/i).value).toBe(
+			"Generated title",
+		);
+
+		fireEvent.change(screen.getByLabelText(/description/i), {
+			target: { value: "Manually edited description" },
+		});
+		expect(
+			screen.getByText(
+				"This Description draft may be stale because Description changed after it was drafted. You can still apply it.",
+			),
+		).toBeTruthy();
+		expect(
+			screen.queryByText(
+				"This Acceptance Criteria draft may be stale because Acceptance Criteria changed after it was drafted. You can still apply it.",
+			),
+		).toBeNull();
+
+		fireEvent.change(screen.getByLabelText(/acceptance criteria/i), {
+			target: { value: "Manually edited criteria" },
+		});
+		expect(
+			screen.getByText(
+				"This Acceptance Criteria draft may be stale because Acceptance Criteria changed after it was drafted. You can still apply it.",
+			),
+		).toBeTruthy();
+
+		fireEvent.click(screen.getByRole("button", { name: /reset chat/i }));
+		expect(screen.queryByText("Review stale-safe drafts.")).toBeNull();
+		expect(screen.queryByText(/Generated description/)).toBeNull();
+		expect(screen.queryByText(/may be stale/)).toBeNull();
+		expect(screen.getByLabelText<HTMLInputElement>(/task title/i).value).toBe(
+			"Generated title",
+		);
+		expect(
+			screen.getByLabelText<HTMLTextAreaElement>(/description/i).value,
+		).toBe("Manually edited description");
+		expect(
+			screen.getByLabelText<HTMLTextAreaElement>(/acceptance criteria/i).value,
+		).toBe("Manually edited criteria");
+	});
+
+	it("applies all Task Shaping drafts and persists them only on create", async () => {
+		const { CreateTaskPage } = await import(
+			"#/domains/workspace/ui/CreateTaskPage"
+		);
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		const fetchSpy = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(taskShapingAgentCardResponse())
+			.mockResolvedValueOnce(
+				taskShapingStreamResponse({
+					assistantMessage: "Apply all when ready.",
+					fieldDrafts: {
+						title: "All title",
+						description: "All description",
+						acceptanceCriteria: "- All criterion",
+					},
+					metadata: {
+						isReady: true,
+						readinessReason: "Ready to apply",
+						staleFieldNames: [],
+					},
+				}),
+			)
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						id: "task-1",
+						project_id: "project-1",
+						title: "All title",
+						column_id: "column-review",
+						priority: null,
+						rank: "0|hzzzzz:",
+						assignee_id: null,
+						description: "All description",
+						acceptance_criteria: "- All criterion",
+						tag: null,
+						created_at: null,
+						updated_at: null,
+					}),
+					{ headers: { "content-type": "application/json" }, status: 200 },
+				),
+			);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		renderWithQueryClient(<CreateTaskPage />);
+		fireEvent.change(screen.getByLabelText(/task title/i), {
+			target: { value: "Original title" },
+		});
+		fireEvent.change(screen.getByLabelText(/description/i), {
+			target: { value: "Original description" },
+		});
+		fireEvent.change(screen.getByLabelText(/acceptance criteria/i), {
+			target: { value: "Original criteria" },
+		});
+		fireEvent.click(
+			screen.getByRole("button", { name: /^task shaping chat$/i }),
+		);
+		fireEvent.click(screen.getByRole("button", { name: /start shaping/i }));
+
+		await screen.findByText("Apply all when ready.");
+		fireEvent.click(screen.getByRole("button", { name: /apply all drafts/i }));
+		expect(screen.getByLabelText<HTMLInputElement>(/task title/i).value).toBe(
+			"All title",
+		);
+		expect(
+			screen.getByLabelText<HTMLTextAreaElement>(/description/i).value,
+		).toBe("All description");
+		expect(
+			screen.getByLabelText<HTMLTextAreaElement>(/acceptance criteria/i).value,
+		).toBe("- All criterion");
+
+		fireEvent.change(screen.getByLabelText(/workflow/i), {
+			target: { value: "column-review" },
+		});
+		fireEvent.submit(getCreateTaskForm());
+
+		await waitFor(() =>
+			expect(
+				fetchSpy.mock.calls.some(
+					([url, init]) =>
+						String(url).endsWith("/projects/project-1/tasks") &&
+						init?.method === "POST",
+				),
+			).toBe(true),
+		);
+		const [, init] = fetchSpy.mock.calls.find(
+			([url, init]) =>
+				String(url).endsWith("/projects/project-1/tasks") &&
+				init?.method === "POST",
+		) ?? [null, undefined];
+		expect(JSON.parse(String(init?.body))).toEqual({
+			title: "All title",
+			column_id: "column-review",
+			description: "All description",
+			acceptance_criteria: "- All criterion",
+		});
+	});
+
+	it("preserves Task Shaping transcript and drafts when the drawer closes", async () => {
+		const { CreateTaskPage } = await import(
+			"#/domains/workspace/ui/CreateTaskPage"
+		);
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		const fetchSpy = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(taskShapingAgentCardResponse())
+			.mockResolvedValueOnce(
+				taskShapingStreamResponse({
+					assistantMessage: "What is the first useful question?",
+					recommendedAnswer: "Pick the highest uncertainty.",
+					fieldDrafts: { title: "Persistent draft" },
+					metadata: {
+						isReady: false,
+						readinessReason: "Needs answer",
+						staleFieldNames: [],
+					},
+				}),
+			);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		renderWithQueryClient(<CreateTaskPage />);
+		fireEvent.click(
+			screen.getByRole("button", { name: /^task shaping chat$/i }),
+		);
+		fireEvent.click(screen.getByRole("button", { name: /start shaping/i }));
+		await screen.findByText("What is the first useful question?");
+		fireEvent.change(screen.getByLabelText(/answer the focused question/i), {
+			target: { value: "Keep this pending answer" },
+		});
+
+		fireEvent.click(
+			screen.getByRole("button", { name: /close task shaping chat/i }),
+		);
+		expect(screen.queryByText("What is the first useful question?")).toBeNull();
+		fireEvent.click(
+			screen.getByRole("button", { name: /^task shaping chat$/i }),
+		);
+
+		expect(screen.getByText("What is the first useful question?")).toBeTruthy();
+		expect(screen.getByText(/Persistent draft/)).toBeTruthy();
+		expect(
+			(
+				screen.getByLabelText(
+					/answer the focused question/i,
+				) as HTMLTextAreaElement
+			).value,
+		).toBe("Keep this pending answer");
+	});
+
+	it("preserves failed Task Shaping turns and retries without dropping drafts", async () => {
+		const { CreateTaskPage } = await import(
+			"#/domains/workspace/ui/CreateTaskPage"
+		);
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		const fetchSpy = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(taskShapingAgentCardResponse())
+			.mockResolvedValueOnce(
+				taskShapingStreamResponse({
+					assistantMessage: "What scope should the task cover?",
+					recommendedAnswer: "Name the smallest useful slice.",
+					fieldDrafts: { title: "Retry-safe draft" },
+					metadata: {
+						isReady: false,
+						readinessReason: "Needs answer",
+						staleFieldNames: [],
+					},
+				}),
+			)
+			.mockRejectedValueOnce(new Error("network down"))
+			.mockResolvedValueOnce(
+				taskShapingStreamResponse(
+					{
+						assistantMessage: "Thanks, what acceptance signal matters?",
+						recommendedAnswer: "Focus on observable behavior.",
+						fieldDrafts: { acceptanceCriteria: "- Retry succeeds" },
+						metadata: {
+							isReady: false,
+							readinessReason: "Needs validation",
+							staleFieldNames: [],
+						},
+					},
+					3,
+				),
+			);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		renderWithQueryClient(<CreateTaskPage />);
+		fireEvent.click(
+			screen.getByRole("button", { name: /^task shaping chat$/i }),
+		);
+		fireEvent.click(screen.getByRole("button", { name: /start shaping/i }));
+		await screen.findByText("What scope should the task cover?");
+		fireEvent.change(screen.getByLabelText(/answer the focused question/i), {
+			target: { value: "Only the create form interview." },
+		});
+		fireEvent.click(screen.getByRole("button", { name: /send answer/i }));
+
+		await screen.findByText(
+			"Task Shaping Chat could not complete this turn. Your answer, transcript, and drafts are still here.",
+		);
+		expect(screen.getByText("Only the create form interview.")).toBeTruthy();
+		expect(screen.getByText(/Retry-safe draft/)).toBeTruthy();
+		expect(screen.getByRole("button", { name: /retry turn/i })).toBeTruthy();
+
+		const failedPayload = taskShapingPayloadAt(fetchSpy, 2);
+		fireEvent.click(screen.getByRole("button", { name: /retry turn/i }));
+		await screen.findByText("Thanks, what acceptance signal matters?");
+		expect(taskShapingPayloadAt(fetchSpy, 3)).toEqual(failedPayload);
+		expect(screen.getByText(/Retry succeeds/)).toBeTruthy();
+		expect(
+			screen.queryByText(
+				"Task Shaping Chat could not complete this turn. Your answer, transcript, and drafts are still here.",
 			),
 		).toBeNull();
 	});

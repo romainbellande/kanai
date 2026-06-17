@@ -21,6 +21,28 @@ function storeAuthSession(session: {
 	window.sessionStorage.setItem(authSessionStorageKey, JSON.stringify(session));
 }
 
+function taskShapingAgentCardResponse(): Response {
+	return new Response(
+		JSON.stringify({
+			name: "Task Shaping Chat Agent",
+			description: "Starts task shaping.",
+			version: "0.1.0",
+			capabilities: { streaming: true, pushNotifications: false },
+			defaultInputModes: ["application/json"],
+			defaultOutputModes: ["application/json"],
+			supportedInterfaces: [
+				{
+					url: "https://api.example.test/a2a/task-shaping",
+					protocolBinding: "JSONRPC",
+					protocolVersion: "1.0",
+				},
+			],
+			skills: [],
+		}),
+		{ headers: { "content-type": "application/json" } },
+	);
+}
+
 function agentCardResponse(): Response {
 	return new Response(
 		JSON.stringify({
@@ -89,6 +111,26 @@ function a2aStreamResponseWithId(id: number, ...chunks: string[]): Response {
 	);
 }
 
+function taskShapingTurnResponse(turn: unknown): Response {
+	return a2aStreamResponseFromEvents({
+		jsonrpc: "2.0",
+		id: 1,
+		result: {
+			artifactUpdate: {
+				taskId: "task-shaping-1",
+				contextId: "task-shaping-1",
+				artifact: {
+					artifactId: "task-shaping-turn",
+					name: "taskShapingTurn",
+					parts: [{ data: turn }],
+				},
+				append: false,
+				lastChunk: true,
+			},
+		},
+	});
+}
+
 function a2aStreamResponseFromEvents(...events: unknown[]): Response {
 	return new Response(
 		events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(""),
@@ -147,7 +189,7 @@ function findProjectTaskPayload(value: unknown): unknown {
 		return undefined;
 	}
 
-	if ("projectTask" in value) {
+	if ("projectTask" in value || "taskShapingTurn" in value) {
 		return value;
 	}
 
@@ -159,6 +201,29 @@ function findProjectTaskPayload(value: unknown): unknown {
 	}
 
 	return undefined;
+}
+
+function expectTaskShapingPayload(body: string) {
+	expect(findProjectTaskPayload(JSON.parse(body))).toEqual({
+		projectId: "project-1",
+		taskShapingTurn: {
+			form: {
+				title: "Task title",
+				description: "Task description",
+				acceptanceCriteria: "Existing criteria",
+				priority: "high",
+				storyPoints: 5,
+				workflowColumn: "Review",
+				mode: "create",
+			},
+			drafts: {
+				title: "Draft title",
+				description: null,
+				acceptanceCriteria: "- Draft criterion",
+			},
+			transcript: [{ role: "assistant", message: "What is the user pain?" }],
+		},
+	});
 }
 
 function expectProjectTaskPayload(body: string) {
@@ -197,7 +262,7 @@ async function generateAcceptanceCriteria() {
 	return chunks;
 }
 
-describe("generateAcceptanceCriteria", () => {
+describe("A2A client helpers", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		vi.resetModules();
@@ -344,6 +409,64 @@ describe("generateAcceptanceCriteria", () => {
 			"- Delta one",
 			"\n- Delta two",
 		]);
+	});
+
+	it("discovers and invokes Task Shaping with structured turn context", async () => {
+		const turn = {
+			assistantMessage: "What outcome should improve?",
+			recommendedAnswer: "Describe the user pain.",
+			fieldDrafts: {
+				title: "Draft title",
+				description: "Draft description",
+				acceptanceCriteria: "- Draft criterion",
+			},
+			metadata: {
+				isReady: false,
+				readinessReason: "Needs one more answer",
+				staleFieldNames: ["title"],
+			},
+		};
+		const fetchSpy = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(taskShapingAgentCardResponse())
+			.mockResolvedValueOnce(taskShapingTurnResponse(turn));
+		vi.stubGlobal("fetch", fetchSpy);
+		const { startTaskShaping } = await import("./a2a");
+
+		await expect(
+			startTaskShaping({
+				projectId: "project-1",
+				task: {
+					title: "Task title",
+					description: "Task description",
+					acceptanceCriteria: "Existing criteria",
+					priority: "high",
+					storyPoints: 5,
+					workflowColumn: "Review",
+					mode: "create",
+				},
+				drafts: {
+					title: "Draft title",
+					description: null,
+					acceptanceCriteria: "- Draft criterion",
+				},
+				transcript: [{ role: "assistant", message: "What is the user pain?" }],
+			}),
+		).resolves.toEqual(turn);
+
+		expect(String(fetchSpy.mock.calls[0][0])).toBe(
+			"https://api.example.test/a2a/task-shaping/.well-known/agent-card.json",
+		);
+		expect(
+			new Headers(fetchSpy.mock.calls[0][1]?.headers).get("Authorization"),
+		).toBeNull();
+		expect(String(fetchSpy.mock.calls[1][0])).toBe(
+			"https://api.example.test/a2a/task-shaping",
+		);
+		expect(
+			new Headers(fetchSpy.mock.calls[1][1]?.headers).get("Authorization"),
+		).toBe("Bearer access-token");
+		expectTaskShapingPayload(String(fetchSpy.mock.calls[1][1]?.body));
 	});
 
 	it("forwards cancellation through the SDK transport signal", async () => {

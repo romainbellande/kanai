@@ -16,6 +16,7 @@ import {
 	STORY_POINT_OPTIONS,
 	useTaskForm,
 } from "#/domains/workspace/model/useTaskForm";
+import { TaskShapingChat } from "#/domains/workspace/ui/TaskShapingChat";
 import { WorkspaceLayout } from "#/domains/workspace/ui/templates/WorkspaceLayout";
 
 export function CreateTaskPage({
@@ -73,7 +74,6 @@ export function CreateTaskPage({
 		: includeInActiveSprint
 			? "Create Current Sprint Task"
 			: "Create New Task";
-
 	async function handleSubmit(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
 		await form.submit();
@@ -268,15 +268,30 @@ export function CreateTaskPage({
 						</section>
 
 						<section className="grid grid-cols-1 gap-5">
-							<div>
-								<h2 className="text-sm font-bold uppercase tracking-[0.18em] text-[var(--primary)]">
-									Work Notes
-								</h2>
-								<p className="mt-1 text-sm text-[var(--on-surface-variant)]">
-									Separate background context from the conditions required to
-									finish.
-								</p>
+							<div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+								<div>
+									<h2 className="text-sm font-bold uppercase tracking-[0.18em] text-[var(--primary)]">
+										Work Notes
+									</h2>
+									<p className="mt-1 text-sm text-[var(--on-surface-variant)]">
+										Separate background context from the conditions required to
+										finish.
+									</p>
+								</div>
 							</div>
+
+							<TaskShapingChat
+								projectId={projectId}
+								mode="create"
+								values={form.values}
+								workflowColumnName={
+									columnsQuery.data?.find(
+										(column) =>
+											column.id === form.workflowState.selectedColumnId,
+									)?.name ?? null
+								}
+								draftApplication={form.taskShapingDraftApplication}
+							/>
 
 							<Field>
 								<FieldLabel

@@ -21,9 +21,12 @@ from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.features.a2a import (
     AcceptanceCriteriaGenerationContext,
+    TaskShapingGenerationContext,
+    TaskShapingTurnOutput,
     a2a_router,
     build_acceptance_criteria_prompt,
     get_acceptance_criteria_generator,
+    get_task_shaping_generator,
 )
 from app.models.project import Project, ProjectMember, ProjectOwner
 from app.models.user import User
@@ -60,6 +63,32 @@ class StubAcceptanceCriteriaGenerator:
         self.contexts.append(context)
         yield "- Users can create tasks"
         yield "\n- Saved tasks show on the board"
+
+
+class StubTaskShapingGenerator:
+    def __init__(self) -> None:
+        self.contexts: list[TaskShapingGenerationContext] = []
+
+    async def start_shaping(
+        self, context: TaskShapingGenerationContext
+    ) -> TaskShapingTurnOutput:
+        self.contexts.append(context)
+        return TaskShapingTurnOutput.model_validate(
+            {
+                "assistantMessage": "What user outcome should this task improve?",
+                "recommendedAnswer": "Start with the workflow pain.",
+                "fieldDrafts": {
+                    "title": "Improve workflow pain",
+                    "description": "Clarify the user outcome and handoff context.",
+                    "acceptanceCriteria": "- User outcome is testable",
+                },
+                "metadata": {
+                    "isReady": False,
+                    "readinessReason": "Needs one more answer",
+                    "staleFieldNames": ["title"],
+                },
+            }
+        )
 
 
 def build_client() -> TestClient:
@@ -140,7 +169,9 @@ async def seeded_project(
 async def protected_client(
     session_factory: async_sessionmaker[AsyncSession],
     seeded_users: dict[str, UUID],
-) -> AsyncIterator[tuple[AsyncClient, StubAcceptanceCriteriaGenerator]]:
+) -> AsyncIterator[
+    tuple[AsyncClient, StubAcceptanceCriteriaGenerator, StubTaskShapingGenerator]
+]:
     del seeded_users
 
     app = FastAPI()
@@ -148,7 +179,10 @@ async def protected_client(
         AuthMiddleware,
         auth_boundary=RequestAuthBoundary(
             StubAuthenticateRequest(),
-            whitelist_paths={"/a2a/acceptance-criteria/.well-known/agent-card.json"},
+            whitelist_paths={
+                "/a2a/acceptance-criteria/.well-known/agent-card.json",
+                "/a2a/task-shaping/.well-known/agent-card.json",
+            },
         ),
     )
     app.include_router(a2a_router)
@@ -158,12 +192,16 @@ async def protected_client(
             yield session
 
     stub_generator = StubAcceptanceCriteriaGenerator()
+    stub_task_shaping_generator = StubTaskShapingGenerator()
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_acceptance_criteria_generator] = lambda: stub_generator
+    app.dependency_overrides[get_task_shaping_generator] = lambda: (
+        stub_task_shaping_generator
+    )
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        yield client, stub_generator
+        yield client, stub_generator, stub_task_shaping_generator
 
 
 def test_acceptance_criteria_agent_card_is_reachable_without_bearer_auth() -> None:
@@ -188,6 +226,29 @@ def test_acceptance_criteria_agent_card_is_reachable_without_bearer_auth() -> No
     assert skill["outputModes"] == ["text/plain"]
 
 
+def test_task_shaping_agent_card_is_reachable_without_bearer_auth() -> None:
+    client = build_client()
+
+    response = client.get("/a2a/task-shaping/.well-known/agent-card.json")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["supportedInterfaces"] == [
+        {
+            "url": "https://api.example.test/a2a/task-shaping",
+            "protocolBinding": "JSONRPC",
+            "protocolVersion": "1.0",
+        }
+    ]
+    assert body["defaultInputModes"] == ["application/json"]
+    assert body["defaultOutputModes"] == ["application/json"]
+    skill = body["skills"][0]
+    assert skill["id"] == "task-shaping"
+    assert skill["name"] == "Task Shaping Chat"
+    assert skill["inputModes"] == ["application/json"]
+    assert skill["outputModes"] == ["application/json"]
+
+
 def test_unknown_a2a_agent_card_slug_returns_not_found() -> None:
     client = build_client()
 
@@ -210,10 +271,101 @@ def test_unknown_a2a_invocation_slug_returns_not_found() -> None:
 
 
 @pytest.mark.asyncio
-async def test_acceptance_criteria_invocation_requires_bearer_auth(
-    protected_client: tuple[AsyncClient, StubAcceptanceCriteriaGenerator],
+async def test_task_shaping_invocation_requires_bearer_auth(
+    protected_client: tuple[
+        AsyncClient, StubAcceptanceCriteriaGenerator, StubTaskShapingGenerator
+    ],
 ) -> None:
-    client, stub_generator = protected_client
+    client, _stub_generator, stub_task_shaping_generator = protected_client
+
+    response = await client.post("/a2a/task-shaping", json={})
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Missing Authorization header"}
+    assert stub_task_shaping_generator.contexts == []
+
+
+@pytest.mark.asyncio
+async def test_task_shaping_project_access_is_required_before_model_invocation(
+    protected_client: tuple[
+        AsyncClient, StubAcceptanceCriteriaGenerator, StubTaskShapingGenerator
+    ],
+    seeded_project: UUID,
+) -> None:
+    client, _stub_generator, stub_task_shaping_generator = protected_client
+
+    response = await client.post(
+        "/a2a/task-shaping",
+        headers={"Authorization": "Bearer outsider-token", "A2A-Version": "1.0"},
+        json=build_a2a_request(
+            project_id=str(seeded_project),
+            task_shaping_turn={"form": {}, "drafts": {}, "transcript": []},
+        ),
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Project not found"}
+    assert stub_task_shaping_generator.contexts == []
+
+
+@pytest.mark.asyncio
+async def test_task_shaping_accepts_blank_create_form_payload(
+    protected_client: tuple[
+        AsyncClient, StubAcceptanceCriteriaGenerator, StubTaskShapingGenerator
+    ],
+    seeded_project: UUID,
+) -> None:
+    client, _stub_generator, stub_task_shaping_generator = protected_client
+
+    response = await client.post(
+        "/a2a/task-shaping",
+        headers=A2A_HEADERS,
+        json=build_a2a_request(
+            project_id=str(seeded_project),
+            task_shaping_turn={
+                "form": {
+                    "title": None,
+                    "description": None,
+                    "acceptanceCriteria": None,
+                    "priority": None,
+                    "storyPoints": None,
+                    "workflowColumn": None,
+                    "mode": "create",
+                },
+                "drafts": {"title": "Draft title"},
+                "transcript": [
+                    {"role": "assistant", "message": "What outcome matters?"},
+                    {"role": "user", "message": "Reduce task handoff churn."},
+                ],
+            },
+        ),
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert "What user outcome should this task improve?" in response.text
+    assert "Improve workflow pain" in response.text
+    assert "Start with the workflow pain." in response.text
+    assert len(stub_task_shaping_generator.contexts) == 1
+    context = stub_task_shaping_generator.contexts[0]
+    assert context.project_id == seeded_project
+    assert context.form.title is None
+    assert context.form.description is None
+    assert context.form.mode == "create"
+    assert context.drafts.title == "Draft title"
+    assert [entry.message for entry in context.transcript] == [
+        "What outcome matters?",
+        "Reduce task handoff churn.",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_acceptance_criteria_invocation_requires_bearer_auth(
+    protected_client: tuple[
+        AsyncClient, StubAcceptanceCriteriaGenerator, StubTaskShapingGenerator
+    ],
+) -> None:
+    client, stub_generator, _stub_task_shaping_generator = protected_client
 
     response = await client.post("/a2a/acceptance-criteria", json={})
 
@@ -224,9 +376,11 @@ async def test_acceptance_criteria_invocation_requires_bearer_auth(
 
 @pytest.mark.asyncio
 async def test_acceptance_criteria_invocation_preserves_invalid_token_auth_response(
-    protected_client: tuple[AsyncClient, StubAcceptanceCriteriaGenerator],
+    protected_client: tuple[
+        AsyncClient, StubAcceptanceCriteriaGenerator, StubTaskShapingGenerator
+    ],
 ) -> None:
-    client, stub_generator = protected_client
+    client, stub_generator, _stub_task_shaping_generator = protected_client
 
     response = await client.post(
         "/a2a/acceptance-criteria",
@@ -241,9 +395,11 @@ async def test_acceptance_criteria_invocation_preserves_invalid_token_auth_respo
 
 @pytest.mark.asyncio
 async def test_malformed_a2a_message_returns_protocol_error(
-    protected_client: tuple[AsyncClient, StubAcceptanceCriteriaGenerator],
+    protected_client: tuple[
+        AsyncClient, StubAcceptanceCriteriaGenerator, StubTaskShapingGenerator
+    ],
 ) -> None:
-    client, stub_generator = protected_client
+    client, stub_generator, _stub_task_shaping_generator = protected_client
 
     response = await client.post(
         "/a2a/acceptance-criteria",
@@ -258,9 +414,11 @@ async def test_malformed_a2a_message_returns_protocol_error(
 
 @pytest.mark.asyncio
 async def test_project_id_data_is_required_before_model_invocation(
-    protected_client: tuple[AsyncClient, StubAcceptanceCriteriaGenerator],
+    protected_client: tuple[
+        AsyncClient, StubAcceptanceCriteriaGenerator, StubTaskShapingGenerator
+    ],
 ) -> None:
-    client, stub_generator = protected_client
+    client, stub_generator, _stub_task_shaping_generator = protected_client
 
     response = await client.post(
         "/a2a/acceptance-criteria",
@@ -275,10 +433,12 @@ async def test_project_id_data_is_required_before_model_invocation(
 
 @pytest.mark.asyncio
 async def test_project_access_is_required_before_model_invocation(
-    protected_client: tuple[AsyncClient, StubAcceptanceCriteriaGenerator],
+    protected_client: tuple[
+        AsyncClient, StubAcceptanceCriteriaGenerator, StubTaskShapingGenerator
+    ],
     seeded_project: UUID,
 ) -> None:
-    client, stub_generator = protected_client
+    client, stub_generator, _stub_task_shaping_generator = protected_client
 
     response = await client.post(
         "/a2a/acceptance-criteria",
@@ -296,10 +456,12 @@ async def test_project_access_is_required_before_model_invocation(
 
 @pytest.mark.asyncio
 async def test_unknown_project_task_field_returns_safe_client_error(
-    protected_client: tuple[AsyncClient, StubAcceptanceCriteriaGenerator],
+    protected_client: tuple[
+        AsyncClient, StubAcceptanceCriteriaGenerator, StubTaskShapingGenerator
+    ],
     seeded_project: UUID,
 ) -> None:
-    client, stub_generator = protected_client
+    client, stub_generator, _stub_task_shaping_generator = protected_client
 
     response = await client.post(
         "/a2a/acceptance-criteria",
@@ -317,10 +479,12 @@ async def test_unknown_project_task_field_returns_safe_client_error(
 
 @pytest.mark.asyncio
 async def test_invalid_project_task_data_returns_safe_protocol_error(
-    protected_client: tuple[AsyncClient, StubAcceptanceCriteriaGenerator],
+    protected_client: tuple[
+        AsyncClient, StubAcceptanceCriteriaGenerator, StubTaskShapingGenerator
+    ],
     seeded_project: UUID,
 ) -> None:
-    client, stub_generator = protected_client
+    client, stub_generator, _stub_task_shaping_generator = protected_client
 
     response = await client.post(
         "/a2a/acceptance-criteria",
@@ -338,10 +502,12 @@ async def test_invalid_project_task_data_returns_safe_protocol_error(
 
 @pytest.mark.asyncio
 async def test_insufficient_project_task_data_returns_safe_client_error(
-    protected_client: tuple[AsyncClient, StubAcceptanceCriteriaGenerator],
+    protected_client: tuple[
+        AsyncClient, StubAcceptanceCriteriaGenerator, StubTaskShapingGenerator
+    ],
     seeded_project: UUID,
 ) -> None:
-    client, stub_generator = protected_client
+    client, stub_generator, _stub_task_shaping_generator = protected_client
 
     response = await client.post(
         "/a2a/acceptance-criteria",
@@ -359,10 +525,12 @@ async def test_insufficient_project_task_data_returns_safe_client_error(
 
 @pytest.mark.asyncio
 async def test_stubbed_output_streams_markdown_through_a2a_artifact_updates(
-    protected_client: tuple[AsyncClient, StubAcceptanceCriteriaGenerator],
+    protected_client: tuple[
+        AsyncClient, StubAcceptanceCriteriaGenerator, StubTaskShapingGenerator
+    ],
     seeded_project: UUID,
 ) -> None:
-    client, stub_generator = protected_client
+    client, stub_generator, _stub_task_shaping_generator = protected_client
 
     response = await client.post(
         "/a2a/acceptance-criteria",
@@ -472,9 +640,16 @@ def test_public_api_base_url_is_required_at_settings_construction(
 
 
 def build_a2a_request(
-    *, project_task: Any, project_id: str | None = None
+    *,
+    project_task: Any | None = None,
+    task_shaping_turn: Any | None = None,
+    project_id: str | None = None,
 ) -> dict[str, Any]:
-    data: dict[str, Any] = {"projectTask": project_task}
+    data: dict[str, Any] = {}
+    if project_task is not None:
+        data["projectTask"] = project_task
+    if task_shaping_turn is not None:
+        data["taskShapingTurn"] = task_shaping_turn
     if project_id is not None:
         data["projectId"] = project_id
 

@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+	getStaleTaskShapingDraftFields,
 	getTaskFormWorkflowState,
 	STORY_POINT_OPTIONS,
 	useTaskForm,
@@ -285,6 +286,62 @@ describe("getTaskFormWorkflowState", () => {
 			message: "A non-Done workflow column is required.",
 			selectedColumnId: "column-todo",
 		});
+	});
+});
+
+describe("getStaleTaskShapingDraftFields", () => {
+	const values = {
+		title: "Source title",
+		status: "todo",
+		priority: "",
+		storyPoints: "",
+		description: "Source description",
+		acceptanceCriteria: "Source criteria",
+		tag: "",
+	};
+
+	it("marks only the field changed after its draft was produced", () => {
+		expect(
+			getStaleTaskShapingDraftFields({
+				drafts: {
+					title: "Draft title",
+					description: "Draft description",
+					acceptanceCriteria: "Draft criteria",
+				},
+				sources: {
+					title: "Source title",
+					description: "Source description",
+					acceptanceCriteria: "Source criteria",
+				},
+				values: { ...values, title: "Edited title" },
+			}),
+		).toEqual(["title"]);
+	});
+
+	it("does not mark unrelated field drafts stale", () => {
+		expect(
+			getStaleTaskShapingDraftFields({
+				drafts: {
+					description: "Draft description",
+					acceptanceCriteria: "Draft criteria",
+				},
+				sources: {
+					description: "Source description",
+					acceptanceCriteria: "Source criteria",
+				},
+				values: { ...values, title: "Edited title" },
+			}),
+		).toEqual([]);
+	});
+
+	it("keeps an applied draft from immediately becoming stale", () => {
+		expect(
+			getStaleTaskShapingDraftFields({
+				drafts: { acceptanceCriteria: "Draft criteria" },
+				sources: { acceptanceCriteria: "Source criteria" },
+				values: { ...values, acceptanceCriteria: "Draft criteria" },
+			}),
+		).toEqual([]);
 	});
 });
 

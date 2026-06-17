@@ -5,6 +5,7 @@ import {
 	generateAcceptanceCriteria,
 	type ProjectColumn,
 	type Task,
+	type TaskShapingFieldDrafts,
 	useKanaiApi,
 } from "#/api/client";
 
@@ -24,6 +25,43 @@ export type TaskFormValues = {
 	acceptanceCriteria: string;
 	tag: string;
 };
+
+export type TaskShapingDraftField = Extract<
+	keyof TaskFormValues,
+	"title" | "description" | "acceptanceCriteria"
+>;
+
+export type TaskShapingDraftSources = Partial<
+	Record<TaskShapingDraftField, string>
+>;
+
+const TASK_SHAPING_DRAFT_FIELDS: readonly TaskShapingDraftField[] = [
+	"title",
+	"description",
+	"acceptanceCriteria",
+];
+
+export function getStaleTaskShapingDraftFields({
+	drafts,
+	sources,
+	values,
+}: {
+	drafts: TaskShapingFieldDrafts;
+	sources: TaskShapingDraftSources;
+	values: TaskFormValues;
+}): TaskShapingDraftField[] {
+	return TASK_SHAPING_DRAFT_FIELDS.filter((field) => {
+		const draft = drafts[field];
+		const source = sources[field];
+
+		return (
+			typeof draft === "string" &&
+			typeof source === "string" &&
+			values[field] !== source &&
+			values[field] !== draft
+		);
+	});
+}
 
 export type TaskFormWorkflowColumn = Pick<ProjectColumn, "id" | "name">;
 
@@ -269,6 +307,38 @@ export function useTaskForm(input: UseTaskFormInput) {
 		}
 	}
 
+	function applyTaskShapingDraft(
+		name: TaskShapingDraftField,
+		drafts: TaskShapingFieldDrafts,
+	) {
+		const draft = drafts[name];
+		if (typeof draft !== "string") {
+			return;
+		}
+
+		setField(name, draft);
+	}
+
+	function applyAllTaskShapingDrafts(drafts: TaskShapingFieldDrafts) {
+		const availableDrafts = TASK_SHAPING_DRAFT_FIELDS.filter(
+			(field) => typeof drafts[field] === "string",
+		);
+		if (availableDrafts.length === 0) {
+			return;
+		}
+
+		setValues((currentValues) => ({
+			...currentValues,
+			...Object.fromEntries(
+				availableDrafts.map((field) => [field, drafts[field] ?? ""]),
+			),
+		}));
+		setIsDirty(true);
+		if (availableDrafts.some((field) => field !== "acceptanceCriteria")) {
+			setAcceptanceCriteriaGenerationMessage(null);
+		}
+	}
+
 	async function generateAcceptanceCriteriaForForm(): Promise<void> {
 		if (acceptanceCriteriaAbortControllerRef.current) {
 			return;
@@ -419,6 +489,10 @@ export function useTaskForm(input: UseTaskFormInput) {
 				: updateTaskMutation.isPending,
 		errorMessage,
 		workflowState,
+		taskShapingDraftApplication: {
+			applyDraft: applyTaskShapingDraft,
+			applyAllDrafts: applyAllTaskShapingDrafts,
+		},
 		acceptanceCriteriaGeneration: {
 			canGenerate: Boolean(values.title.trim() || values.description.trim()),
 			isGenerating: isGeneratingAcceptanceCriteria,

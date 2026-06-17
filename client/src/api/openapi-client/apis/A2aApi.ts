@@ -111,7 +111,7 @@ export class A2aApi extends runtime.BaseAPI {
     }
 
     /**
-     * Delegate Acceptance Criteria invocation to the A2A SDK JSON-RPC route.
+     * Delegate invocation to the registered A2A SDK JSON-RPC route.
      * Invoke Agent
      */
     async invokeAgentA2aAgentSlugPostRaw(requestParameters: InvokeAgentA2aAgentSlugPostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<any>> {
@@ -126,7 +126,7 @@ export class A2aApi extends runtime.BaseAPI {
     }
 
     /**
-     * Delegate Acceptance Criteria invocation to the A2A SDK JSON-RPC route.
+     * Delegate invocation to the registered A2A SDK JSON-RPC route.
      * Invoke Agent
      */
     async invokeAgentA2aAgentSlugPost(requestParameters: InvokeAgentA2aAgentSlugPostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<any> {

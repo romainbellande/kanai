@@ -83,7 +83,7 @@ No authorization required
 
 Invoke Agent
 
-Delegate Acceptance Criteria invocation to the A2A SDK JSON-RPC route.
+Delegate invocation to the registered A2A SDK JSON-RPC route.
 
 ### Example
 
