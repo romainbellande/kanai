@@ -24,6 +24,18 @@ _Avoid_: Contributor, teammate
 A Kanai work item owned by a Project and managed through planning and workflow views.
 _Avoid_: A2A Task, agent task
 
+**Project Task Title**:
+A concise, user-editable name that identifies the work represented by a Project Task.
+_Avoid_: Task name, issue title
+
+**Project Task Description**:
+Task-owned, user-editable narrative context that explains the background, scope, or handoff information for a Project Task.
+_Avoid_: Task notes, work notes, task body
+
+**Task Shaping Chat**:
+An agent-assisted conversation that interviews a Project Member to refine a Project Task before it is saved.
+_Avoid_: Grill Me, Task Coach, Project chat
+
 **A2A Task**:
 A protocol-level agent execution state used for A2A streaming and interoperability.
 _Avoid_: Project Task, backlog task, sprint task
