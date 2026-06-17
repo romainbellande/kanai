@@ -26,6 +26,7 @@ from app.features.a2a.acceptance_criteria import (
 )
 from app.features.a2a.task_shaping import (
     TaskShapingGenerator,
+    TaskShapingTurnOutput,
     get_task_shaping_generator,
     parse_task_shaping_context,
 )
@@ -236,7 +237,9 @@ class TaskShapingAgentExecutor(AgentExecutor):
         )
 
         updater = TaskUpdater(event_queue, task_id, context_id)
-        turn_output = await generator.start_shaping(generation_context)
+        turn_output = TaskShapingTurnOutput.model_validate(
+            await generator.start_shaping(generation_context)
+        )
         await updater.add_artifact(
             [
                 Part(

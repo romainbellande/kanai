@@ -229,6 +229,28 @@ function taskShapingTurnResponse(turn: unknown): Response {
 	);
 }
 
+function taskShapingQuestion(text: string, recommendedLabel: string) {
+	return {
+		text,
+		answerOptions: [
+			{
+				identifier: "Recommended / Option",
+				label: recommendedLabel,
+				detail: "Use this visible answer detail.",
+				responseText: "Use this visible answer detail.",
+				isRecommended: true,
+			},
+			{
+				identifier: "Other option",
+				label: "Use another answer",
+				detail: null,
+				responseText: "Use another visible answer.",
+				isRecommended: false,
+			},
+		],
+	};
+}
+
 function failingA2aStreamResponse(...chunks: string[]): Response {
 	const encoder = new TextEncoder();
 	return new Response(
@@ -596,7 +618,10 @@ describe("TaskDetailPage", () => {
 			.mockResolvedValueOnce(
 				taskShapingTurnResponse({
 					assistantMessage: "What outcome should this task achieve?",
-					recommendedAnswer: "Describe the user-visible outcome.",
+					question: taskShapingQuestion(
+						"What outcome should this task achieve?",
+						"Describe the user-visible outcome",
+					),
 					fieldDrafts: { title: "Shaped Task" },
 					metadata: { isReady: false, readinessReason: "Needs scope" },
 				}),
@@ -615,8 +640,26 @@ describe("TaskDetailPage", () => {
 			await screen.findByText("What outcome should this task achieve?"),
 		).toBeTruthy();
 		expect(
-			screen.getByText("Recommended: Describe the user-visible outcome."),
-		).toBeTruthy();
+			screen.queryByText(/Recommended: Describe the user-visible outcome/),
+		).toBeNull();
+		const recommendedOption = screen.getByRole<HTMLInputElement>("radio", {
+			name: /describe the user-visible outcome/i,
+		});
+		const otherOption = screen.getByRole<HTMLInputElement>("radio", {
+			name: /use another answer/i,
+		});
+		const sendButton = screen.getByRole<HTMLButtonElement>("button", {
+			name: /send answer/i,
+		});
+		expect(recommendedOption.checked).toBe(false);
+		expect(otherOption.checked).toBe(false);
+		expect(sendButton.disabled).toBe(true);
+		expect(screen.getByText("Recommended")).toBeTruthy();
+		fireEvent.click(recommendedOption);
+		expect(recommendedOption.checked).toBe(true);
+		expect(otherOption.checked).toBe(false);
+		expect(sendButton.disabled).toBe(false);
+		expect(fetchSpy).toHaveBeenCalledTimes(2);
 
 		fireEvent.click(
 			screen.getByRole("button", { name: "Close Task Shaping Chat" }),
@@ -666,7 +709,6 @@ describe("TaskDetailPage", () => {
 			.mockResolvedValueOnce(
 				taskShapingTurnResponse({
 					assistantMessage: "I drafted updates for the task fields.",
-					recommendedAnswer: "Apply the drafts if they match your intent.",
 					fieldDrafts: {
 						title: "Shaped Title",
 						description: "Shaped description",
@@ -704,6 +746,9 @@ describe("TaskDetailPage", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Start shaping" }));
 
 		await screen.findByText("I drafted updates for the task fields.");
+		expect(screen.queryByText("Answer options")).toBeNull();
+		expect(screen.queryByLabelText(/answer the focused question/i)).toBeNull();
+		expect(screen.queryByRole("button", { name: /send answer/i })).toBeNull();
 		const taskShapingCall = fetchSpy.mock.calls.find(([url]) =>
 			String(url).endsWith("/a2a/task-shaping"),
 		);

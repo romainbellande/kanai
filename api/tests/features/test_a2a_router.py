@@ -2,6 +2,7 @@ import json
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, cast
 from uuid import UUID, uuid4
 
@@ -25,9 +26,11 @@ from app.features.a2a import (
     TaskShapingTurnOutput,
     a2a_router,
     build_acceptance_criteria_prompt,
+    build_task_shaping_prompt,
     get_acceptance_criteria_generator,
     get_task_shaping_generator,
 )
+from app.features.a2a.task_shaping import PydanticAiTaskShapingGenerator
 from app.models.project import Project, ProjectMember, ProjectOwner
 from app.models.user import User
 from app.schemas.auth import AuthenticatedContext
@@ -68,15 +71,37 @@ class StubAcceptanceCriteriaGenerator:
 class StubTaskShapingGenerator:
     def __init__(self) -> None:
         self.contexts: list[TaskShapingGenerationContext] = []
+        self.next_output: Any | None = None
 
     async def start_shaping(
         self, context: TaskShapingGenerationContext
     ) -> TaskShapingTurnOutput:
         self.contexts.append(context)
+        if self.next_output is not None:
+            return cast("TaskShapingTurnOutput", self.next_output)
+
         return TaskShapingTurnOutput.model_validate(
             {
                 "assistantMessage": "What user outcome should this task improve?",
-                "recommendedAnswer": "Start with the workflow pain.",
+                "question": {
+                    "text": "What user outcome should this task improve?",
+                    "answerOptions": [
+                        {
+                            "identifier": "Outcome / Pain",
+                            "label": "Start with the workflow pain",
+                            "detail": "Name the user outcome and current workflow pain.",
+                            "responseText": "Name the user outcome and current workflow pain.",
+                            "isRecommended": True,
+                        },
+                        {
+                            "identifier": "Outcome / Pain",
+                            "label": "Start with a constraint",
+                            "detail": None,
+                            "responseText": "Start with a constraint.",
+                            "isRecommended": True,
+                        },
+                    ],
+                },
                 "fieldDrafts": {
                     "title": "Improve workflow pain",
                     "description": "Clarify the user outcome and handoff context.",
@@ -335,7 +360,10 @@ async def test_task_shaping_accepts_blank_create_form_payload(
                 "drafts": {"title": "Draft title"},
                 "transcript": [
                     {"role": "assistant", "message": "What outcome matters?"},
-                    {"role": "user", "message": "Reduce task handoff churn."},
+                    {
+                        "role": "user",
+                        "message": "Name the user outcome and current workflow pain.",
+                    },
                 ],
             },
         ),
@@ -345,7 +373,37 @@ async def test_task_shaping_accepts_blank_create_form_payload(
     assert response.headers["content-type"].startswith("text/event-stream")
     assert "What user outcome should this task improve?" in response.text
     assert "Improve workflow pain" in response.text
-    assert "Start with the workflow pain." in response.text
+    turn = extract_task_shaping_turn(response.text)
+    assert turn["question"] == {
+        "text": "What user outcome should this task improve?",
+        "answerOptions": [
+            {
+                "identifier": "outcome-pain",
+                "label": "Start with the workflow pain",
+                "detail": "Name the user outcome and current workflow pain.",
+                "responseText": "Name the user outcome and current workflow pain.",
+                "isRecommended": True,
+            },
+            {
+                "identifier": "outcome-pain-2",
+                "label": "Start with a constraint",
+                "detail": None,
+                "responseText": "Start with a constraint.",
+                "isRecommended": False,
+            },
+            {
+                "identifier": "custom_response",
+                "label": "Answer in my own words",
+                "detail": "Write a custom response when the suggested answers do not fit.",
+                "responseText": "",
+                "isRecommended": False,
+            },
+        ],
+    }
+    assert (
+        sum(option["isRecommended"] for option in turn["question"]["answerOptions"])
+        == 1
+    )
     assert len(stub_task_shaping_generator.contexts) == 1
     context = stub_task_shaping_generator.contexts[0]
     assert context.project_id == seeded_project
@@ -355,8 +413,221 @@ async def test_task_shaping_accepts_blank_create_form_payload(
     assert context.drafts.title == "Draft title"
     assert [entry.message for entry in context.transcript] == [
         "What outcome matters?",
-        "Reduce task handoff churn.",
+        "Name the user outcome and current workflow pain.",
     ]
+
+
+def test_task_shaping_question_enforces_product_controlled_custom_response_option() -> (
+    None
+):
+    turn = TaskShapingTurnOutput.model_validate(
+        {
+            "assistantMessage": "Choose an answer.",
+            "question": {
+                "text": "What should improve?",
+                "answerOptions": [
+                    {
+                        "identifier": "custom_response",
+                        "label": "Model-proposed custom copy",
+                        "detail": "Do not preserve this.",
+                        "responseText": "Do not send this metadata.",
+                        "isRecommended": True,
+                    },
+                    {
+                        "identifier": "Outcome / Pain",
+                        "label": "Name the pain",
+                        "responseText": "Name the pain.",
+                    },
+                ],
+            },
+        }
+    )
+
+    assert turn.question is not None
+    assert [option.identifier for option in turn.question.answer_options] == [
+        "outcome-pain",
+        "custom_response",
+    ]
+    assert [option.is_recommended for option in turn.question.answer_options] == [
+        True,
+        False,
+    ]
+    custom_option = turn.question.answer_options[-1]
+    assert custom_option.label == "Answer in my own words"
+    assert custom_option.detail == (
+        "Write a custom response when the suggested answers do not fit."
+    )
+    assert custom_option.response_text == ""
+
+
+def test_task_shaping_prompt_starts_blank_create_with_desired_outcome() -> None:
+    context = TaskShapingGenerationContext.model_validate(
+        {
+            "projectId": "00000000-0000-4000-8000-000000000001",
+            "form": {
+                "title": None,
+                "description": None,
+                "acceptanceCriteria": None,
+                "priority": None,
+                "storyPoints": None,
+                "workflowColumn": None,
+                "mode": "create",
+            },
+        }
+    )
+
+    prompt = build_task_shaping_prompt(context)
+
+    assert "blank create form" in prompt
+    assert "first ask what desired user outcome" in prompt
+    assert "do not start by asking for a title" in prompt
+
+
+def test_task_shaping_prompt_uses_domain_relevant_next_clarification() -> None:
+    partial_context = TaskShapingGenerationContext.model_validate(
+        {
+            "projectId": "00000000-0000-4000-8000-000000000001",
+            "form": {
+                "title": "Improve task handoff",
+                "description": "",
+                "acceptanceCriteria": None,
+                "priority": None,
+                "storyPoints": None,
+                "workflowColumn": None,
+                "mode": "create",
+            },
+        }
+    )
+    edit_context = TaskShapingGenerationContext.model_validate(
+        {
+            "projectId": "00000000-0000-4000-8000-000000000001",
+            "form": {
+                "title": "Improve task handoff",
+                "description": "Members can hand off task context.",
+                "acceptanceCriteria": None,
+                "priority": "medium",
+                "storyPoints": None,
+                "workflowColumn": "Ready",
+                "mode": "edit",
+            },
+        }
+    )
+
+    partial_prompt = build_task_shaping_prompt(partial_context)
+    edit_prompt = build_task_shaping_prompt(edit_context)
+
+    assert "partially filled" in partial_prompt
+    assert "next domain-relevant clarification" in partial_prompt
+    assert "Do not mechanically ask for the first blank field" in partial_prompt
+    assert "edit form" in edit_prompt
+    assert "weakest next domain clarification" in edit_prompt
+    assert "Do not mechanically ask for the first blank field" in edit_prompt
+
+
+@pytest.mark.asyncio
+async def test_pydantic_ai_task_shaping_generator_uses_native_structured_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import pydantic_ai
+    import pydantic_ai.models.openai
+    import pydantic_ai.providers.openai
+
+    calls: dict[str, Any] = {}
+
+    class FakeNativeOutput:
+        def __init__(self, outputs: Any, **kwargs: Any) -> None:
+            calls["native_output"] = {"outputs": outputs, **kwargs}
+
+    class FakeOpenAIProvider:
+        def __init__(self, **kwargs: Any) -> None:
+            calls["provider"] = kwargs
+
+    class FakeOpenAIChatModel:
+        def __init__(self, model_name: str, *, provider: Any) -> None:
+            calls["model"] = {"model_name": model_name, "provider": provider}
+
+    class FakeAgent:
+        def __init__(self, model: Any, **kwargs: Any) -> None:
+            calls["agent"] = {"model": model, **kwargs}
+
+        async def run(self, prompt: str) -> SimpleNamespace:
+            calls["prompt"] = prompt
+            return SimpleNamespace(
+                output=TaskShapingTurnOutput.model_validate(
+                    {
+                        "assistantMessage": "What outcome should improve?",
+                        "question": {
+                            "text": "What outcome should improve?",
+                            "answerOptions": [
+                                {
+                                    "identifier": "outcome",
+                                    "label": "Describe the outcome",
+                                    "responseText": "Describe the outcome.",
+                                    "isRecommended": True,
+                                }
+                            ],
+                        },
+                        "fieldDrafts": {},
+                        "metadata": {"isReady": False, "staleFieldNames": []},
+                    }
+                )
+            )
+
+    monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
+    monkeypatch.setattr(pydantic_ai, "NativeOutput", FakeNativeOutput)
+    monkeypatch.setattr(
+        pydantic_ai.providers.openai, "OpenAIProvider", FakeOpenAIProvider
+    )
+    monkeypatch.setattr(
+        pydantic_ai.models.openai, "OpenAIChatModel", FakeOpenAIChatModel
+    )
+    context = TaskShapingGenerationContext.model_validate(
+        {
+            "projectId": "00000000-0000-4000-8000-000000000001",
+            "form": {"mode": "create"},
+        }
+    )
+
+    output = await PydanticAiTaskShapingGenerator().start_shaping(context)
+
+    assert output.assistant_message == "What outcome should improve?"
+    assert calls["native_output"] == {
+        "outputs": TaskShapingTurnOutput,
+        "name": "TaskShapingTurn",
+        "description": "A complete structured Task Shaping Chat turn.",
+        "strict": True,
+    }
+    assert calls["agent"]["output_type"] is not None
+    assert calls["agent"]["retries"] == 2
+    assert "first ask what desired user outcome" in calls["prompt"]
+
+
+@pytest.mark.asyncio
+async def test_task_shaping_invalid_structured_turn_streams_error_without_artifact(
+    protected_client: tuple[
+        AsyncClient, StubAcceptanceCriteriaGenerator, StubTaskShapingGenerator
+    ],
+    seeded_project: UUID,
+) -> None:
+    client, _stub_generator, stub_task_shaping_generator = protected_client
+    stub_task_shaping_generator.next_output = {
+        "fieldDrafts": {"title": "Do not stream this partial draft"},
+        "metadata": {"isReady": False, "staleFieldNames": []},
+    }
+
+    response = await client.post(
+        "/a2a/task-shaping",
+        headers=A2A_HEADERS,
+        json=build_a2a_request(
+            project_id=str(seeded_project),
+            task_shaping_turn={"form": {"mode": "create"}},
+        ),
+    )
+
+    assert response.status_code == 200
+    assert_stream_error(response.text, "assistantMessage")
+    assert "task-shaping-turn" not in response.text
+    assert "Do not stream this partial draft" not in response.text
 
 
 @pytest.mark.asyncio
@@ -681,6 +952,30 @@ def parse_sse_jsonrpc_messages(body: str) -> list[dict[str, Any]]:
                 cast("dict[str, Any]", json.loads(line.removeprefix("data: ")))
             )
     return messages
+
+
+def extract_task_shaping_turn(body: str) -> dict[str, Any]:
+    for message in parse_sse_jsonrpc_messages(body):
+        artifact = (
+            message.get("result", {}).get("artifactUpdate", {}).get("artifact", {})
+        )
+        if not isinstance(artifact, dict):
+            continue
+        if (
+            artifact.get("artifactId") != "task-shaping-turn"
+            and artifact.get("name") != "taskShapingTurn"
+        ):
+            continue
+
+        for part in artifact.get("parts", []):
+            if not isinstance(part, dict):
+                continue
+            if isinstance(part.get("data"), dict):
+                return cast("dict[str, Any]", part["data"])
+            if isinstance(part.get("text"), str):
+                return cast("dict[str, Any]", json.loads(part["text"]))
+
+    raise AssertionError("taskShapingTurn artifact was not streamed")
 
 
 def assert_stream_error(body: str, expected_message: str) -> None:

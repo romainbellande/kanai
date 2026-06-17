@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 
 import {
 	startTaskShaping,
+	TASK_SHAPING_CUSTOM_RESPONSE_OPTION_IDENTIFIER,
 	type TaskShapingFieldDrafts,
 	type TaskShapingTaskMetadata,
 	type TaskShapingTranscriptEntry,
@@ -64,9 +65,11 @@ export function TaskShapingChat({
 	const [transcript, setTranscript] = useState<TaskShapingTranscriptEntry[]>(
 		[],
 	);
-	const [recommendations, setRecommendations] = useState<
-		Record<string, string>
-	>({});
+	const [activeQuestion, setActiveQuestion] =
+		useState<TaskShapingTurnOutput["question"]>(null);
+	const [selectedAnswerOptionId, setSelectedAnswerOptionId] = useState<
+		string | null
+	>(null);
 	const [answer, setAnswer] = useState("");
 	const [retryTranscript, setRetryTranscript] = useState<
 		TaskShapingTranscriptEntry[] | null
@@ -82,6 +85,28 @@ export function TaskShapingChat({
 		values,
 	});
 	const staleDraftFieldSet = new Set(staleDraftFields);
+	let latestAssistantMessage: string | null = null;
+	for (let index = transcript.length - 1; index >= 0; index -= 1) {
+		if (transcript[index].role === "assistant") {
+			latestAssistantMessage = transcript[index].message;
+			break;
+		}
+	}
+	const selectedAnswerOption =
+		activeQuestion?.answerOptions.find(
+			(option) => option.identifier === selectedAnswerOptionId,
+		) ?? null;
+	const isCustomResponseSelected =
+		selectedAnswerOption?.identifier ===
+		TASK_SHAPING_CUSTOM_RESPONSE_OPTION_IDENTIFIER;
+	const shouldShowAnswerTextarea = Boolean(
+		activeQuestion && isCustomResponseSelected,
+	);
+	const canSendAnswer = Boolean(
+		activeQuestion &&
+			selectedAnswerOption &&
+			(!isCustomResponseSelected || answer.trim()),
+	);
 
 	async function submitTurn({
 		transcript: nextTranscript,
@@ -139,12 +164,8 @@ export function TaskShapingChat({
 				...nextTranscript,
 				{ role: "assistant", message: turn.assistantMessage },
 			]);
-			if (turn.recommendedAnswer) {
-				setRecommendations((current) => ({
-					...current,
-					[turn.assistantMessage]: turn.recommendedAnswer ?? "",
-				}));
-			}
+			setActiveQuestion(turn.question ?? null);
+			setSelectedAnswerOptionId(null);
 			setRetryTranscript(null);
 		} catch {
 			if (sessionVersionRef.current !== sessionVersion) {
@@ -167,17 +188,33 @@ export function TaskShapingChat({
 	}
 
 	async function handleSendAnswer() {
-		const trimmedAnswer = answer.trim();
-		if (!trimmedAnswer || isTurnLoading) {
+		const selectedResponseText = isCustomResponseSelected
+			? answer.trim()
+			: selectedAnswerOption?.responseText;
+		const answerMessage = selectedResponseText ?? answer.trim();
+		if (!activeQuestion || !answerMessage.trim() || isTurnLoading) {
 			return;
 		}
 
+		const visibleTranscript = [...transcript];
+		if (
+			activeQuestion &&
+			visibleTranscript[visibleTranscript.length - 1]?.message !==
+				activeQuestion.text
+		) {
+			visibleTranscript.push({
+				role: "assistant",
+				message: activeQuestion.text,
+			});
+		}
 		const nextTranscript: TaskShapingTranscriptEntry[] = [
-			...transcript,
-			{ role: "user", message: trimmedAnswer },
+			...visibleTranscript,
+			{ role: "user", message: answerMessage },
 		];
 		setTranscript(nextTranscript);
 		setAnswer("");
+		setActiveQuestion(null);
+		setSelectedAnswerOptionId(null);
 		await submitTurn({ transcript: nextTranscript });
 	}
 
@@ -201,7 +238,8 @@ export function TaskShapingChat({
 		setDrafts({});
 		setDraftSources({});
 		setTranscript([]);
-		setRecommendations({});
+		setActiveQuestion(null);
+		setSelectedAnswerOptionId(null);
 		setAnswer("");
 		setRetryTranscript(null);
 		setError(null);
@@ -256,26 +294,14 @@ export function TaskShapingChat({
 							<p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--on-surface-variant)]">
 								Transcript
 							</p>
-							{transcript.map((entry) => {
-								const recommendedAnswer =
-									entry.role === "assistant"
-										? recommendations[entry.message]
-										: undefined;
-
-								return (
-									<div key={`${entry.role}-${entry.message}`}>
-										<p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--on-surface-variant)]">
-											{entry.role === "assistant" ? "Assistant" : "You"}
-										</p>
-										<p>{entry.message}</p>
-										{recommendedAnswer ? (
-											<p className="font-semibold text-[var(--primary)]">
-												Recommended: {recommendedAnswer}
-											</p>
-										) : null}
-									</div>
-								);
-							})}
+							{transcript.map((entry) => (
+								<div key={`${entry.role}-${entry.message}`}>
+									<p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--on-surface-variant)]">
+										{entry.role === "assistant" ? "Assistant" : "You"}
+									</p>
+									<p>{entry.message}</p>
+								</div>
+							))}
 							{isTurnLoading ? (
 								<p className="font-semibold text-[var(--primary)]">
 									Waiting for the next Task Shaping turn...
@@ -327,46 +353,93 @@ export function TaskShapingChat({
 						</div>
 					) : null}
 
-					<div className="mt-4 flex flex-col gap-3">
-						<Field>
-							<FieldLabel
-								className="text-sm font-semibold text-[var(--on-surface)]"
-								htmlFor="taskShapingAnswer"
-							>
-								Answer the focused question
-							</FieldLabel>
-							<Textarea
-								id="taskShapingAnswer"
-								name="taskShapingAnswer"
-								placeholder="Type a short answer, or use the recommended direction."
-								rows={3}
-								value={answer}
-								onChange={(event) => setAnswer(event.target.value)}
-							/>
-						</Field>
-						<div className="flex flex-wrap gap-2">
-							<Button
-								className="h-auto rounded-full bg-[var(--primary)] px-3 py-1.5 text-xs font-semibold text-[color:var(--on-primary)] shadow-none"
-								disabled={isTurnLoading || !answer.trim()}
-								type="button"
-								onClick={() => void handleSendAnswer()}
-							>
-								{isTurnLoading ? "Sending..." : "Send answer"}
-							</Button>
-							{retryTranscript ? (
-								<Button
-									className="h-auto rounded-full border border-[var(--outline-variant)] bg-[var(--surface)] px-3 py-1.5 text-xs font-semibold text-[var(--primary)] shadow-none transition hover:bg-[var(--primary-container)]"
-									disabled={isTurnLoading}
-									type="button"
-									onClick={() =>
-										void submitTurn({ transcript: retryTranscript })
-									}
-								>
-									Retry turn
-								</Button>
+					{activeQuestion ? (
+						<fieldset className="mt-4 flex flex-col gap-3 rounded-xl border border-[var(--outline-variant)] bg-[var(--surface-container-low)] px-4 py-3 text-sm leading-6 text-[var(--on-surface)]">
+							<legend className="px-1 text-xs font-bold uppercase tracking-[0.16em] text-[var(--on-surface-variant)]">
+								Answer options
+							</legend>
+							{activeQuestion.text !== latestAssistantMessage ? (
+								<p className="font-semibold">{activeQuestion.text}</p>
 							) : null}
+							<div className="flex flex-col gap-2" role="radiogroup">
+								{activeQuestion.answerOptions.map((option) => (
+									<label
+										className="flex cursor-pointer gap-3 rounded-lg border border-[var(--outline-variant)] bg-[var(--surface)] px-3 py-2 transition hover:bg-[var(--primary-container)]"
+										key={option.identifier}
+									>
+										<input
+											checked={selectedAnswerOptionId === option.identifier}
+											className="mt-1"
+											name="taskShapingAnswerOption"
+											type="radio"
+											value={option.identifier}
+											onChange={() => {
+												setSelectedAnswerOptionId(option.identifier);
+											}}
+										/>
+										<span>
+											<span className="font-semibold">{option.label}</span>
+											{option.isRecommended ? (
+												<span className="ml-2 rounded-full bg-[var(--primary-container)] px-2 py-0.5 text-xs font-bold text-[var(--on-primary-container)]">
+													Recommended
+												</span>
+											) : null}
+											<span className="block text-[var(--on-surface-variant)]">
+												{option.detail || option.responseText}
+											</span>
+										</span>
+									</label>
+								))}
+							</div>
+						</fieldset>
+					) : null}
+
+					{activeQuestion || retryTranscript ? (
+						<div className="mt-4 flex flex-col gap-3">
+							{shouldShowAnswerTextarea ? (
+								<Field>
+									<FieldLabel
+										className="text-sm font-semibold text-[var(--on-surface)]"
+										htmlFor="taskShapingAnswer"
+									>
+										Answer the focused question
+									</FieldLabel>
+									<Textarea
+										id="taskShapingAnswer"
+										name="taskShapingAnswer"
+										placeholder="Type a short answer."
+										rows={3}
+										value={answer}
+										onChange={(event) => setAnswer(event.target.value)}
+									/>
+								</Field>
+							) : null}
+							<div className="flex flex-wrap gap-2">
+								{activeQuestion ? (
+									<Button
+										className="h-auto rounded-full bg-[var(--primary)] px-3 py-1.5 text-xs font-semibold text-[color:var(--on-primary)] shadow-none"
+										disabled={isTurnLoading || !canSendAnswer}
+										type="button"
+										onClick={() => void handleSendAnswer()}
+									>
+										{isTurnLoading ? "Sending..." : "Send answer"}
+									</Button>
+								) : null}
+								{retryTranscript ? (
+									<Button
+										className="h-auto rounded-full border border-[var(--outline-variant)] bg-[var(--surface)] px-3 py-1.5 text-xs font-semibold text-[var(--primary)] shadow-none transition hover:bg-[var(--primary-container)]"
+										disabled={isTurnLoading}
+										type="button"
+										onClick={() =>
+											void submitTurn({ transcript: retryTranscript })
+										}
+									>
+										Retry turn
+									</Button>
+								) : null}
+							</div>
 						</div>
-					</div>
+					) : null}
 					{error ? (
 						<p className="mt-4 rounded-xl border border-[var(--outline-variant)] bg-[var(--error-container)] px-4 py-3 text-sm font-semibold text-[var(--on-error-container)]">
 							{error}

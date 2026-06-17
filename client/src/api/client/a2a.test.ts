@@ -414,7 +414,30 @@ describe("A2A client helpers", () => {
 	it("discovers and invokes Task Shaping with structured turn context", async () => {
 		const turn = {
 			assistantMessage: "What outcome should improve?",
-			recommendedAnswer: "Describe the user pain.",
+			question: {
+				text: "What outcome should improve?",
+				answerOptions: [
+					{
+						identifier: "Outcome / Pain",
+						label: "Describe the user pain",
+						detail: "Name the blocked workflow.",
+						responseText: "Name the blocked workflow.",
+						isRecommended: false,
+					},
+					{
+						identifier: "Outcome / Pain",
+						label: "Describe the desired result",
+						detail: null,
+						responseText: "Describe the desired result.",
+						isRecommended: true,
+					},
+					{
+						identifier: "",
+						label: "Name a constraint",
+						responseText: "Name a constraint.",
+					},
+				],
+			},
 			fieldDrafts: {
 				title: "Draft title",
 				description: "Draft description",
@@ -452,7 +475,43 @@ describe("A2A client helpers", () => {
 				},
 				transcript: [{ role: "assistant", message: "What is the user pain?" }],
 			}),
-		).resolves.toEqual(turn);
+		).resolves.toEqual({
+			...turn,
+			question: {
+				text: "What outcome should improve?",
+				answerOptions: [
+					{
+						identifier: "outcome-pain",
+						label: "Describe the user pain",
+						detail: "Name the blocked workflow.",
+						responseText: "Name the blocked workflow.",
+						isRecommended: false,
+					},
+					{
+						identifier: "outcome-pain-2",
+						label: "Describe the desired result",
+						detail: null,
+						responseText: "Describe the desired result.",
+						isRecommended: true,
+					},
+					{
+						identifier: "option-3",
+						label: "Name a constraint",
+						detail: null,
+						responseText: "Name a constraint.",
+						isRecommended: false,
+					},
+					{
+						identifier: "custom_response",
+						label: "Answer in my own words",
+						detail:
+							"Write a custom response when the suggested answers do not fit.",
+						responseText: "",
+						isRecommended: false,
+					},
+				],
+			},
+		});
 
 		expect(String(fetchSpy.mock.calls[0][0])).toBe(
 			"https://api.example.test/a2a/task-shaping/.well-known/agent-card.json",
@@ -467,6 +526,147 @@ describe("A2A client helpers", () => {
 			new Headers(fetchSpy.mock.calls[1][1]?.headers).get("Authorization"),
 		).toBe("Bearer access-token");
 		expectTaskShapingPayload(String(fetchSpy.mock.calls[1][1]?.body));
+	});
+
+	it("replaces malformed custom response metadata with the product-controlled option", async () => {
+		const fetchSpy = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(taskShapingAgentCardResponse())
+			.mockResolvedValueOnce(
+				taskShapingTurnResponse({
+					assistantMessage: "What outcome should improve?",
+					question: {
+						text: "What outcome should improve?",
+						answerOptions: [
+							{
+								identifier: "custom_response",
+								label: "Model custom copy",
+								responseText: "Do not send this metadata.",
+								isRecommended: true,
+							},
+							{
+								identifier: "Model option",
+								label: "Use a model option",
+								responseText: "Use a model option.",
+							},
+						],
+					},
+					fieldDrafts: {},
+					metadata: { isReady: false, staleFieldNames: [] },
+				}),
+			);
+		vi.stubGlobal("fetch", fetchSpy);
+		const { startTaskShaping } = await import("./a2a");
+
+		await expect(
+			startTaskShaping({
+				projectId: "project-1",
+				task: {
+					title: null,
+					description: null,
+					acceptanceCriteria: null,
+					priority: null,
+					storyPoints: null,
+					workflowColumn: null,
+					mode: "create",
+				},
+			}),
+		).resolves.toMatchObject({
+			question: {
+				answerOptions: [
+					{
+						identifier: "model-option",
+						label: "Use a model option",
+						isRecommended: true,
+					},
+					{
+						identifier: "custom_response",
+						label: "Answer in my own words",
+						responseText: "",
+						isRecommended: false,
+					},
+				],
+			},
+		});
+	});
+
+	it("normalizes ready Task Shaping turns that omit the next question", async () => {
+		const fetchSpy = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(taskShapingAgentCardResponse())
+			.mockResolvedValueOnce(
+				taskShapingTurnResponse({
+					assistantMessage: "The task is ready to apply.",
+					fieldDrafts: {
+						title: "Ready title",
+						description: "Ready description",
+					},
+					metadata: {
+						isReady: true,
+						readinessReason: "Enough detail to create.",
+						staleFieldNames: [],
+					},
+				}),
+			);
+		vi.stubGlobal("fetch", fetchSpy);
+		const { startTaskShaping } = await import("./a2a");
+
+		await expect(
+			startTaskShaping({
+				projectId: "project-1",
+				task: {
+					title: null,
+					description: null,
+					acceptanceCriteria: null,
+					priority: null,
+					storyPoints: null,
+					workflowColumn: null,
+					mode: "create",
+				},
+			}),
+		).resolves.toEqual({
+			assistantMessage: "The task is ready to apply.",
+			question: null,
+			fieldDrafts: {
+				title: "Ready title",
+				description: "Ready description",
+				acceptanceCriteria: null,
+			},
+			metadata: {
+				isReady: true,
+				readinessReason: "Enough detail to create.",
+				staleFieldNames: [],
+			},
+		});
+	});
+
+	it("rejects malformed Task Shaping turn artifacts instead of returning partial controls", async () => {
+		const fetchSpy = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(taskShapingAgentCardResponse())
+			.mockResolvedValueOnce(
+				taskShapingTurnResponse({
+					fieldDrafts: { title: "Do not render this partial draft" },
+					metadata: { isReady: false, staleFieldNames: [] },
+				}),
+			);
+		vi.stubGlobal("fetch", fetchSpy);
+		const { startTaskShaping } = await import("./a2a");
+
+		await expect(
+			startTaskShaping({
+				projectId: "project-1",
+				task: {
+					title: null,
+					description: null,
+					acceptanceCriteria: null,
+					priority: null,
+					storyPoints: null,
+					workflowColumn: null,
+					mode: "create",
+				},
+			}),
+		).rejects.toThrow("Task Shaping turn artifact was not returned");
 	});
 
 	it("forwards cancellation through the SDK transport signal", async () => {

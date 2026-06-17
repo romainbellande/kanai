@@ -162,6 +162,28 @@ function taskShapingStreamResponse(turn: unknown, id = 1): Response {
 	);
 }
 
+function taskShapingQuestion(text: string, recommendedLabel: string) {
+	return {
+		text,
+		answerOptions: [
+			{
+				identifier: "Recommended / Option",
+				label: recommendedLabel,
+				detail: "Use this visible answer detail.",
+				responseText: "Use this visible answer detail.",
+				isRecommended: true,
+			},
+			{
+				identifier: "Other option",
+				label: "Use another answer",
+				detail: null,
+				responseText: "Use another visible answer.",
+				isRecommended: false,
+			},
+		],
+	};
+}
+
 function taskShapingPayloadAt(
 	fetchSpy: ReturnType<typeof vi.fn>,
 	index: number,
@@ -477,7 +499,10 @@ describe("CreateTaskPage", () => {
 			.mockResolvedValueOnce(
 				taskShapingStreamResponse({
 					assistantMessage: "What outcome should this task improve?",
-					recommendedAnswer: "Describe the user pain.",
+					question: taskShapingQuestion(
+						"What outcome should this task improve?",
+						"Describe the user pain",
+					),
 					fieldDrafts: {
 						title: "Outcome task",
 						description: "Capture the workflow pain.",
@@ -516,8 +541,29 @@ describe("CreateTaskPage", () => {
 
 		await screen.findByText("What outcome should this task improve?");
 		expect(
-			screen.getByText("Recommended: Describe the user pain."),
-		).toBeTruthy();
+			screen.queryByText(/Recommended: Describe the user pain/),
+		).toBeNull();
+		const recommendedOption = screen.getByRole<HTMLInputElement>("radio", {
+			name: /describe the user pain/i,
+		});
+		const otherOption = screen.getByRole<HTMLInputElement>("radio", {
+			name: /use another answer/i,
+		});
+		const sendButton = screen.getByRole<HTMLButtonElement>("button", {
+			name: /send answer/i,
+		});
+		expect(recommendedOption.checked).toBe(false);
+		expect(otherOption.checked).toBe(false);
+		expect(sendButton.disabled).toBe(true);
+		expect(screen.getByText("Recommended")).toBeTruthy();
+		expect(
+			screen.getAllByText("Use this visible answer detail.").length,
+		).toBeGreaterThan(0);
+		fireEvent.click(recommendedOption);
+		expect(recommendedOption.checked).toBe(true);
+		expect(otherOption.checked).toBe(false);
+		expect(sendButton.disabled).toBe(false);
+		expect(fetchSpy).toHaveBeenCalledTimes(2);
 		expect(screen.getByText(/Outcome task/)).toBeTruthy();
 		expect(screen.getByText(/Capture the workflow pain/)).toBeTruthy();
 		expect(screen.getByText(/Outcome is testable/)).toBeTruthy();
@@ -560,7 +606,10 @@ describe("CreateTaskPage", () => {
 			.mockResolvedValueOnce(
 				taskShapingStreamResponse({
 					assistantMessage: "What user problem should this solve?",
-					recommendedAnswer: "Name the blocked workflow.",
+					question: taskShapingQuestion(
+						"What user problem should this solve?",
+						"Name the blocked workflow",
+					),
 					fieldDrafts: { title: "Shape onboarding task" },
 					metadata: {
 						isReady: false,
@@ -573,7 +622,10 @@ describe("CreateTaskPage", () => {
 				taskShapingStreamResponse(
 					{
 						assistantMessage: "What outcome confirms the fix worked?",
-						recommendedAnswer: "Use one measurable result.",
+						question: taskShapingQuestion(
+							"What outcome confirms the fix worked?",
+							"Use one measurable result",
+						),
 						fieldDrafts: {
 							description: "Reduce onboarding confusion for project members.",
 							acceptanceCriteria: "- Members can complete onboarding",
@@ -602,23 +654,38 @@ describe("CreateTaskPage", () => {
 		fireEvent.click(screen.getByRole("button", { name: /start shaping/i }));
 
 		await screen.findByText("What user problem should this solve?");
-		expect(
-			screen.getByText("Recommended: Name the blocked workflow."),
-		).toBeTruthy();
+		const predefinedOption = screen.getByRole<HTMLInputElement>("radio", {
+			name: /name the blocked workflow/i,
+		});
+		const sendButton = screen.getByRole<HTMLButtonElement>("button", {
+			name: /send answer/i,
+		});
+		expect(sendButton.disabled).toBe(true);
 		expect(screen.getByText(/Shape onboarding task/)).toBeTruthy();
 
-		fireEvent.change(screen.getByLabelText(/answer the focused question/i), {
-			target: { value: "New members get lost before creating tasks." },
-		});
-		fireEvent.click(screen.getByRole("button", { name: /send answer/i }));
+		fireEvent.click(predefinedOption);
+		expect(predefinedOption.checked).toBe(true);
+		expect(sendButton.disabled).toBe(false);
+		expect(fetchSpy).toHaveBeenCalledTimes(2);
+		fireEvent.click(sendButton);
 
 		await screen.findByText("What outcome confirms the fix worked?");
 		expect(
-			screen.getByText("Recommended: Use one measurable result."),
+			screen.getByText("What user problem should this solve?"),
 		).toBeTruthy();
 		expect(
-			screen.getByText("New members get lost before creating tasks."),
+			screen.queryByRole("radio", { name: /name the blocked workflow/i }),
+		).toBeNull();
+		const latestOption = screen.getByRole<HTMLInputElement>("radio", {
+			name: /use one measurable result/i,
+		});
+		expect(latestOption.checked).toBe(false);
+		expect(
+			screen.getByRole("radio", { name: /use one measurable result/i }),
 		).toBeTruthy();
+		expect(
+			screen.getAllByText("Use this visible answer detail.").length,
+		).toBeGreaterThan(0);
 		expect(screen.getByText(/Reduce onboarding confusion/)).toBeTruthy();
 
 		expect(taskShapingPayloadAt(fetchSpy, 2)).toEqual({
@@ -641,20 +708,124 @@ describe("CreateTaskPage", () => {
 					},
 					{
 						role: "user",
-						message: "New members get lost before creating tasks.",
+						message: "Use this visible answer detail.",
 					},
 				],
 			},
 		});
-		expect(
-			JSON.stringify(JSON.parse(String(fetchSpy.mock.calls[2][1]?.body))),
-		).not.toContain("tag");
-		expect(
-			JSON.stringify(JSON.parse(String(fetchSpy.mock.calls[2][1]?.body))),
-		).not.toContain("Do not send");
-		expect(
-			JSON.stringify(JSON.parse(String(fetchSpy.mock.calls[2][1]?.body))),
-		).not.toContain("projectChat");
+		const secondTaskShapingRequestBody = JSON.stringify(
+			JSON.parse(String(fetchSpy.mock.calls[2][1]?.body)),
+		);
+		expect(secondTaskShapingRequestBody).not.toContain("Recommended / Option");
+		expect(secondTaskShapingRequestBody).not.toContain("answerOptions");
+		expect(secondTaskShapingRequestBody).not.toContain("isRecommended");
+		expect(secondTaskShapingRequestBody).not.toContain("tag");
+		expect(secondTaskShapingRequestBody).not.toContain("Do not send");
+		expect(secondTaskShapingRequestBody).not.toContain("projectChat");
+	});
+
+	it("sends custom Task Shaping answers as transcript text only", async () => {
+		const { CreateTaskPage } = await import(
+			"#/domains/workspace/ui/CreateTaskPage"
+		);
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		const fetchSpy = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(taskShapingAgentCardResponse())
+			.mockResolvedValueOnce(
+				taskShapingStreamResponse({
+					assistantMessage: "What user problem should this solve?",
+					question: taskShapingQuestion(
+						"What user problem should this solve?",
+						"Name the blocked workflow",
+					),
+					fieldDrafts: {},
+					metadata: {
+						isReady: false,
+						readinessReason: "Needs one answer",
+						staleFieldNames: [],
+					},
+				}),
+			)
+			.mockResolvedValueOnce(
+				taskShapingStreamResponse(
+					{
+						assistantMessage: "Thanks for the custom answer.",
+						fieldDrafts: { description: "Draft from custom answer" },
+						metadata: {
+							isReady: true,
+							readinessReason: "Ready to review",
+							staleFieldNames: [],
+						},
+					},
+					2,
+				),
+			);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		renderWithQueryClient(<CreateTaskPage />);
+		fireEvent.click(
+			screen.getByRole("button", { name: /^task shaping chat$/i }),
+		);
+		fireEvent.click(screen.getByRole("button", { name: /start shaping/i }));
+
+		await screen.findByText("What user problem should this solve?");
+		const customOption = screen.getByRole<HTMLInputElement>("radio", {
+			name: /answer in my own words/i,
+		});
+		const sendButton = screen.getByRole<HTMLButtonElement>("button", {
+			name: /send answer/i,
+		});
+		expect(screen.queryByLabelText(/answer the focused question/i)).toBeNull();
+		expect(sendButton.disabled).toBe(true);
+
+		fireEvent.click(customOption);
+		const textarea = screen.getByLabelText<HTMLTextAreaElement>(
+			/answer the focused question/i,
+		);
+		expect(textarea).toBeTruthy();
+		expect(sendButton.disabled).toBe(true);
+
+		fireEvent.change(textarea, { target: { value: "   " } });
+		expect(sendButton.disabled).toBe(true);
+		fireEvent.change(textarea, {
+			target: { value: "Focus on the onboarding handoff instead." },
+		});
+		expect(sendButton.disabled).toBe(false);
+		fireEvent.click(sendButton);
+
+		await screen.findByText("Thanks for the custom answer.");
+		expect(taskShapingPayloadAt(fetchSpy, 2)).toEqual({
+			projectId: "project-1",
+			taskShapingTurn: {
+				form: {
+					title: null,
+					description: null,
+					acceptanceCriteria: null,
+					priority: null,
+					storyPoints: null,
+					workflowColumn: "Backlog",
+					mode: "create",
+				},
+				drafts: {},
+				transcript: [
+					{
+						role: "assistant",
+						message: "What user problem should this solve?",
+					},
+					{
+						role: "user",
+						message: "Focus on the onboarding handoff instead.",
+					},
+				],
+			},
+		});
+		const secondTaskShapingRequestBody = JSON.stringify(
+			JSON.parse(String(fetchSpy.mock.calls[2][1]?.body)),
+		);
+		expect(secondTaskShapingRequestBody).not.toContain("custom_response");
+		expect(secondTaskShapingRequestBody).not.toContain("answerOptions");
+		expect(secondTaskShapingRequestBody).not.toContain("isRecommended");
 	});
 
 	it("applies Task Shaping field drafts individually without creating a task", async () => {
@@ -668,7 +839,6 @@ describe("CreateTaskPage", () => {
 			.mockResolvedValueOnce(
 				taskShapingStreamResponse({
 					assistantMessage: "Review these drafts.",
-					recommendedAnswer: "Apply the useful parts.",
 					fieldDrafts: {
 						title: "Draft title",
 						description: "Draft description",
@@ -700,6 +870,9 @@ describe("CreateTaskPage", () => {
 		fireEvent.click(screen.getByRole("button", { name: /start shaping/i }));
 
 		await screen.findByText("Review these drafts.");
+		expect(screen.queryByText("Answer options")).toBeNull();
+		expect(screen.queryByLabelText(/answer the focused question/i)).toBeNull();
+		expect(screen.queryByRole("button", { name: /send answer/i })).toBeNull();
 		expect(screen.queryByText(/Do not apply/)).toBeNull();
 		fireEvent.click(screen.getByRole("button", { name: /apply title draft/i }));
 		fireEvent.click(
@@ -891,6 +1064,9 @@ describe("CreateTaskPage", () => {
 		fireEvent.click(screen.getByRole("button", { name: /start shaping/i }));
 
 		await screen.findByText("Apply all when ready.");
+		expect(screen.queryByText("Answer options")).toBeNull();
+		expect(screen.queryByLabelText(/answer the focused question/i)).toBeNull();
+		expect(screen.queryByRole("button", { name: /send answer/i })).toBeNull();
 		fireEvent.click(screen.getByRole("button", { name: /apply all drafts/i }));
 		expect(screen.getByLabelText<HTMLInputElement>(/task title/i).value).toBe(
 			"All title",
@@ -940,7 +1116,10 @@ describe("CreateTaskPage", () => {
 			.mockResolvedValueOnce(
 				taskShapingStreamResponse({
 					assistantMessage: "What is the first useful question?",
-					recommendedAnswer: "Pick the highest uncertainty.",
+					question: taskShapingQuestion(
+						"What is the first useful question?",
+						"Answer the first question",
+					),
 					fieldDrafts: { title: "Persistent draft" },
 					metadata: {
 						isReady: false,
@@ -957,6 +1136,9 @@ describe("CreateTaskPage", () => {
 		);
 		fireEvent.click(screen.getByRole("button", { name: /start shaping/i }));
 		await screen.findByText("What is the first useful question?");
+		fireEvent.click(
+			screen.getByRole("radio", { name: /answer in my own words/i }),
+		);
 		fireEvent.change(screen.getByLabelText(/answer the focused question/i), {
 			target: { value: "Keep this pending answer" },
 		});
@@ -991,7 +1173,10 @@ describe("CreateTaskPage", () => {
 			.mockResolvedValueOnce(
 				taskShapingStreamResponse({
 					assistantMessage: "What scope should the task cover?",
-					recommendedAnswer: "Name the smallest useful slice.",
+					question: taskShapingQuestion(
+						"What scope should the task cover?",
+						"Describe the task scope",
+					),
 					fieldDrafts: { title: "Retry-safe draft" },
 					metadata: {
 						isReady: false,
@@ -1000,12 +1185,16 @@ describe("CreateTaskPage", () => {
 					},
 				}),
 			)
-			.mockRejectedValueOnce(new Error("network down"))
+			.mockResolvedValueOnce(
+				taskShapingStreamResponse({
+					fieldDrafts: { title: "Do not render malformed partial draft" },
+					metadata: { isReady: false, staleFieldNames: [] },
+				}),
+			)
 			.mockResolvedValueOnce(
 				taskShapingStreamResponse(
 					{
 						assistantMessage: "Thanks, what acceptance signal matters?",
-						recommendedAnswer: "Focus on observable behavior.",
 						fieldDrafts: { acceptanceCriteria: "- Retry succeeds" },
 						metadata: {
 							isReady: false,
@@ -1024,6 +1213,9 @@ describe("CreateTaskPage", () => {
 		);
 		fireEvent.click(screen.getByRole("button", { name: /start shaping/i }));
 		await screen.findByText("What scope should the task cover?");
+		fireEvent.click(
+			screen.getByRole("radio", { name: /answer in my own words/i }),
+		);
 		fireEvent.change(screen.getByLabelText(/answer the focused question/i), {
 			target: { value: "Only the create form interview." },
 		});
@@ -1034,6 +1226,9 @@ describe("CreateTaskPage", () => {
 		);
 		expect(screen.getByText("Only the create form interview.")).toBeTruthy();
 		expect(screen.getByText(/Retry-safe draft/)).toBeTruthy();
+		expect(
+			screen.queryByText(/Do not render malformed partial draft/),
+		).toBeNull();
 		expect(screen.getByRole("button", { name: /retry turn/i })).toBeTruthy();
 
 		const failedPayload = taskShapingPayloadAt(fetchSpy, 2);

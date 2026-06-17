@@ -14,6 +14,7 @@ const ACCEPTANCE_CRITERIA_DELTA_ARTIFACT_ID = "acceptance-criteria-delta";
 const ACCEPTANCE_CRITERIA_DELTA_ARTIFACT_NAME = "acceptanceCriteriaDelta";
 const TASK_SHAPING_TURN_ARTIFACT_ID = "task-shaping-turn";
 const TASK_SHAPING_TURN_ARTIFACT_NAME = "taskShapingTurn";
+export const TASK_SHAPING_CUSTOM_RESPONSE_OPTION_IDENTIFIER = "custom_response";
 
 export type AcceptanceCriteriaTaskMetadata = {
 	title: string | null;
@@ -49,9 +50,22 @@ export type TaskShapingTranscriptEntry = {
 	message: string;
 };
 
+export type TaskShapingAnswerOption = {
+	identifier: string;
+	label: string;
+	detail?: string | null;
+	responseText: string;
+	isRecommended: boolean;
+};
+
+export type TaskShapingInterviewQuestion = {
+	text: string;
+	answerOptions: TaskShapingAnswerOption[];
+};
+
 export type TaskShapingTurnOutput = {
 	assistantMessage: string;
-	recommendedAnswer?: string | null;
+	question?: TaskShapingInterviewQuestion | null;
 	fieldDrafts: TaskShapingFieldDrafts;
 	metadata: {
 		isReady: boolean;
@@ -149,11 +163,7 @@ export async function startTaskShaping({
 		}
 	}
 
-	return {
-		assistantMessage: "Task Shaping Chat is ready.",
-		fieldDrafts: {},
-		metadata: { isReady: false, staleFieldNames: [] },
-	};
+	throw new Error("Task Shaping turn artifact was not returned");
 }
 
 function normalizeTaskShapingTurn(
@@ -169,16 +179,14 @@ function normalizeTaskShapingTurn(
 	}
 
 	const fieldDrafts = normalizeTaskShapingFieldDrafts(record.fieldDrafts);
+	const question = normalizeTaskShapingQuestion(record.question);
 	const metadataRecord =
 		record.metadata && typeof record.metadata === "object"
 			? (record.metadata as Record<string, unknown>)
 			: {};
 	return {
 		assistantMessage: record.assistantMessage,
-		recommendedAnswer:
-			typeof record.recommendedAnswer === "string"
-				? record.recommendedAnswer
-				: null,
+		question,
 		fieldDrafts,
 		metadata: {
 			isReady: metadataRecord.isReady === true,
@@ -193,6 +201,104 @@ function normalizeTaskShapingTurn(
 				: [],
 		},
 	};
+}
+
+function normalizeTaskShapingQuestion(
+	value: unknown,
+): TaskShapingInterviewQuestion | null {
+	if (!value || typeof value !== "object") {
+		return null;
+	}
+
+	const record = value as Record<string, unknown>;
+	if (typeof record.text !== "string" || !Array.isArray(record.answerOptions)) {
+		return null;
+	}
+
+	const answerOptions = normalizeTaskShapingAnswerOptions(record.answerOptions);
+	if (answerOptions.length === 0) {
+		return null;
+	}
+
+	return {
+		text: record.text,
+		answerOptions,
+	};
+}
+
+function normalizeTaskShapingAnswerOptions(
+	value: unknown[],
+): TaskShapingAnswerOption[] {
+	const seenIdentifiers = new Map<string, number>();
+	const normalizedOptions = value.flatMap((option, index) => {
+		if (!option || typeof option !== "object") {
+			return [];
+		}
+
+		const record = option as Record<string, unknown>;
+		if (record.identifier === TASK_SHAPING_CUSTOM_RESPONSE_OPTION_IDENTIFIER) {
+			return [];
+		}
+
+		if (
+			typeof record.label !== "string" ||
+			typeof record.responseText !== "string"
+		) {
+			return [];
+		}
+
+		const baseIdentifier = uiSafeAnswerOptionIdentifier(
+			record.identifier,
+			index,
+		);
+		const duplicateCount = seenIdentifiers.get(baseIdentifier) ?? 0;
+		seenIdentifiers.set(baseIdentifier, duplicateCount + 1);
+		const identifier = duplicateCount
+			? `${baseIdentifier}-${duplicateCount + 1}`
+			: baseIdentifier;
+
+		return [
+			{
+				identifier,
+				label: record.label,
+				detail: typeof record.detail === "string" ? record.detail : null,
+				responseText: record.responseText,
+				isRecommended: record.isRecommended === true,
+			},
+		];
+	});
+
+	const firstRecommendedIndex = normalizedOptions.findIndex(
+		(option) => option.isRecommended,
+	);
+	const recommendedIndex =
+		firstRecommendedIndex >= 0 ? firstRecommendedIndex : 0;
+	const modelOptions = normalizedOptions.map((option, index) => ({
+		...option,
+		isRecommended: index === recommendedIndex,
+	}));
+	return [...modelOptions, customResponseAnswerOption()];
+}
+
+function customResponseAnswerOption(): TaskShapingAnswerOption {
+	return {
+		identifier: TASK_SHAPING_CUSTOM_RESPONSE_OPTION_IDENTIFIER,
+		label: "Answer in my own words",
+		detail: "Write a custom response when the suggested answers do not fit.",
+		responseText: "",
+		isRecommended: false,
+	};
+}
+
+function uiSafeAnswerOptionIdentifier(value: unknown, index: number): string {
+	const normalized =
+		typeof value === "string"
+			? value
+					.toLowerCase()
+					.replace(/[^a-z0-9]+/g, "-")
+					.replace(/^-|-$/g, "")
+			: "";
+	return normalized || `option-${index + 1}`;
 }
 
 function normalizeTaskShapingFieldDrafts(
