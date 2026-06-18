@@ -14,8 +14,6 @@ from app.core.config import get_settings
 from app.core.exceptions import (
     RedisConnectionException,
     RedisDataValidationException,
-    RedisKeyAlreadyExistsException,
-    RedisKeyNotFoundException,
 )
 
 settings = get_settings()
@@ -79,37 +77,6 @@ class RedisService:
         if ttl_seconds is not None and ttl_seconds <= 0:
             message = "Redis TTL must be greater than zero"
             raise RedisDataValidationException(message)
-
-    async def create(self, key: str, value: ModelT) -> ModelT:
-        """Create a Redis document from a Pydantic model.
-
-        Args:
-            key: Redis key used to store the serialized model.
-            value: Pydantic model instance to serialize and store.
-
-        Returns:
-            Stored model instance validated from the serialized payload.
-
-        Raises:
-            RedisConnectionException: If Redis rejects or cannot complete the write.
-            RedisDataValidationException: If `value` cannot serialize to a JSON object.
-            RedisKeyAlreadyExistsException: If `key` already exists.
-        """
-        payload = self._model_to_json_object(value)
-        model_type = value.__class__
-        client = await self._get_client()
-
-        try:
-            created = await client.set(key, json.dumps(payload), nx=True)
-        except RedisError as exc:
-            message = f"Failed to create Redis data for key '{key}'"
-            raise RedisConnectionException(message, exc) from exc
-
-        if not created:
-            message = f"Redis key already exists: {key}"
-            raise RedisKeyAlreadyExistsException(message)
-
-        return model_type.model_validate(payload)
 
     async def put(
         self,
@@ -183,64 +150,6 @@ class RedisService:
         except ValidationError as exc:
             message = f"Redis data for key '{key}' could not be validated as {model_type.__name__}"
             raise RedisDataValidationException(message, exc) from exc
-
-    async def patch(
-        self, key: str, updates: BaseModel, model_type: type[ModelT]
-    ) -> ModelT:
-        """Apply a shallow top-level patch to a Redis document.
-
-        Args:
-            key: Redis key to update.
-            updates: Pydantic model containing fields to merge into the stored payload.
-            model_type: Pydantic model type used to validate the merged payload.
-
-        Returns:
-            Updated model instance validated from the merged payload.
-
-        Raises:
-            RedisConnectionException: If Redis rejects or cannot complete the update.
-            RedisDataValidationException: If current or updated data is not a valid
-                JSON object or cannot be validated as `model_type`.
-            RedisKeyNotFoundException: If `key` does not exist.
-        """
-        current_value = await self.get(key, model_type)
-        if current_value is None:
-            message = f"Redis key was not found: {key}"
-            raise RedisKeyNotFoundException(message)
-
-        current_payload = self._model_to_json_object(current_value)
-        updates_payload = updates.model_dump(exclude_unset=True, mode="json")
-
-        if not isinstance(updates_payload, dict):
-            message = "Redis patch updates must serialize to a JSON object"
-            raise RedisDataValidationException(message)
-
-        merged_payload = {
-            **current_payload,
-            **cast(JsonObject, updates_payload),
-        }
-
-        try:
-            validated = model_type.model_validate(merged_payload)
-        except ValidationError as exc:
-            message = f"Patched Redis data for key '{key}' could not be validated as {model_type.__name__}"
-            raise RedisDataValidationException(message, exc) from exc
-
-        client = await self._get_client()
-
-        try:
-            ttl_seconds = await client.ttl(key)
-            await client.set(
-                key,
-                json.dumps(self._model_to_json_object(validated)),
-                ex=ttl_seconds if ttl_seconds > 0 else None,
-                keepttl=ttl_seconds <= 0,
-            )
-        except RedisError as exc:
-            message = f"Failed to update Redis data for key '{key}'"
-            raise RedisConnectionException(message, exc) from exc
-
-        return validated
 
     async def delete(self, key: str) -> bool:
         """Delete a Redis document.

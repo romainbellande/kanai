@@ -118,6 +118,7 @@ def get_settings() -> Settings:
         The configured application settings instance.
     """
 
+    # pydantic-settings reads required fields from env at runtime; ty can't see defaults.
     return cast("Settings", cast("Any", Settings)())
 
 

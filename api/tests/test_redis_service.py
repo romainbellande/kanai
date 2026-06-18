@@ -7,11 +7,7 @@ from pydantic import BaseModel
 
 import app.services.redis_service as redis_service_module
 from app.core.config import Settings
-from app.core.exceptions import (
-    RedisDataValidationException,
-    RedisKeyAlreadyExistsException,
-    RedisKeyNotFoundException,
-)
+from app.core.exceptions import RedisDataValidationException
 from app.services.redis_service import RedisService
 
 
@@ -19,11 +15,6 @@ class RedisUser(BaseModel):
     id: str
     name: str
     enabled: bool
-
-
-class RedisUserPatch(BaseModel):
-    name: str | None = None
-    enabled: bool | None = None
 
 
 @pytest_asyncio.fixture
@@ -45,29 +36,10 @@ def test_settings_include_redis_url() -> None:
 
 
 @pytest.mark.asyncio
-async def test_create_returns_same_model_type(redis_service: RedisService) -> None:
-    user = RedisUser(id="user-1", name="Alice", enabled=True)
-
-    created = await redis_service.create("users:user-1", user)
-
-    assert created == user
-    assert isinstance(created, RedisUser)
-
-
-@pytest.mark.asyncio
-async def test_create_fails_when_key_exists(redis_service: RedisService) -> None:
-    user = RedisUser(id="user-1", name="Alice", enabled=True)
-    await redis_service.create("users:user-1", user)
-
-    with pytest.raises(RedisKeyAlreadyExistsException):
-        await redis_service.create("users:user-1", user)
-
-
-@pytest.mark.asyncio
 async def test_get_returns_requested_model_type(redis_service: RedisService) -> None:
     user = RedisUser(id="user-1", name="Alice", enabled=True)
-    await redis_service.create("users:user-1", user)
 
+    await redis_service.put("users:user-1", user)
     loaded = await redis_service.get("users:user-1", RedisUser)
 
     assert loaded == user
@@ -81,7 +53,7 @@ async def test_put_overwrites_value_and_applies_ttl(
     original_user = RedisUser(id="user-1", name="Alice", enabled=True)
     overwritten_user = RedisUser(id="user-1", name="Bob", enabled=False)
 
-    await redis_service.create("users:user-1", original_user)
+    await redis_service.put("users:user-1", original_user, ttl_seconds=30)
     await redis_service.put("users:user-1", overwritten_user, ttl_seconds=30)
 
     loaded = await redis_service.get("users:user-1", RedisUser)
@@ -142,55 +114,8 @@ async def test_get_raises_for_non_object_json(redis_service: RedisService) -> No
 
 
 @pytest.mark.asyncio
-async def test_patch_merges_top_level_fields(redis_service: RedisService) -> None:
-    await redis_service.create(
-        "users:user-1",
-        RedisUser(id="user-1", name="Alice", enabled=True),
-    )
-
-    updated = await redis_service.patch(
-        "users:user-1",
-        RedisUserPatch(name="Bob"),
-        RedisUser,
-    )
-
-    assert updated == RedisUser(id="user-1", name="Bob", enabled=True)
-    assert isinstance(updated, RedisUser)
-
-
-@pytest.mark.asyncio
-async def test_patch_preserves_existing_ttl(redis_service: RedisService) -> None:
-    await redis_service.put(
-        "users:user-1",
-        RedisUser(id="user-1", name="Alice", enabled=True),
-        ttl_seconds=30,
-    )
-
-    client = await redis_service._get_client()
-    initial_ttl = await client.ttl("users:user-1")
-
-    await redis_service.patch(
-        "users:user-1",
-        RedisUserPatch(name="Bob"),
-        RedisUser,
-    )
-
-    ttl = await client.ttl("users:user-1")
-
-    assert 0 < ttl <= initial_ttl
-
-
-@pytest.mark.asyncio
-async def test_patch_fails_for_missing_key(redis_service: RedisService) -> None:
-    with pytest.raises(RedisKeyNotFoundException):
-        await redis_service.patch(
-            "users:missing", RedisUserPatch(name="Bob"), RedisUser
-        )
-
-
-@pytest.mark.asyncio
 async def test_delete_returns_true_when_key_exists(redis_service: RedisService) -> None:
-    await redis_service.create(
+    await redis_service.put(
         "users:user-1",
         RedisUser(id="user-1", name="Alice", enabled=True),
     )
