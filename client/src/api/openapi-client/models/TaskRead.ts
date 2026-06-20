@@ -127,6 +127,12 @@ export interface TaskRead {
      * @memberof TaskRead
      */
     updatedAt: Date | null;
+    /**
+     * 
+     * @type {Array<string>}
+     * @memberof TaskRead
+     */
+    prerequisiteTaskIds?: Array<string>;
 }
 
 /**
@@ -176,6 +182,7 @@ export function TaskReadFromJSONTyped(json: any, ignoreDiscriminator: boolean): 
         'tag': json['tag'],
         'createdAt': (json['created_at'] == null ? null : new Date(json['created_at'])),
         'updatedAt': (json['updated_at'] == null ? null : new Date(json['updated_at'])),
+        'prerequisiteTaskIds': json['prerequisite_task_ids'] == null ? undefined : json['prerequisite_task_ids'],
     };
 }
 
@@ -205,6 +212,7 @@ export function TaskReadToJSONTyped(value?: TaskRead | null, ignoreDiscriminator
         'tag': value['tag'],
         'created_at': value['createdAt'] == null ? value['createdAt'] : value['createdAt'].toISOString(),
         'updated_at': value['updatedAt'] == null ? value['updatedAt'] : value['updatedAt'].toISOString(),
+        'prerequisite_task_ids': value['prerequisiteTaskIds'],
     };
 }
 

@@ -55,6 +55,19 @@ class ProjectAccess:
                     detail=f"Unknown user id: {user_id}",
                 )
 
+    async def validate_project_users(
+        self, project_id: UUID, user_ids: set[UUID]
+    ) -> None:
+        """Validate that every user ID belongs to a project."""
+        for user_id in user_ids:
+            owner = await self._project_repository.get_owner(project_id, user_id)
+            member = await self._project_repository.get_member(project_id, user_id)
+            if owner is None and member is None:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail="Assignee must belong to the project",
+                )
+
     async def replace_membership(
         self,
         project_id: UUID,

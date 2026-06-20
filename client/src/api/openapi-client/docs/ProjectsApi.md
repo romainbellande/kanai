@@ -8,6 +8,7 @@ All URIs are relative to *http://localhost*
 | [**addTaskToActiveProjectSprintProjectsProjectIdSprintsActiveTasksPost**](ProjectsApi.md#addtasktoactiveprojectsprintprojectsprojectidsprintsactivetaskspost) | **POST** /projects/{project_id}/sprints/active/tasks | Add Task To Active Project Sprint |
 | [**closeActiveProjectSprintProjectsProjectIdSprintsActiveClosePost**](ProjectsApi.md#closeactiveprojectsprintprojectsprojectidsprintsactiveclosepost) | **POST** /projects/{project_id}/sprints/active/close | Close Active Project Sprint |
 | [**createProjectBacklogTaskProjectsProjectIdBacklogTasksPost**](ProjectsApi.md#createprojectbacklogtaskprojectsprojectidbacklogtaskspost) | **POST** /projects/{project_id}/backlog/tasks | Create Project Backlog Task |
+| [**createProjectBacklogTasksBulkProjectsProjectIdBacklogTasksBulkPost**](ProjectsApi.md#createprojectbacklogtasksbulkprojectsprojectidbacklogtasksbulkpost) | **POST** /projects/{project_id}/backlog/tasks/bulk | Create Project Backlog Tasks Bulk |
 | [**createProjectColumnProjectsProjectIdColumnsPost**](ProjectsApi.md#createprojectcolumnprojectsprojectidcolumnspost) | **POST** /projects/{project_id}/columns | Create Project Column |
 | [**createProjectEndpointProjectsPost**](ProjectsApi.md#createprojectendpointprojectspost) | **POST** /projects | Create Project Endpoint |
 | [**createProjectSprintProjectsProjectIdSprintsPost**](ProjectsApi.md#createprojectsprintprojectsprojectidsprintspost) | **POST** /projects/{project_id}/sprints | Create Project Sprint |
@@ -300,6 +301,77 @@ example().catch(console.error);
 ### Return type
 
 [**TaskRead**](TaskRead.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+- **Content-Type**: `application/json`
+- **Accept**: `application/json`
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+| **201** | Successful Response |  -  |
+| **422** | Validation Error |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+
+## createProjectBacklogTasksBulkProjectsProjectIdBacklogTasksBulkPost
+
+> Array&lt;TaskRead&gt; createProjectBacklogTasksBulkProjectsProjectIdBacklogTasksBulkPost(projectId, backlogTaskBulkCreate)
+
+Create Project Backlog Tasks Bulk
+
+Atomically save reviewed draft tasks into the project Backlog.
+
+### Example
+
+```ts
+import {
+  Configuration,
+  ProjectsApi,
+} from '';
+import type { CreateProjectBacklogTasksBulkProjectsProjectIdBacklogTasksBulkPostRequest } from '';
+
+async function example() {
+  console.log("🚀 Testing  SDK...");
+  const api = new ProjectsApi();
+
+  const body = {
+    // string
+    projectId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+    // BacklogTaskBulkCreate
+    backlogTaskBulkCreate: ...,
+  } satisfies CreateProjectBacklogTasksBulkProjectsProjectIdBacklogTasksBulkPostRequest;
+
+  try {
+    const data = await api.createProjectBacklogTasksBulkProjectsProjectIdBacklogTasksBulkPost(body);
+    console.log(data);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+// Run the test
+example().catch(console.error);
+```
+
+### Parameters
+
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **projectId** | `string` |  | [Defaults to `undefined`] |
+| **backlogTaskBulkCreate** | [BacklogTaskBulkCreate](BacklogTaskBulkCreate.md) |  | |
+
+### Return type
+
+[**Array&lt;TaskRead&gt;**](TaskRead.md)
 
 ### Authorization
 

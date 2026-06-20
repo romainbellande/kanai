@@ -80,6 +80,7 @@ import {
 } from "#/domains/workspace/model/useProjectTaskBoard";
 import { WorkspaceIconButton } from "#/domains/workspace/ui/atoms/WorkspaceIconButton";
 import { SidebarNavItem } from "#/domains/workspace/ui/molecules/SidebarNavItem";
+import { ProjectBacklogShapingFlow } from "#/domains/workspace/ui/ProjectBacklogShapingFlow";
 import type { SidebarItem } from "#/domains/workspace/ui/types";
 
 export {
@@ -1414,6 +1415,8 @@ function ProjectBacklogView({
 	onAddToSprint: (taskId: string) => void;
 	onRetry: () => void;
 }) {
+	const [isShapingOpen, setIsShapingOpen] = useState(false);
+
 	return (
 		<section className="min-w-[1100px] rounded-[1.5rem] border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-6 shadow-sm">
 			<div className="flex flex-wrap items-start justify-between gap-4">
@@ -1433,14 +1436,23 @@ function ProjectBacklogView({
 						</PointSummaryChip>
 					</div>
 				</div>
-				<Link
-					to="/projects/$projectId/tasks/new"
-					params={{ projectId }}
-					search={{ backlog: true }}
-					className="rounded-full border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-4 py-2 text-sm font-bold text-[var(--on-surface)] no-underline hover:bg-[var(--surface-bright)]"
-				>
-					Add Backlog Task
-				</Link>
+				<div className="flex flex-wrap gap-2">
+					<button
+						type="button"
+						onClick={() => setIsShapingOpen((current) => !current)}
+						className="rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-bold text-[color:var(--on-primary)] hover:brightness-105"
+					>
+						Shape project idea
+					</button>
+					<Link
+						to="/projects/$projectId/tasks/new"
+						params={{ projectId }}
+						search={{ backlog: true }}
+						className="rounded-full border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-4 py-2 text-sm font-bold text-[var(--on-surface)] no-underline hover:bg-[var(--surface-bright)]"
+					>
+						Add Backlog Task
+					</Link>
+				</div>
 			</div>
 			<Link
 				to="/projects/$projectId"
@@ -1453,6 +1465,13 @@ function ProjectBacklogView({
 				<p className="mt-4 rounded-xl bg-[var(--error-container)] px-4 py-3 text-sm font-semibold text-[var(--on-error-container)]">
 					{error}
 				</p>
+			) : null}
+			{isShapingOpen ? (
+				<ProjectBacklogShapingFlow
+					projectId={projectId}
+					existingBacklogTasks={tasks}
+					onSaved={onRetry}
+				/>
 			) : null}
 			{isLoading ? (
 				<p className="mt-5 rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface-container-low)] p-4 text-sm text-[var(--on-surface-variant)]">

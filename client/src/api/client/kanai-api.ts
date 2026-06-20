@@ -39,6 +39,8 @@ import {
 } from "./projects";
 import {
 	addProjectBacklogTaskToActiveSprint,
+	type BulkCreateProjectBacklogTasksInput,
+	bulkCreateProjectBacklogTasks,
 	type CreateProjectTaskInput,
 	type CreateTaskInput,
 	createProjectBacklogTask,
@@ -300,6 +302,19 @@ export function useKanaiApi() {
 		backlog: {
 			list: (projectId: string) => projectBacklogQueryOptions(projectId),
 			fetch: (projectId: string) => listProjectBacklog(projectId),
+			bulkCreateTasks: async (
+				projectId: string,
+				values: BulkCreateProjectBacklogTasksInput,
+			) => {
+				const tasks = await bulkCreateProjectBacklogTasks(projectId, values);
+				await queryClient.invalidateQueries({
+					queryKey: projectBacklogQueryKey(projectId),
+				});
+				await queryClient.invalidateQueries({
+					queryKey: projectTasksQueryKey(projectId),
+				});
+				return tasks;
+			},
 			createTask: async (projectId: string, values: CreateTaskInput) => {
 				const task = await createProjectBacklogTask({
 					projectId,

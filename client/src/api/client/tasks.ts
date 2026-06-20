@@ -24,6 +24,27 @@ export type Task = {
 	tag: string | null;
 	createdAt: Date | null;
 	updatedAt: Date | null;
+	prerequisiteTaskIds?: string[];
+};
+
+export type TaskPrerequisiteInput =
+	| { type: "draft"; key: string }
+	| { type: "existing"; taskId: string };
+
+export type BacklogTaskDraftInput = {
+	key: string;
+	title: string;
+	priority?: string | null;
+	storyPoints?: number | null;
+	assigneeId?: string | null;
+	description?: string | null;
+	acceptanceCriteria?: string | null;
+	tag?: string | null;
+	prerequisites?: TaskPrerequisiteInput[];
+};
+
+export type BulkCreateProjectBacklogTasksInput = {
+	tasks: BacklogTaskDraftInput[];
 };
 
 export type CreateTaskInput = TaskCreate;
@@ -55,6 +76,7 @@ type TaskJson = {
 	tag: string | null;
 	created_at: string | null;
 	updated_at: string | null;
+	prerequisite_task_ids?: string[];
 };
 
 export function projectTasksQueryKey(projectId: string) {
@@ -86,6 +108,7 @@ function mapTask(task: TaskJson): Task {
 		tag: task.tag,
 		createdAt: task.created_at === null ? null : new Date(task.created_at),
 		updatedAt: task.updated_at === null ? null : new Date(task.updated_at),
+		prerequisiteTaskIds: task.prerequisite_task_ids ?? [],
 	};
 }
 
@@ -121,6 +144,24 @@ function taskDestinationToJson(values: MoveTaskInput) {
 		column_id: values.columnId,
 		before_task_id: values.beforeTaskId,
 		after_task_id: values.afterTaskId,
+	};
+}
+
+function backlogTaskDraftToJson(values: BacklogTaskDraftInput) {
+	return {
+		key: values.key,
+		title: values.title,
+		priority: values.priority,
+		story_points: values.storyPoints,
+		assignee_id: values.assigneeId,
+		description: values.description,
+		acceptance_criteria: values.acceptanceCriteria,
+		tag: values.tag,
+		prerequisites: (values.prerequisites ?? []).map((prerequisite) =>
+			prerequisite.type === "draft"
+				? { type: "draft", key: prerequisite.key }
+				: { type: "existing", task_id: prerequisite.taskId },
+		),
 	};
 }
 
@@ -209,6 +250,23 @@ export async function createProjectBacklogTask({
 	);
 
 	return mapTask(task);
+}
+
+export async function bulkCreateProjectBacklogTasks(
+	projectId: string,
+	values: BulkCreateProjectBacklogTasksInput,
+): Promise<Task[]> {
+	const tasks = await requestProjectTasks<TaskJson[]>(
+		`/projects/${projectId}/backlog/tasks/bulk`,
+		{
+			method: "POST",
+			body: JSON.stringify({
+				tasks: values.tasks.map(backlogTaskDraftToJson),
+			}),
+		},
+	);
+
+	return tasks.map(mapTask);
 }
 
 export async function reorderProjectBacklog(

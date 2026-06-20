@@ -22,6 +22,7 @@ Name | Type
 `tag` | string
 `createdAt` | Date
 `updatedAt` | Date
+`prerequisiteTaskIds` | Array&lt;string&gt;
 
 ## Example
 
@@ -45,6 +46,7 @@ const example = {
   "tag": null,
   "createdAt": null,
   "updatedAt": null,
+  "prerequisiteTaskIds": null,
 } satisfies TaskRead
 
 console.log(example)
