@@ -36,6 +36,7 @@ The current quality gate is `just pre-commit`. It runs frontend checks including
 
 ## Detailed Instructions
 
+- Documented solutions: `docs/solutions/` stores past fixes and guidance by category with YAML frontmatter (`module`, `tags`, `problem_type`), relevant when implementing or debugging in documented areas.
 - [Frontend Guidelines](docs/agent-instructions/frontend.md)
 - [Backend Guidelines](docs/agent-instructions/backend.md)
 - [Testing Guidelines](docs/agent-instructions/testing.md)
