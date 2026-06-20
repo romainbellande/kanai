@@ -71,6 +71,7 @@ class TaskCreate(BaseModel):
     description: str | None = None
     acceptance_criteria: str | None = None
     tag: str | None = None
+    prerequisite_task_ids: list[UUID] = Field(default_factory=list)
 
     @field_validator("priority")
     @classmethod
@@ -127,6 +128,7 @@ class TaskUpdate(BaseModel):
         default=None,
         json_schema_extra={NULLABLE_UPDATE_FIELD: True},
     )
+    prerequisite_task_ids: list[UUID] = Field(default_factory=list)
 
     @field_validator("priority")
     @classmethod

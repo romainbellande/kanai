@@ -1630,7 +1630,7 @@ No authorization required
 
 ## listTasksEndpointProjectsProjectIdTasksGet
 
-> Array&lt;TaskRead&gt; listTasksEndpointProjectsProjectIdTasksGet(projectId)
+> Array&lt;TaskRead&gt; listTasksEndpointProjectsProjectIdTasksGet(projectId, title, limit, excludeTaskId)
 
 List Tasks Endpoint
 
@@ -1652,6 +1652,12 @@ async function example() {
   const body = {
     // string
     projectId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+    // string (optional)
+    title: title_example,
+    // number (optional)
+    limit: 56,
+    // string (optional)
+    excludeTaskId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
   } satisfies ListTasksEndpointProjectsProjectIdTasksGetRequest;
 
   try {
@@ -1672,6 +1678,9 @@ example().catch(console.error);
 | Name | Type | Description  | Notes |
 |------------- | ------------- | ------------- | -------------|
 | **projectId** | `string` |  | [Defaults to `undefined`] |
+| **title** | `string` |  | [Optional] [Defaults to `undefined`] |
+| **limit** | `number` |  | [Optional] [Defaults to `undefined`] |
+| **excludeTaskId** | `string` |  | [Optional] [Defaults to `undefined`] |
 
 ### Return type
 

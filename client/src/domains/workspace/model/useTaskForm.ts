@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import {
 	generateAcceptanceCriteria,
 	type ProjectColumn,
+	ProjectTaskRequestError,
 	type Task,
 	type TaskShapingFieldDrafts,
 	useKanaiApi,
@@ -24,6 +25,7 @@ export type TaskFormValues = {
 	description: string;
 	acceptanceCriteria: string;
 	tag: string;
+	prerequisiteTaskIds: string[];
 };
 
 export type TaskShapingDraftField = Extract<
@@ -178,6 +180,7 @@ function createInitialValues(
 		description: "",
 		acceptanceCriteria: "",
 		tag: "",
+		prerequisiteTaskIds: [],
 	};
 }
 
@@ -190,6 +193,7 @@ function editInitialValues(task: Task | null | undefined): TaskFormValues {
 		description: task?.description ?? "",
 		acceptanceCriteria: task?.acceptanceCriteria ?? "",
 		tag: task?.tag ?? "",
+		prerequisiteTaskIds: task?.prerequisiteTaskIds ?? [],
 	};
 }
 
@@ -224,6 +228,17 @@ function initialValues(input: UseTaskFormInput): TaskFormValues {
 	return input.mode === "create"
 		? createInitialValues(input.initialColumnId)
 		: editInitialValues(input.task);
+}
+
+function taskFormErrorMessage(error: unknown, fallback: string): string {
+	if (
+		error instanceof ProjectTaskRequestError &&
+		error.status === 422 &&
+		typeof error.detail === "string"
+	) {
+		return error.detail;
+	}
+	return fallback;
 }
 
 export function useTaskForm(input: UseTaskFormInput) {
@@ -299,12 +314,28 @@ export function useTaskForm(input: UseTaskFormInput) {
 		}
 	}, [editTask, formTaskId, input.mode, isDirty]);
 
-	function setField(name: keyof TaskFormValues, value: string) {
+	function setField(
+		name: keyof Omit<TaskFormValues, "prerequisiteTaskIds">,
+		value: string,
+	) {
 		setValues((currentValues) => ({ ...currentValues, [name]: value }));
 		setIsDirty(true);
 		if (name === "title" || name === "description") {
 			setAcceptanceCriteriaGenerationMessage(null);
 		}
+	}
+
+	function setPrerequisiteTaskIds(prerequisiteTaskIds: string[]) {
+		setValues((currentValues) => ({ ...currentValues, prerequisiteTaskIds }));
+		setIsDirty(true);
+	}
+
+	function removePrerequisiteTaskId(taskId: string) {
+		setPrerequisiteTaskIds(
+			values.prerequisiteTaskIds.filter(
+				(candidateId) => candidateId !== taskId,
+			),
+		);
 	}
 
 	function applyTaskShapingDraft(
@@ -446,6 +477,10 @@ export function useTaskForm(input: UseTaskFormInput) {
 						description: description || null,
 						acceptanceCriteria: acceptanceCriteria || null,
 						tag: tag || null,
+						...(editTask?.prerequisiteTaskIds !== undefined ||
+						values.prerequisiteTaskIds.length
+							? { prerequisiteTaskIds: values.prerequisiteTaskIds }
+							: {}),
 					},
 				});
 				api.tasks.patchCached(input.projectId, input.taskId, task);
@@ -467,14 +502,20 @@ export function useTaskForm(input: UseTaskFormInput) {
 				description: description || undefined,
 				acceptanceCriteria: acceptanceCriteria || undefined,
 				tag: tag || undefined,
+				...(values.prerequisiteTaskIds.length
+					? { prerequisiteTaskIds: values.prerequisiteTaskIds }
+					: {}),
 			});
 			input.onSaved?.(task);
 			return task;
-		} catch {
+		} catch (error) {
 			setErrorMessage(
-				input.mode === "create"
-					? "Task could not be created. Please try again."
-					: "Task could not be saved. Please try again.",
+				taskFormErrorMessage(
+					error,
+					input.mode === "create"
+						? "Task could not be created. Please try again."
+						: "Task could not be saved. Please try again.",
+				),
 			);
 			return null;
 		}
@@ -505,6 +546,8 @@ export function useTaskForm(input: UseTaskFormInput) {
 			cancel: cancelAcceptanceCriteriaGeneration,
 		},
 		setField,
+		setPrerequisiteTaskIds,
+		removePrerequisiteTaskId,
 		submit,
 	};
 }

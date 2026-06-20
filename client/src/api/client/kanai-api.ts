@@ -45,6 +45,7 @@ import {
 	type CreateTaskInput,
 	createProjectBacklogTask,
 	createProjectTask,
+	type ListProjectTasksInput,
 	listProjectActiveSprintTasks,
 	listProjectBacklog,
 	type MoveTaskInput,
@@ -53,6 +54,7 @@ import {
 	projectActiveSprintTasksQueryOptions,
 	projectBacklogQueryKey,
 	projectBacklogQueryOptions,
+	projectTaskPrerequisiteCandidatesQueryOptions,
 	projectTasksQueryKey,
 	projectTasksQueryOptions,
 	type ReorderProjectBacklogInput,
@@ -221,6 +223,10 @@ export function useKanaiApi() {
 		},
 		tasks: {
 			list: (projectId: string) => projectTasksQueryOptions(projectId),
+			prerequisiteCandidates: (
+				projectId: string,
+				params: ListProjectTasksInput,
+			) => projectTaskPrerequisiteCandidatesQueryOptions(projectId, params),
 			listActiveSprint: (projectId: string) =>
 				projectActiveSprintTasksQueryOptions(projectId),
 			fetchActiveSprint: (projectId: string) =>

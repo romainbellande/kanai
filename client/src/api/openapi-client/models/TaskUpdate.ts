@@ -78,6 +78,12 @@ export interface TaskUpdate {
      * @memberof TaskUpdate
      */
     tag?: string | null;
+    /**
+     * 
+     * @type {Array<string>}
+     * @memberof TaskUpdate
+     */
+    prerequisiteTaskIds?: Array<string>;
 }
 
 /**
@@ -105,6 +111,7 @@ export function TaskUpdateFromJSONTyped(json: any, ignoreDiscriminator: boolean)
         'description': json['description'] == null ? undefined : json['description'],
         'acceptanceCriteria': json['acceptance_criteria'] == null ? undefined : json['acceptance_criteria'],
         'tag': json['tag'] == null ? undefined : json['tag'],
+        'prerequisiteTaskIds': json['prerequisite_task_ids'] == null ? undefined : json['prerequisite_task_ids'],
     };
 }
 
@@ -127,6 +134,7 @@ export function TaskUpdateToJSONTyped(value?: TaskUpdate | null, ignoreDiscrimin
         'description': value['description'],
         'acceptance_criteria': value['acceptanceCriteria'],
         'tag': value['tag'],
+        'prerequisite_task_ids': value['prerequisiteTaskIds'],
     };
 }
 

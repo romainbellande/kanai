@@ -17,6 +17,7 @@ import {
 	STORY_POINT_OPTIONS,
 	useTaskForm,
 } from "#/domains/workspace/model/useTaskForm";
+import { TaskPrerequisitesField } from "#/domains/workspace/ui/TaskPrerequisitesField";
 import { TaskShapingChat } from "#/domains/workspace/ui/TaskShapingChat";
 import { WorkspaceLayout } from "#/domains/workspace/ui/templates/WorkspaceLayout";
 
@@ -70,7 +71,10 @@ export function TaskDetailPage({
 		}
 	}, [isMissingResource, navigate]);
 
-	function updateField(field: keyof typeof form.values, value: string) {
+	function updateField(
+		field: keyof Omit<typeof form.values, "prerequisiteTaskIds">,
+		value: string,
+	) {
 		form.setField(field, value);
 		setSavedMessage(null);
 	}
@@ -291,6 +295,15 @@ export function TaskDetailPage({
 									value={form.values.tag}
 								/>
 							</Field>
+
+							<TaskPrerequisitesField
+								columns={columnsQuery.data}
+								currentTaskId={taskId}
+								onChange={form.setPrerequisiteTaskIds}
+								projectId={projectId}
+								selectedTaskIds={form.values.prerequisiteTaskIds}
+								tasks={tasksQuery.data}
+							/>
 						</section>
 
 						<section className="grid grid-cols-1 gap-5">

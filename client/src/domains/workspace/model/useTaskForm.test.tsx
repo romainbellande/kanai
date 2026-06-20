@@ -298,6 +298,7 @@ describe("getStaleTaskShapingDraftFields", () => {
 		description: "Source description",
 		acceptanceCriteria: "Source criteria",
 		tag: "",
+		prerequisiteTaskIds: [],
 	};
 
 	it("marks only the field changed after its draft was produced", () => {
@@ -379,6 +380,7 @@ describe("useTaskForm create mode", () => {
 			description: "",
 			acceptanceCriteria: "",
 			tag: "",
+			prerequisiteTaskIds: [],
 		});
 		expect(result.current.isDirty).toBe(false);
 		expect(result.current.isSaving).toBe(false);
@@ -481,6 +483,7 @@ describe("useTaskForm create mode", () => {
 			result.current.setField("storyPoints", "8");
 			result.current.setField("description", "  Useful notes  ");
 			result.current.setField("acceptanceCriteria", "  Done means done  ");
+			result.current.setPrerequisiteTaskIds(["task-a", "task-b"]);
 		});
 
 		await act(async () => {
@@ -496,6 +499,7 @@ describe("useTaskForm create mode", () => {
 			story_points: 8,
 			description: "Useful notes",
 			acceptance_criteria: "Done means done",
+			prerequisite_task_ids: ["task-a", "task-b"],
 		});
 		expect(onSaved).toHaveBeenCalledWith(
 			expect.objectContaining({ id: "task-1", title: "Created task" }),
@@ -877,6 +881,7 @@ describe("useTaskForm edit mode", () => {
 			description: "Current notes",
 			acceptanceCriteria: "Current criteria",
 			tag: "frontend",
+			prerequisiteTaskIds: [],
 		});
 		expect(result.current.isDirty).toBe(false);
 
@@ -1257,5 +1262,39 @@ describe("useTaskForm edit mode", () => {
 			"Task could not be saved. Please try again.",
 		);
 		expect(result.current.isDirty).toBe(true);
+	});
+
+	it("shows backend validation details on edit submit", async () => {
+		const queryClient = createTestQueryClient();
+		const existingTask = task({ prerequisiteTaskIds: ["task-a"] });
+		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					detail: "Prerequisite tasks cannot create a cycle",
+				}),
+				{ headers: { "content-type": "application/json" }, status: 422 },
+			),
+		);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		const { result } = renderHook(
+			() =>
+				useTaskForm({
+					projectId: "project-1",
+					mode: "edit",
+					taskId: "task-1",
+					task: existingTask,
+					workflowColumns: [{ id: "in-progress", name: "In Progress" }],
+				}),
+			{ wrapper: createWrapper(queryClient) },
+		);
+
+		await act(async () => {
+			await result.current.submit();
+		});
+
+		expect(result.current.errorMessage).toBe(
+			"Prerequisite tasks cannot create a cycle",
+		);
 	});
 });

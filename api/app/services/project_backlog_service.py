@@ -125,7 +125,91 @@ class ProjectBacklogService:
             acceptance_criteria=payload.acceptance_criteria,
             tag=payload.tag,
         )
-        return task_to_read(await self._task_repository.create(task))
+        try:
+            self._session.add(task)
+            await self._session.flush()
+            if task.id is None:
+                raise RuntimeError("Task ID is missing")
+            await self._replace_prerequisites(
+                project_id, task.id, payload.prerequisite_task_ids
+            )
+            await self._session.commit()
+            await self._session.refresh(task)
+        except Exception:
+            await self._session.rollback()
+            raise
+        return task_to_read(task, payload.prerequisite_task_ids)
+
+    async def _replace_prerequisites(
+        self,
+        project_id: UUID,
+        task_id: UUID,
+        prerequisite_task_ids: list_[UUID],
+    ) -> None:
+        if len(set(prerequisite_task_ids)) != len(prerequisite_task_ids):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Prerequisite tasks must be unique",
+            )
+        prerequisite_ids = set(prerequisite_task_ids)
+        if task_id in prerequisite_ids:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="A task cannot depend on itself",
+            )
+        matches = await self._task_repository.list_by_project_ids(
+            project_id, prerequisite_ids
+        )
+        if {task.id for task in matches if task.id is not None} != prerequisite_ids:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Prerequisite tasks must belong to the project",
+            )
+        await self._reject_dependency_cycle(project_id, task_id, prerequisite_ids)
+        await self._task_repository.delete_outgoing_dependency_edges(task_id)
+        self._task_repository.add_dependency_edges(
+            [
+                TaskDependency(
+                    project_id=project_id,
+                    dependent_task_id=task_id,
+                    prerequisite_task_id=prerequisite_id,
+                )
+                for prerequisite_id in prerequisite_task_ids
+            ]
+        )
+
+    async def _reject_dependency_cycle(
+        self, project_id: UUID, task_id: UUID, prerequisite_ids: set[UUID]
+    ) -> None:
+        graph: dict[UUID, set[UUID]] = {}
+        for edge in await self._task_repository.list_dependency_edges(project_id):
+            if edge.dependent_task_id != task_id:
+                graph.setdefault(edge.dependent_task_id, set()).add(
+                    edge.prerequisite_task_id
+                )
+        graph[task_id] = prerequisite_ids
+
+        visiting: set[UUID] = set()
+        visited: set[UUID] = set()
+
+        def visit(node: UUID) -> bool:
+            if node in visiting:
+                return True
+            if node in visited:
+                return False
+            visiting.add(node)
+            for prerequisite_id in graph.get(node, set()):
+                if visit(prerequisite_id):
+                    return True
+            visiting.remove(node)
+            visited.add(node)
+            return False
+
+        if visit(task_id):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Prerequisite tasks cannot create a cycle",
+            )
 
     async def create_tasks_bulk(
         self,
