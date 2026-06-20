@@ -2511,6 +2511,32 @@ function ChatComposer({ chat }: { chat: ReturnType<typeof useProjectChat> }) {
 	);
 }
 
+function ProjectBoardSkeleton() {
+	return (
+		<div className="min-h-screen bg-[var(--surface)] px-4 py-6 sm:px-6 lg:px-8">
+			<output
+				aria-label="Loading project..."
+				className="mx-auto flex max-w-6xl animate-pulse flex-col gap-6"
+			>
+				<span className="sr-only">Loading project...</span>
+				<div className="h-4 w-48 rounded-full bg-[var(--surface-container-high)]" />
+				<div className="space-y-3">
+					<div className="h-10 w-80 rounded-full bg-[var(--surface-container-high)]" />
+					<div className="h-4 w-full max-w-2xl rounded-full bg-[var(--surface-container-high)]" />
+				</div>
+				<div className="grid gap-4 lg:grid-cols-3">
+					{["todo", "doing", "done"].map((column) => (
+						<div
+							key={column}
+							className="h-72 rounded-[1.5rem] bg-[var(--surface-container-low)]"
+						/>
+					))}
+				</div>
+			</output>
+		</div>
+	);
+}
+
 export function ProjectBoardPage() {
 	const { projectId } = useParams({ from: "/projects/$projectId" });
 	const { view } = useSearch({ from: "/projects/$projectId" });
@@ -2530,14 +2556,31 @@ export function ProjectBoardContent({
 	const api = useKanaiApi();
 	const suggestedSprintDates = getSuggestedSprintDates();
 	const { data: currentUser } = useCurrentUserQuery();
-	const projectQuery = useQuery(api.projects.get(projectId));
-	const activeSprintQuery = useQuery(api.sprints.active(projectId));
-	const sprintHistoryQuery = useQuery(api.sprints.history(projectId));
-	const doneColumnQuery = useQuery(api.doneColumn.get(projectId));
-	const backlogQuery = useQuery(api.backlog.list(projectId));
+	const projectQuery = useQuery({
+		...api.projects.get(projectId),
+		retry: false,
+	});
+	const isProjectLoaded = projectQuery.isSuccess;
+	const activeSprintQuery = useQuery({
+		...api.sprints.active(projectId),
+		enabled: isProjectLoaded,
+	});
+	const sprintHistoryQuery = useQuery({
+		...api.sprints.history(projectId),
+		enabled: isProjectLoaded,
+	});
+	const doneColumnQuery = useQuery({
+		...api.doneColumn.get(projectId),
+		enabled: isProjectLoaded,
+	});
+	const backlogQuery = useQuery({
+		...api.backlog.list(projectId),
+		enabled: isProjectLoaded,
+	});
 	const board = useProjectTaskBoard(
 		projectId,
 		activeSprintQuery.data?.id ?? null,
+		isProjectLoaded,
 	);
 	const { columnsQuery, tasksQuery } = board;
 	const { draggingTaskId, activeDropColumnId } = board.dragState;
@@ -2803,6 +2846,14 @@ export function ProjectBoardContent({
 	useEffect(() => {
 		setMetadataDoneColumnId(doneColumn?.doneColumnId ?? "");
 	}, [doneColumn?.doneColumnId]);
+
+	if (projectQuery.isPending) {
+		return <ProjectBoardSkeleton />;
+	}
+
+	if (isProjectNotFound) {
+		return null;
+	}
 
 	function handleLogout() {
 		auth.logout();

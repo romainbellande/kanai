@@ -235,10 +235,14 @@ function isSamePosition(sourceTask: Task, cards: Task[], input: MoveTaskInput) {
 export function useProjectTaskBoard(
 	projectId: string,
 	sprintId?: string | null,
+	enabled = true,
 ) {
 	const api = useKanaiApi();
-	const tasksQuery = useQuery(api.tasks.list(projectId));
-	const columnsQuery = useQuery(api.projectColumns.list(projectId));
+	const tasksQuery = useQuery({ ...api.tasks.list(projectId), enabled });
+	const columnsQuery = useQuery({
+		...api.projectColumns.list(projectId),
+		enabled,
+	});
 	const moveTaskMutation = useMutation({
 		mutationFn: (input: Parameters<typeof api.tasks.move>[1]) =>
 			api.tasks.move(projectId, input),

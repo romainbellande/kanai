@@ -547,6 +547,34 @@ describe("ProjectBoardPage", () => {
 		expect(screen.queryByText("Security Audit Phase 1")).toBeNull();
 	});
 
+	it("shows the project skeleton and checks the project before board data", async () => {
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({ accessToken: "project-token" }),
+		);
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(currentUserQueryOptions().queryKey, {
+			id: "user-1",
+		});
+		const fetchMock = vi
+			.fn<typeof fetch>()
+			.mockReturnValue(new Promise<Response>(() => {}));
+		vi.stubGlobal("fetch", fetchMock);
+
+		render(
+			<QueryClientProvider client={queryClient}>
+				<ProjectBoardPage />
+			</QueryClientProvider>,
+		);
+
+		expect(screen.getByText("Loading project...")).toBeTruthy();
+		await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+	});
+
 	it("redirects missing projects to /404", async () => {
 		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
 		window.sessionStorage.setItem(
