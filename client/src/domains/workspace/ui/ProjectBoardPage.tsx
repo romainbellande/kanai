@@ -9,7 +9,12 @@ import {
 	extractClosestEdge,
 } from "@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useParams, useSearch } from "@tanstack/react-router";
+import {
+	Link,
+	useNavigate,
+	useParams,
+	useSearch,
+} from "@tanstack/react-router";
 import {
 	ArrowDown,
 	ArrowUp,
@@ -59,6 +64,7 @@ import {
 	useKanaiApi,
 	userSearchQueryOptions,
 } from "#/api/client";
+import { ResponseError } from "#/api/openapi-client/runtime";
 import { Field, FieldLabel } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
 import {
@@ -363,6 +369,10 @@ function sprintMutationErrorMessage(error: unknown, fallback: string): string {
 	return error instanceof ProjectColumnRequestError && error.detail
 		? error.detail
 		: fallback;
+}
+
+function isNotFoundResponseError(error: unknown): boolean {
+	return error instanceof ResponseError && error.response.status === 404;
 }
 
 function formatSprintDateLabel(dateValue: string): string {
@@ -2513,6 +2523,7 @@ export function ProjectBoardContent({
 	view?: "backlog" | "history";
 }) {
 	const auth = useAuthBoundary();
+	const navigate = useNavigate();
 	const api = useKanaiApi();
 	const suggestedSprintDates = getSuggestedSprintDates();
 	const { data: currentUser } = useCurrentUserQuery();
@@ -2601,6 +2612,7 @@ export function ProjectBoardContent({
 	const isProjectOwner = Boolean(
 		currentUser && projectQuery.data?.ownerIds.includes(currentUser.id),
 	);
+	const isProjectNotFound = isNotFoundResponseError(projectQuery.error);
 	const isProjectAuthError = projectQuery.error instanceof CurrentUserAuthError;
 	const isTasksAuthError = tasksQuery.error instanceof CurrentUserAuthError;
 	const isColumnsAuthError = columnsQuery.error instanceof CurrentUserAuthError;
@@ -2625,6 +2637,12 @@ export function ProjectBoardContent({
 			}
 		};
 	}, []);
+
+	useEffect(() => {
+		if (isProjectNotFound) {
+			void navigate({ to: "/404", replace: true });
+		}
+	}, [isProjectNotFound, navigate]);
 
 	useEffect(() => {
 		if (activeSprint !== null || hasEditedSprintDates) {
@@ -3065,6 +3083,10 @@ export function ProjectBoardContent({
 			!columnsQuery.isPending &&
 			!columnsQuery.isError,
 	);
+
+	if (isProjectNotFound) {
+		return null;
+	}
 
 	return (
 		<main className="min-h-screen overflow-hidden bg-[var(--background)] text-[var(--on-surface)]">

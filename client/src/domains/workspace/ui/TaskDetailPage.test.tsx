@@ -22,6 +22,8 @@ import {
 	type Task,
 } from "#/api/client";
 
+let navigateSpy = vi.fn();
+
 vi.mock("@tanstack/react-router", () => ({
 	Link: ({
 		children,
@@ -52,6 +54,7 @@ vi.mock("@tanstack/react-router", () => ({
 			</a>
 		);
 	},
+	useNavigate: () => navigateSpy,
 	useParams: () => ({ projectId: "project-1", taskId: "task-1" }),
 }));
 
@@ -315,6 +318,7 @@ function renderTaskDetailPage(
 
 describe("TaskDetailPage", () => {
 	beforeEach(() => {
+		navigateSpy = vi.fn();
 		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
 		window.sessionStorage.setItem(
 			"kanai.openid-client.auth-session",
@@ -527,6 +531,125 @@ describe("TaskDetailPage", () => {
 			expect.stringContaining("/projects/project-1/backlog"),
 		);
 		expect(screen.queryByRole("link", { name: "Back to Board" })).toBeNull();
+	});
+
+	it("redirects when the selected task is absent after tasks load", async () => {
+		const { TaskDetailPage } = await import(
+			"#/domains/workspace/ui/TaskDetailPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project(),
+		);
+		queryClient.setQueryData(
+			projectTasksQueryOptions("project-1").queryKey,
+			[],
+		);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column(),
+		]);
+
+		renderTaskDetailPage(<TaskDetailPage />, queryClient);
+
+		await waitFor(() =>
+			expect(navigateSpy).toHaveBeenCalledWith({
+				replace: true,
+				to: "/404",
+			}),
+		);
+		expect(screen.queryByText("This task could not be found.")).toBeNull();
+	});
+
+	it("redirects when project details return 404", async () => {
+		const { TaskDetailPage } = await import(
+			"#/domains/workspace/ui/TaskDetailPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
+			task(),
+		]);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column(),
+		]);
+		vi.stubGlobal(
+			"fetch",
+			vi.fn<typeof fetch>().mockResolvedValue(
+				new Response(JSON.stringify({ detail: "Not found" }), {
+					status: 404,
+				}),
+			),
+		);
+
+		renderTaskDetailPage(<TaskDetailPage />, queryClient);
+
+		await waitFor(() =>
+			expect(navigateSpy).toHaveBeenCalledWith({
+				replace: true,
+				to: "/404",
+			}),
+		);
+	});
+
+	it("redirects when task list returns 404", async () => {
+		const { TaskDetailPage } = await import(
+			"#/domains/workspace/ui/TaskDetailPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project(),
+		);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column(),
+		]);
+		vi.stubGlobal(
+			"fetch",
+			vi.fn<typeof fetch>().mockResolvedValue(
+				new Response(JSON.stringify({ detail: "Not found" }), {
+					status: 404,
+				}),
+			),
+		);
+
+		renderTaskDetailPage(<TaskDetailPage />, queryClient);
+
+		await waitFor(() =>
+			expect(navigateSpy).toHaveBeenCalledWith({
+				replace: true,
+				to: "/404",
+			}),
+		);
+		expect(screen.queryByText("Task details could not be loaded.")).toBeNull();
+	});
+
+	it("keeps non-404 task list errors retryable", async () => {
+		const { TaskDetailPage } = await import(
+			"#/domains/workspace/ui/TaskDetailPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project(),
+		);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column(),
+		]);
+		vi.stubGlobal(
+			"fetch",
+			vi.fn<typeof fetch>().mockResolvedValue(
+				new Response(JSON.stringify({ detail: "Server error" }), {
+					status: 500,
+				}),
+			),
+		);
+
+		renderTaskDetailPage(<TaskDetailPage />, queryClient);
+
+		expect(
+			await screen.findByText("Task details could not be loaded."),
+		).toBeTruthy();
+		expect(navigateSpy).not.toHaveBeenCalled();
 	});
 
 	it("keeps unsaved edits visible when saving fails", async () => {

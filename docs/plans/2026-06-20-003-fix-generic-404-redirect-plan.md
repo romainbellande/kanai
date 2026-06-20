@@ -1,7 +1,7 @@
 ---
 title: "fix: Add generic 404 redirect"
 type: fix
-status: active
+status: completed
 date: 2026-06-20
 origin: docs/brainstorms/2026-06-20-generic-404-redirect-requirements.md
 ---
