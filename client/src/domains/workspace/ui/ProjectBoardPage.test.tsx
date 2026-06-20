@@ -589,6 +589,45 @@ describe("ProjectBoardPage", () => {
 		).toBeNull();
 	});
 
+	it("redirects malformed project ids to /404", async () => {
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({ accessToken: "project-token" }),
+		);
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(currentUserQueryOptions().queryKey, {
+			id: "user-1",
+		});
+		queryClient.setQueryData(
+			projectTasksQueryOptions("project-1").queryKey,
+			[],
+		);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({}),
+		]);
+		vi.stubGlobal(
+			"fetch",
+			vi
+				.fn<typeof fetch>()
+				.mockResolvedValue(
+					jsonResponse({ detail: "Invalid UUID" }, { status: 422 }),
+				),
+		);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+
+		await waitFor(() =>
+			expect(navigateSpy).toHaveBeenCalledWith({
+				replace: true,
+				to: "/404",
+			}),
+		);
+	});
+
 	it("keeps non-404 project errors on the board", async () => {
 		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
 		window.sessionStorage.setItem(

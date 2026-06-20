@@ -371,8 +371,11 @@ function sprintMutationErrorMessage(error: unknown, fallback: string): string {
 		: fallback;
 }
 
-function isNotFoundResponseError(error: unknown): boolean {
-	return error instanceof ResponseError && error.response.status === 404;
+function isMissingProjectResponseError(error: unknown): boolean {
+	return (
+		error instanceof ResponseError &&
+		(error.response.status === 404 || error.response.status === 422)
+	);
 }
 
 function formatSprintDateLabel(dateValue: string): string {
@@ -2612,7 +2615,7 @@ export function ProjectBoardContent({
 	const isProjectOwner = Boolean(
 		currentUser && projectQuery.data?.ownerIds.includes(currentUser.id),
 	);
-	const isProjectNotFound = isNotFoundResponseError(projectQuery.error);
+	const isProjectNotFound = isMissingProjectResponseError(projectQuery.error);
 	const isProjectAuthError = projectQuery.error instanceof CurrentUserAuthError;
 	const isTasksAuthError = tasksQuery.error instanceof CurrentUserAuthError;
 	const isColumnsAuthError = columnsQuery.error instanceof CurrentUserAuthError;
