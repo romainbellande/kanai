@@ -35,28 +35,53 @@ describe("project backlog shaping helpers", () => {
 	});
 
 	it("validates blank titles, missing refs, duplicates, self refs, and cycles", () => {
-		const result = validateProjectTaskDrafts([
-			draft({
-				key: "a",
-				title: " ",
-				prerequisites: [
-					{ type: "draft", key: "a" },
-					{ type: "draft", key: "missing" },
-					{ type: "existing", taskId: "task-1" },
-					{ type: "existing", taskId: "task-1" },
-				],
-			}),
-			draft({
-				key: "b",
-				title: "B",
-				prerequisites: [{ type: "draft", key: "c" }],
-			}),
-			draft({
-				key: "c",
-				title: "C",
-				prerequisites: [{ type: "draft", key: "b" }],
-			}),
-		]);
+		const existingTask = {
+			id: "task-1",
+			projectId: "project-1",
+			sprintId: null,
+			title: "API",
+			columnId: "column-1",
+			priority: null,
+			storyPoints: null,
+			rank: "U",
+			backlogRank: "U",
+			assigneeId: null,
+			description: null,
+			acceptanceCriteria: null,
+			tag: null,
+			createdAt: null,
+			updatedAt: null,
+			prerequisiteTaskIds: [],
+		};
+		const result = validateProjectTaskDrafts(
+			[
+				draft({
+					key: "a",
+					title: " ",
+					prerequisites: [
+						{ type: "draft", key: "a" },
+						{ type: "draft", key: "missing" },
+						{ type: "existing", taskId: "task-2" },
+						{ type: "existing", taskId: "task-2" },
+					],
+				}),
+				draft({
+					key: "A",
+					title: "Duplicate key",
+				}),
+				draft({
+					key: "b",
+					title: "B",
+					prerequisites: [{ type: "draft", key: "c" }],
+				}),
+				draft({
+					key: "c",
+					title: "C",
+					prerequisites: [{ type: "draft", key: "b" }],
+				}),
+			],
+			[existingTask],
+		);
 
 		expect(result.canSave).toBe(false);
 		expect(result.errorsByKey.a).toEqual(
@@ -64,9 +89,12 @@ describe("project backlog shaping helpers", () => {
 				"Title is required.",
 				"Task cannot depend on itself.",
 				"Missing draft prerequisite.",
+				"Missing existing prerequisite.",
 				"Duplicate prerequisite.",
+				"Draft keys must be unique.",
 			]),
 		);
+		expect(result.errorsByKey.A).toContain("Draft keys must be unique.");
 		expect(result.errorsByKey.b).toContain(
 			"Draft prerequisites contain a cycle.",
 		);

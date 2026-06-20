@@ -32,7 +32,7 @@ This repository has two active workspaces: `client/` and `api/`.
 
 ## Quality Gate
 
-The current quality gate is `just pre-commit`
+The current quality gate is `just pre-commit`. It runs frontend checks including the client production build.
 
 ## Detailed Instructions
 

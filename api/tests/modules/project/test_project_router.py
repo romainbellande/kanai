@@ -1281,11 +1281,28 @@ async def test_project_backlog_bulk_create_persists_dependency_edges(
         f"/projects/{project_id}/backlog",
         headers={"Authorization": "Bearer token"},
     )
+    await client.post(
+        f"/projects/{project_id}/sprints",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "planned_start_date": "2026-06-01",
+            "planned_end_date": "2026-06-14",
+        },
+    )
 
     assert response.status_code == 201
     created = response.json()
     assert [task["title"] for task in created] == ["Build auth API", "Build login UI"]
     assert set(created[1]["prerequisite_task_ids"]) == {
+        created[0]["id"],
+        existing_response.json()["id"],
+    }
+    sprint_add_response = await client.post(
+        f"/projects/{project_id}/sprints/active/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={"task_id": created[1]["id"]},
+    )
+    assert set(sprint_add_response.json()["prerequisite_task_ids"]) == {
         created[0]["id"],
         existing_response.json()["id"],
     }

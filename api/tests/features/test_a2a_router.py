@@ -370,6 +370,37 @@ def test_project_task_shaping_agent_card_is_static_public_metadata() -> None:
     assert "Project context" not in json.dumps(body)
 
 
+def test_project_task_shaping_output_rejects_malformed_prerequisites() -> None:
+    with pytest.raises(ValidationError):
+        ProjectTaskShapingOutput.model_validate(
+            {
+                "operation": "generateDrafts",
+                "assistantMessage": "Drafts are ready.",
+                "drafts": [
+                    {
+                        "key": "api",
+                        "title": "Build API",
+                        "prerequisites": [{"type": "existing", "key": "api"}],
+                    }
+                ],
+            }
+        )
+
+
+def test_project_task_shaping_output_rejects_duplicate_draft_keys() -> None:
+    with pytest.raises(ValidationError):
+        ProjectTaskShapingOutput.model_validate(
+            {
+                "operation": "generateDrafts",
+                "assistantMessage": "Drafts are ready.",
+                "drafts": [
+                    {"key": "api", "title": "Build API"},
+                    {"key": "API", "title": "Build API again"},
+                ],
+            }
+        )
+
+
 def test_unknown_a2a_agent_card_slug_returns_not_found() -> None:
     client = build_client()
 

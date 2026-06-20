@@ -27,6 +27,16 @@ function latestTranscript(entries: ProjectTaskShapingTranscriptEntry[]) {
 	return entries.slice(-MAX_SHAPING_TRANSCRIPT_ENTRIES);
 }
 
+function keyedTranscript(entries: ProjectTaskShapingTranscriptEntry[]) {
+	const seen = new Map<string, number>();
+	return entries.map((entry) => {
+		const baseKey = `${entry.role}-${entry.message}`;
+		const count = seen.get(baseKey) ?? 0;
+		seen.set(baseKey, count + 1);
+		return { entry, key: `${baseKey}-${count}` };
+	});
+}
+
 export function ProjectBacklogShapingFlow({
 	existingBacklogTasks,
 	projectId,
@@ -55,13 +65,17 @@ export function ProjectBacklogShapingFlow({
 		generatedFrom,
 		sharedUnderstanding,
 	});
-	const validation = validateProjectTaskDrafts(drafts);
+	const validation = validateProjectTaskDrafts(drafts, existingBacklogTasks);
 	const graph = useMemo(
 		() => getProjectBacklogGraph(drafts, existingBacklogTasks),
 		[drafts, existingBacklogTasks],
 	);
 	const canSave =
-		drafts.length > 0 && validation.canSave && !stale && pending === null;
+		drafts.length > 0 &&
+		validation.canSave &&
+		!stale &&
+		!saved &&
+		pending === null;
 
 	async function interview(message: string | null) {
 		if (pending) {
@@ -239,8 +253,8 @@ export function ProjectBacklogShapingFlow({
 					<p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--on-surface-variant)]">
 						Transcript
 					</p>
-					{transcript.map((entry) => (
-						<p key={`${entry.role}-${entry.message}`} className="mt-2">
+					{keyedTranscript(transcript).map(({ entry, key }) => (
+						<p key={key} className="mt-2">
 							<strong>
 								{entry.role === "assistant" ? "Assistant" : "You"}:
 							</strong>{" "}
@@ -278,7 +292,10 @@ export function ProjectBacklogShapingFlow({
 			<Textarea
 				id="project-backlog-shaping-understanding"
 				value={sharedUnderstanding}
-				onChange={(event) => setSharedUnderstanding(event.currentTarget.value)}
+				onChange={(event) => {
+					setSharedUnderstanding(event.currentTarget.value);
+					setSaved(false);
+				}}
 				placeholder="Review or write the shared understanding before generating drafts."
 				rows={5}
 			/>

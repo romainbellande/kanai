@@ -71,6 +71,18 @@ class ProjectTaskPrerequisiteRef(BaseModel):
     key: str | None = None
     task_id: UUID | None = Field(default=None, alias="taskId")
 
+    @model_validator(mode="after")
+    def require_matching_value(self) -> "ProjectTaskPrerequisiteRef":
+        if self.type == "draft" and not (self.key and self.key.strip()):
+            raise ValueError("draft prerequisite key is required")
+        if self.type == "existing" and self.task_id is None:
+            raise ValueError("existing prerequisite taskId is required")
+        if self.type == "draft" and self.task_id is not None:
+            raise ValueError("draft prerequisite cannot include taskId")
+        if self.type == "existing" and self.key is not None:
+            raise ValueError("existing prerequisite cannot include key")
+        return self
+
 
 class ProjectTaskDraftOutput(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
@@ -96,6 +108,13 @@ class ProjectTaskShapingOutput(BaseModel):
     question: ProjectTaskShapingQuestion | None = None
     shared_understanding: str | None = Field(default=None, alias="sharedUnderstanding")
     drafts: list[ProjectTaskDraftOutput] = Field(default_factory=list, max_length=12)
+
+    @model_validator(mode="after")
+    def reject_duplicate_draft_keys(self) -> "ProjectTaskShapingOutput":
+        keys = [draft.key.strip().casefold() for draft in self.drafts]
+        if len(set(keys)) != len(keys):
+            raise ValueError("draft keys must be unique")
+        return self
 
 
 class ProjectTaskShapingGenerator(Protocol):

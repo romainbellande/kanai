@@ -34,13 +34,30 @@ export function areProjectTaskDraftsStale({
 
 export function validateProjectTaskDrafts(
 	drafts: EditableProjectTaskDraft[],
+	existingTasks: Task[] = [],
 ): ProjectBacklogShapingValidation {
 	const errorsByKey: Record<string, string[]> = {};
+	const normalizedKeys = drafts.map((draft) => draft.key.trim().toLowerCase());
 	const keys = new Set(drafts.map((draft) => draft.key));
+	const duplicateKeys = new Set(
+		normalizedKeys.filter(
+			(key, index) => normalizedKeys.indexOf(key) !== index,
+		),
+	);
+	const existingIds = new Set(existingTasks.map((task) => task.id));
 	const edgeKeys = new Set<string>();
 
 	for (const draft of drafts) {
 		const errors: string[] = [];
+		const normalizedKey = draft.key.trim().toLowerCase();
+		if (!normalizedKey) {
+			errors.push("Draft key is required.");
+		} else if (duplicateKeys.has(normalizedKey)) {
+			errors.push("Draft keys must be unique.");
+		}
+		if (drafts.length > 12) {
+			errors.push("No more than 12 drafts can be saved at once.");
+		}
 		if (!draft.title.trim()) {
 			errors.push("Title is required.");
 		}
@@ -51,7 +68,10 @@ export function validateProjectTaskDrafts(
 				errors.push("Duplicate prerequisite.");
 			}
 			edgeKeys.add(pairKey);
-			if (prerequisite.type !== "draft") {
+			if (prerequisite.type === "existing") {
+				if (!existingIds.has(prerequisite.taskId)) {
+					errors.push("Missing existing prerequisite.");
+				}
 				continue;
 			}
 			if (prerequisite.key === draft.key) {

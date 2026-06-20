@@ -4,6 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 import json
 from typing import Any
+from uuid import UUID
 
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.context import ServerCallContext
@@ -16,6 +17,7 @@ from a2a.types import AgentCapabilities, AgentCard, AgentInterface, AgentSkill
 from a2a.types import Part, Task, TaskState, TaskStatus
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from google.protobuf.json_format import MessageToDict
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentUser, DatabaseSession
 from app.core.config import settings
@@ -366,7 +368,7 @@ class ProjectTaskShapingAgentExecutor(AgentExecutor):
 
 
 async def _project_task_shaping_backlog_context(
-    session: Any, project_id: Any, done_column_id: Any
+    session: AsyncSession, project_id: UUID, done_column_id: UUID | None
 ) -> list[dict[str, str]]:
     from app.repositories.task_repository import TaskRepository
 
