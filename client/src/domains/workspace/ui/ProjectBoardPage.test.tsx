@@ -33,6 +33,7 @@ import {
 } from "#/api/client";
 
 let projectSearch: { view?: "history" } = {};
+let navigateSpy = vi.fn();
 
 vi.mock("@tanstack/react-router", () => ({
 	Link: ({
@@ -67,6 +68,7 @@ vi.mock("@tanstack/react-router", () => ({
 			</a>
 		);
 	},
+	useNavigate: () => navigateSpy,
 	useParams: () => ({ projectId: "project-1" }),
 	useSearch: () => projectSearch,
 }));
@@ -358,6 +360,7 @@ describe("ProjectBoardPage", () => {
 
 	beforeEach(() => {
 		projectSearch = {};
+		navigateSpy = vi.fn();
 		FakeWebSocket.instances = [];
 		vi.stubGlobal("WebSocket", FakeWebSocket);
 	});
@@ -542,6 +545,152 @@ describe("ProjectBoardPage", () => {
 		expect(screen.queryByText("Other Project")).toBeNull();
 		expect(screen.queryByText("Backlog only")).toBeNull();
 		expect(screen.queryByText("Security Audit Phase 1")).toBeNull();
+	});
+
+	it("shows the project skeleton and checks the project before board data", async () => {
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({ accessToken: "project-token" }),
+		);
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(currentUserQueryOptions().queryKey, {
+			id: "user-1",
+		});
+		const fetchMock = vi
+			.fn<typeof fetch>()
+			.mockReturnValue(new Promise<Response>(() => {}));
+		vi.stubGlobal("fetch", fetchMock);
+
+		render(
+			<QueryClientProvider client={queryClient}>
+				<ProjectBoardPage />
+			</QueryClientProvider>,
+		);
+
+		expect(screen.getByText("Loading project...")).toBeTruthy();
+		await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+	});
+
+	it("redirects missing projects to /404", async () => {
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({ accessToken: "project-token" }),
+		);
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(currentUserQueryOptions().queryKey, {
+			id: "user-1",
+		});
+		queryClient.setQueryData(
+			projectTasksQueryOptions("project-1").queryKey,
+			[],
+		);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({}),
+		]);
+		vi.stubGlobal(
+			"fetch",
+			vi
+				.fn<typeof fetch>()
+				.mockResolvedValue(
+					jsonResponse({ detail: "Not found" }, { status: 404 }),
+				),
+		);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+
+		await waitFor(() =>
+			expect(navigateSpy).toHaveBeenCalledWith({
+				replace: true,
+				to: "/404",
+			}),
+		);
+		expect(
+			screen.queryByText("Project details could not be loaded."),
+		).toBeNull();
+	});
+
+	it("redirects malformed project ids to /404", async () => {
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({ accessToken: "project-token" }),
+		);
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(currentUserQueryOptions().queryKey, {
+			id: "user-1",
+		});
+		queryClient.setQueryData(
+			projectTasksQueryOptions("project-1").queryKey,
+			[],
+		);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({}),
+		]);
+		vi.stubGlobal(
+			"fetch",
+			vi
+				.fn<typeof fetch>()
+				.mockResolvedValue(
+					jsonResponse({ detail: "Invalid UUID" }, { status: 422 }),
+				),
+		);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+
+		await waitFor(() =>
+			expect(navigateSpy).toHaveBeenCalledWith({
+				replace: true,
+				to: "/404",
+			}),
+		);
+	});
+
+	it("keeps non-404 project errors on the board", async () => {
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({ accessToken: "project-token" }),
+		);
+		const { ProjectBoardPage } = await import(
+			"#/domains/workspace/ui/ProjectBoardPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(currentUserQueryOptions().queryKey, {
+			id: "user-1",
+		});
+		queryClient.setQueryData(
+			projectTasksQueryOptions("project-1").queryKey,
+			[],
+		);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column({}),
+		]);
+		vi.stubGlobal(
+			"fetch",
+			vi
+				.fn<typeof fetch>()
+				.mockResolvedValue(
+					jsonResponse({ detail: "Server error" }, { status: 500 }),
+				),
+		);
+
+		renderWithQueryClient(<ProjectBoardPage />, queryClient);
+
+		expect(
+			await screen.findByText("Project details could not be loaded."),
+		).toBeTruthy();
+		expect(navigateSpy).not.toHaveBeenCalled();
 	});
 
 	it("updates task card Story Point badges when saved task data changes", async () => {

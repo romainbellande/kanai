@@ -1,9 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link, useParams } from "@tanstack/react-router";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { Save } from "lucide-react";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 
-import { useKanaiApi } from "#/api/client";
+import { ProjectTaskRequestError, useKanaiApi } from "#/api/client";
+import { ResponseError } from "#/api/openapi-client/runtime";
 import { Button } from "#/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
@@ -19,6 +20,13 @@ import {
 import { TaskShapingChat } from "#/domains/workspace/ui/TaskShapingChat";
 import { WorkspaceLayout } from "#/domains/workspace/ui/templates/WorkspaceLayout";
 
+function isNotFoundError(error: unknown): boolean {
+	return (
+		(error instanceof ResponseError && error.response.status === 404) ||
+		(error instanceof ProjectTaskRequestError && error.status === 404)
+	);
+}
+
 export function TaskDetailPage({
 	fromBacklog = false,
 }: {
@@ -27,6 +35,7 @@ export function TaskDetailPage({
 	const { projectId, taskId } = useParams({
 		from: "/projects_/$projectId/tasks/$taskId",
 	});
+	const navigate = useNavigate();
 	const api = useKanaiApi();
 	const projectQuery = useQuery(api.projects.get(projectId));
 	const columnsQuery = useQuery(api.projectColumns.list(projectId));
@@ -46,10 +55,20 @@ export function TaskDetailPage({
 	const workflowMessage = columnsQuery.isError
 		? "Project workflow columns could not be loaded."
 		: form.workflowState.message;
+	const isMissingResource =
+		isNotFoundError(projectQuery.error) ||
+		isNotFoundError(tasksQuery.error) ||
+		(!tasksQuery.isPending && !tasksQuery.isError && !task);
 	const returnTo = fromBacklog
 		? "/projects/$projectId/backlog"
 		: "/projects/$projectId";
 	const returnLabel = fromBacklog ? "Back to the Backlog" : "Back to Board";
+
+	useEffect(() => {
+		if (isMissingResource) {
+			void navigate({ to: "/404", replace: true });
+		}
+	}, [isMissingResource, navigate]);
 
 	function updateField(field: keyof typeof form.values, value: string) {
 		form.setField(field, value);
@@ -74,6 +93,10 @@ export function TaskDetailPage({
 
 	function handleTaskShapingDraftApplied() {
 		setSavedMessage(null);
+	}
+
+	if (isMissingResource) {
+		return null;
 	}
 
 	return (

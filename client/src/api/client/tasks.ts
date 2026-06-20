@@ -60,6 +60,16 @@ export type AddProjectSprintTaskInput = {
 export type UpdateTaskInput = TaskUpdate;
 export type MoveTaskInput = TaskDestination;
 
+export class ProjectTaskRequestError extends Error {
+	readonly status: number;
+
+	constructor(status: number) {
+		super(`Project task request failed with ${status}.`);
+		this.name = "ProjectTaskRequestError";
+		this.status = status;
+	}
+}
+
 type TaskJson = {
 	id: string;
 	project_id: string;
@@ -181,7 +191,7 @@ async function requestProjectTasks<T>(
 	});
 
 	if (!response.ok) {
-		throw new Error(`Project task request failed with ${response.status}.`);
+		throw new ProjectTaskRequestError(response.status);
 	}
 
 	return response.json() as Promise<T>;
