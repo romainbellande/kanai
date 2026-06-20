@@ -32,6 +32,10 @@ _Avoid_: Task name, issue title
 Task-owned, user-editable narrative context that explains the background, scope, or handoff information for a Project Task.
 _Avoid_: Task notes, work notes, task body
 
+**Task Prerequisite**:
+A Project Task that must be considered before another Project Task can proceed.
+_Avoid_: Depends-on task, blocker, task dependency
+
 **Task Shaping Chat**:
 An agent-assisted conversation that interviews a Project Member to refine a Project Task before it is saved.
 _Avoid_: Grill Me, Task Coach, Project chat
