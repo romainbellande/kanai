@@ -4,6 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 import json
 from typing import Any
+from uuid import UUID
 
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.context import ServerCallContext
@@ -16,6 +17,7 @@ from a2a.types import AgentCapabilities, AgentCard, AgentInterface, AgentSkill
 from a2a.types import Part, Task, TaskState, TaskStatus
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from google.protobuf.json_format import MessageToDict
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentUser, DatabaseSession
 from app.core.config import settings
@@ -23,6 +25,14 @@ from app.features.a2a.acceptance_criteria import (
     AcceptanceCriteriaGenerator,
     get_acceptance_criteria_generator,
     parse_acceptance_criteria_context,
+)
+from app.features.a2a.project_task_shaping import (
+    ProjectTaskShapingGenerationContext,
+    ProjectTaskShapingGenerator,
+    ProjectTaskShapingOutput,
+    get_project_task_shaping_generator,
+    parse_project_task_shaping_context,
+    project_task_shaping_artifact,
 )
 from app.features.a2a.task_shaping import (
     TaskShapingGenerator,
@@ -35,6 +45,7 @@ from app.services.project_service import require_current_user_id
 
 ACCEPTANCE_CRITERIA_SLUG = "acceptance-criteria"
 TASK_SHAPING_SLUG = "task-shaping"
+PROJECT_TASK_SHAPING_SLUG = "project-task-shaping"
 
 _REQUEST_STATE_KEY = "kanai_a2a_agent"
 
@@ -118,6 +129,38 @@ def _build_task_shaping_agent_card() -> AgentCard:
     )
 
 
+def _build_project_task_shaping_agent_card() -> AgentCard:
+    return AgentCard(
+        name="Project Task Shaping Agent",
+        description="Interviews on broad project ideas and drafts reviewed Backlog tasks.",
+        supported_interfaces=[
+            AgentInterface(
+                url=_agent_interface_url(PROJECT_TASK_SHAPING_SLUG),
+                protocol_binding="JSONRPC",
+                protocol_version="1.0",
+            )
+        ],
+        version="0.1.0",
+        capabilities=AgentCapabilities(
+            streaming=True,
+            push_notifications=False,
+        ),
+        default_input_modes=["application/json"],
+        default_output_modes=["application/json"],
+        skills=[
+            AgentSkill(
+                id=PROJECT_TASK_SHAPING_SLUG,
+                name="Project Task Shaping",
+                description="Uses explicit interview and generateDrafts operations for Backlog task shaping.",
+                tags=["project-task-shaping", "backlog", "chat"],
+                examples=["Shape a project idea into reviewed Backlog task drafts."],
+                input_modes=["application/json"],
+                output_modes=["application/json"],
+            )
+        ],
+    )
+
+
 def _agent_card_to_response(agent_card: AgentCard) -> dict[str, object]:
     return MessageToDict(agent_card, preserving_proto_field_name=False)
 
@@ -139,6 +182,9 @@ async def invoke_agent(
         get_acceptance_criteria_generator
     ),
     task_shaping_generator: TaskShapingGenerator = Depends(get_task_shaping_generator),
+    project_task_shaping_generator: ProjectTaskShapingGenerator = Depends(
+        get_project_task_shaping_generator
+    ),
 ) -> Response:
     """Delegate invocation to the registered A2A SDK JSON-RPC route."""
 
@@ -149,6 +195,7 @@ async def invoke_agent(
         "generators": {
             ACCEPTANCE_CRITERIA_SLUG: acceptance_criteria_generator,
             TASK_SHAPING_SLUG: task_shaping_generator,
+            PROJECT_TASK_SHAPING_SLUG: project_task_shaping_generator,
         },
     }
     return await registration.endpoint(request)
@@ -261,6 +308,80 @@ class TaskShapingAgentExecutor(AgentExecutor):
         await updater.update_status(TaskState.TASK_STATE_CANCELED)
 
 
+class ProjectTaskShapingAgentExecutor(AgentExecutor):
+    """SDK executor for the project-level task shaping agent."""
+
+    async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
+        state = context.call_context.state[_REQUEST_STATE_KEY]
+        session = state["session"]
+        current_user = state["current_user"]
+        generator = state["generators"][PROJECT_TASK_SHAPING_SLUG]
+
+        shaping_input = parse_project_task_shaping_context(context)
+        project = await ProjectAccess(session).require_project(
+            shaping_input.project_id,
+            require_current_user_id(current_user.id),
+        )
+        backlog = await _project_task_shaping_backlog_context(
+            session, shaping_input.project_id, project.done_column_id
+        )
+        generation_context = ProjectTaskShapingGenerationContext.model_validate(
+            {
+                **shaping_input.model_dump(by_alias=True, mode="json"),
+                "existingBacklogTasks": backlog,
+            }
+        )
+
+        task_id = context.task_id or PROJECT_TASK_SHAPING_SLUG
+        context_id = context.context_id or task_id
+        await event_queue.enqueue_event(
+            Task(
+                id=task_id,
+                context_id=context_id,
+                status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+            )
+        )
+
+        updater = TaskUpdater(event_queue, task_id, context_id)
+        output = ProjectTaskShapingOutput.model_validate(
+            await generator.shape_project_tasks(generation_context)
+        )
+        await updater.add_artifact(
+            [
+                Part(
+                    text=project_task_shaping_artifact(output),
+                    media_type="application/json",
+                )
+            ],
+            artifact_id="project-task-shaping",
+            name="projectTaskShaping",
+            append=False,
+            last_chunk=True,
+        )
+        await updater.complete()
+
+    async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
+        task_id = context.task_id or PROJECT_TASK_SHAPING_SLUG
+        context_id = context.context_id or task_id
+        updater = TaskUpdater(event_queue, task_id, context_id)
+        await updater.update_status(TaskState.TASK_STATE_CANCELED)
+
+
+async def _project_task_shaping_backlog_context(
+    session: AsyncSession, project_id: UUID, done_column_id: UUID | None
+) -> list[dict[str, str]]:
+    from app.repositories.task_repository import TaskRepository
+
+    tasks = await TaskRepository(session).list_backlog_candidates(
+        project_id, done_column_id
+    )
+    return [
+        {"id": str(task.id), "title": task.title}
+        for task in tasks[:50]
+        if task.id is not None
+    ]
+
+
 class _KanaiServerCallContextBuilder(DefaultServerCallContextBuilder):
     def build(self, request: Request) -> ServerCallContext:
         context = super().build(request)
@@ -287,6 +408,7 @@ def _create_jsonrpc_endpoint(
 
 _ACCEPTANCE_CRITERIA_AGENT_CARD = _build_acceptance_criteria_agent_card()
 _TASK_SHAPING_AGENT_CARD = _build_task_shaping_agent_card()
+_PROJECT_TASK_SHAPING_AGENT_CARD = _build_project_task_shaping_agent_card()
 _AGENT_REGISTRY = {
     ACCEPTANCE_CRITERIA_SLUG: A2AAgentRegistration(
         slug=ACCEPTANCE_CRITERIA_SLUG,
@@ -302,6 +424,14 @@ _AGENT_REGISTRY = {
         endpoint=_create_jsonrpc_endpoint(
             TaskShapingAgentExecutor(),
             _TASK_SHAPING_AGENT_CARD,
+        ),
+    ),
+    PROJECT_TASK_SHAPING_SLUG: A2AAgentRegistration(
+        slug=PROJECT_TASK_SHAPING_SLUG,
+        agent_card=_PROJECT_TASK_SHAPING_AGENT_CARD,
+        endpoint=_create_jsonrpc_endpoint(
+            ProjectTaskShapingAgentExecutor(),
+            _PROJECT_TASK_SHAPING_AGENT_CARD,
         ),
     ),
 }

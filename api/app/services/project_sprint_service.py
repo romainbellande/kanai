@@ -142,7 +142,10 @@ class ProjectSprintService:
         )
         task.sprint_id = sprint.id
         task.backlog_rank = None
-        return task_to_read(await self._task_repository.update(task))
+        return await self._task_to_read_with_prerequisites(
+            project_id,
+            await self._task_repository.update(task),
+        )
 
     async def remove_task_from_active(
         self,
@@ -196,7 +199,10 @@ class ProjectSprintService:
             if first_backlog_task and first_backlog_task.backlog_rank
             else DEFAULT_TASK_RANK
         )
-        return task_to_read(await self._task_repository.update(task))
+        return await self._task_to_read_with_prerequisites(
+            project_id,
+            await self._task_repository.update(task),
+        )
 
     async def close_confirmation(
         self,
@@ -222,7 +228,10 @@ class ProjectSprintService:
             sprint=sprint_to_read(sprint),
             finished_count=len(finished_tasks),
             unfinished_count=len(unfinished_tasks),
-            unfinished_tasks=[task_to_read(task) for task in unfinished_tasks],
+            unfinished_tasks=await self._tasks_to_read_with_prerequisites(
+                project_id,
+                unfinished_tasks,
+            ),
             carryover_statement="Unfinished tasks will move to the top of the Backlog.",
         )
 
@@ -290,10 +299,27 @@ class ProjectSprintService:
             sprint=sprint_to_read(sprint),
             finished_count=len(finished_tasks),
             unfinished_count=len(unfinished_tasks),
-            unfinished_tasks=[task_to_read(task) for task in unfinished_tasks],
+            unfinished_tasks=await self._tasks_to_read_with_prerequisites(
+                project_id,
+                unfinished_tasks,
+            ),
             carryover_statement="Unfinished tasks will move to the top of the Backlog.",
             snapshots=[snapshot_to_read(snapshot) for snapshot in snapshots],
         )
+
+    async def _task_to_read_with_prerequisites(
+        self, project_id: UUID, task: Task
+    ) -> TaskRead:
+        return (await self._tasks_to_read_with_prerequisites(project_id, [task]))[0]
+
+    async def _tasks_to_read_with_prerequisites(
+        self, project_id: UUID, tasks: list[Task]
+    ) -> list[TaskRead]:
+        prerequisites = await self._task_repository.prerequisite_ids_by_task(
+            project_id,
+            {task.id for task in tasks if task.id is not None},
+        )
+        return [task_to_read(task, prerequisites.get(task.id, [])) for task in tasks]
 
     async def list_history(
         self,

@@ -30,7 +30,7 @@ from app.models.project import (
     ProjectSprintTaskSnapshot,
     SprintLifecycleState,
 )
-from app.models.task import Task
+from app.models.task import Task, TaskDependency
 from app.models.user import User
 from app.schemas.auth import AuthenticatedContext
 from app.services.auth_service import RequestAuthBoundary, WebSocketAuthBoundary
@@ -1230,6 +1230,309 @@ async def test_project_backlog_reorder_requires_complete_backlog_task_set(
     assert response.json() == {
         "detail": "Backlog reorder must include each backlog task exactly once"
     }
+
+
+@pytest.mark.asyncio
+async def test_project_backlog_bulk_create_persists_dependency_edges(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Enterprise Launch", "code": "BL4"},
+    )
+    project_id = project_response.json()["id"]
+    existing_response = await client.post(
+        f"/projects/{project_id}/backlog/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={"title": "Existing discovery"},
+    )
+
+    response = await client.post(
+        f"/projects/{project_id}/backlog/tasks/bulk",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "tasks": [
+                {
+                    "key": "api",
+                    "title": "Build auth API",
+                    "acceptance_criteria": "API returns session",
+                    "prerequisites": [],
+                },
+                {
+                    "key": "ui",
+                    "title": "Build login UI",
+                    "description": "Wire login form",
+                    "prerequisites": [
+                        {"type": "draft", "key": "api"},
+                        {
+                            "type": "existing",
+                            "task_id": existing_response.json()["id"],
+                        },
+                    ],
+                },
+            ]
+        },
+    )
+    refetch_response = await client.get(
+        f"/projects/{project_id}/backlog",
+        headers={"Authorization": "Bearer token"},
+    )
+    await client.post(
+        f"/projects/{project_id}/sprints",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "planned_start_date": "2026-06-01",
+            "planned_end_date": "2026-06-14",
+        },
+    )
+
+    assert response.status_code == 201
+    created = response.json()
+    assert [task["title"] for task in created] == ["Build auth API", "Build login UI"]
+    assert set(created[1]["prerequisite_task_ids"]) == {
+        created[0]["id"],
+        existing_response.json()["id"],
+    }
+    sprint_add_response = await client.post(
+        f"/projects/{project_id}/sprints/active/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={"task_id": created[1]["id"]},
+    )
+    assert set(sprint_add_response.json()["prerequisite_task_ids"]) == {
+        created[0]["id"],
+        existing_response.json()["id"],
+    }
+    assert [task["title"] for task in refetch_response.json()][:2] == [
+        "Build auth API",
+        "Build login UI",
+    ]
+    async with session_factory() as session:
+        edges = list(
+            (
+                await session.scalars(
+                    select(TaskDependency).filter_by(project_id=UUID(project_id))
+                )
+            ).all()
+        )
+    assert len(edges) == 2
+
+
+@pytest.mark.parametrize(
+    ("drafts", "detail"),
+    [
+        (
+            [
+                {
+                    "key": "api",
+                    "title": "Build auth API",
+                    "prerequisites": [{"type": "draft", "key": "api"}],
+                }
+            ],
+            "Task cannot depend on itself",
+        ),
+        (
+            [
+                {
+                    "key": "ui",
+                    "title": "Build login UI",
+                    "prerequisites": [{"type": "draft", "key": "missing"}],
+                }
+            ],
+            "Invalid prerequisite reference",
+        ),
+        (
+            [
+                {
+                    "key": "ui",
+                    "title": "Build login UI",
+                    "prerequisites": [
+                        {"type": "draft", "key": "api"},
+                        {"type": "draft", "key": "api"},
+                    ],
+                },
+                {"key": "api", "title": "Build auth API", "prerequisites": []},
+            ],
+            "Duplicate prerequisite reference",
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_project_backlog_bulk_create_rejects_invalid_prerequisites_atomically(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    users: dict[str, User],
+    drafts: list[dict[str, object]],
+    detail: str,
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Enterprise Launch", "code": "BL8"},
+    )
+    project_id = project_response.json()["id"]
+
+    response = await client.post(
+        f"/projects/{project_id}/backlog/tasks/bulk",
+        headers={"Authorization": "Bearer token"},
+        json={"tasks": drafts},
+    )
+    backlog_response = await client.get(
+        f"/projects/{project_id}/backlog",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": detail}
+    assert backlog_response.json() == []
+    async with session_factory() as session:
+        edge_count = len(
+            (
+                await session.scalars(
+                    select(TaskDependency).filter_by(project_id=UUID(project_id))
+                )
+            ).all()
+        )
+    assert edge_count == 0
+
+
+@pytest.mark.asyncio
+async def test_project_backlog_bulk_create_rejects_non_member_assignee(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    assignee_id = users["assignee"].id
+    assert assignee_id is not None
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Enterprise Launch", "code": "BL7"},
+    )
+    project_id = project_response.json()["id"]
+
+    response = await client.post(
+        f"/projects/{project_id}/backlog/tasks/bulk",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "tasks": [
+                {
+                    "key": "api",
+                    "title": "Build auth API",
+                    "assignee_id": str(assignee_id),
+                    "prerequisites": [],
+                }
+            ]
+        },
+    )
+    backlog_response = await client.get(
+        f"/projects/{project_id}/backlog",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Assignee must belong to the project"}
+    assert backlog_response.json() == []
+
+
+@pytest.mark.asyncio
+async def test_project_backlog_read_does_not_leak_cross_project_dependency_edges(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Enterprise Launch", "code": "BL6"},
+    )
+    other_project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Other", "code": "OTH"},
+    )
+    task_response = await client.post(
+        f"/projects/{project_response.json()['id']}/backlog/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={"title": "Current task"},
+    )
+    other_task_response = await client.post(
+        f"/projects/{other_project_response.json()['id']}/backlog/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={"title": "Other task"},
+    )
+    async with session_factory() as session:
+        session.add(
+            TaskDependency(
+                project_id=UUID(project_response.json()["id"]),
+                dependent_task_id=UUID(task_response.json()["id"]),
+                prerequisite_task_id=UUID(other_task_response.json()["id"]),
+            )
+        )
+        await session.commit()
+
+    response = await client.get(
+        f"/projects/{project_response.json()['id']}/backlog",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()[0]["prerequisite_task_ids"] == []
+
+
+@pytest.mark.asyncio
+async def test_project_backlog_bulk_create_rejects_cycles_atomically(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Enterprise Launch", "code": "BL5"},
+    )
+    project_id = project_response.json()["id"]
+
+    response = await client.post(
+        f"/projects/{project_id}/backlog/tasks/bulk",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "tasks": [
+                {
+                    "key": "api",
+                    "title": "Build auth API",
+                    "prerequisites": [{"type": "draft", "key": "ui"}],
+                },
+                {
+                    "key": "ui",
+                    "title": "Build login UI",
+                    "prerequisites": [{"type": "draft", "key": "api"}],
+                },
+            ]
+        },
+    )
+    backlog_response = await client.get(
+        f"/projects/{project_id}/backlog",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Task dependencies cannot contain cycles"}
+    assert backlog_response.json() == []
+    async with session_factory() as session:
+        edge_count = len(
+            (
+                await session.scalars(
+                    select(TaskDependency).filter_by(project_id=UUID(project_id))
+                )
+            ).all()
+        )
+    assert edge_count == 0
 
 
 @pytest.mark.asyncio

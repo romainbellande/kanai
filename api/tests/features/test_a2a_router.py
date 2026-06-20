@@ -1,6 +1,6 @@
 import json
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -22,16 +22,26 @@ from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.features.a2a import (
     AcceptanceCriteriaGenerationContext,
+    ProjectTaskShapingGenerationContext,
+    ProjectTaskShapingOutput,
     TaskShapingGenerationContext,
     TaskShapingTurnOutput,
     a2a_router,
     build_acceptance_criteria_prompt,
     build_task_shaping_prompt,
     get_acceptance_criteria_generator,
+    get_project_task_shaping_generator,
     get_task_shaping_generator,
 )
 from app.features.a2a.task_shaping import PydanticAiTaskShapingGenerator
-from app.models.project import Project, ProjectMember, ProjectOwner
+from app.models.project import (
+    Project,
+    ProjectColumn,
+    ProjectMember,
+    ProjectOwner,
+    ProjectSprint,
+)
+from app.models.task import Task
 from app.models.user import User
 from app.schemas.auth import AuthenticatedContext
 from app.services.auth_service import RequestAuthBoundary
@@ -112,6 +122,41 @@ class StubTaskShapingGenerator:
                     "readinessReason": "Needs one more answer",
                     "staleFieldNames": ["title"],
                 },
+            }
+        )
+
+
+class StubProjectTaskShapingGenerator:
+    def __init__(self) -> None:
+        self.contexts: list[ProjectTaskShapingGenerationContext] = []
+
+    async def shape_project_tasks(
+        self, context: ProjectTaskShapingGenerationContext
+    ) -> ProjectTaskShapingOutput:
+        self.contexts.append(context)
+        if context.operation == "interview":
+            return ProjectTaskShapingOutput.model_validate(
+                {
+                    "operation": "interview",
+                    "assistantMessage": "What is the first boundary?",
+                    "question": {"text": "What is the first boundary?"},
+                    "sharedUnderstanding": None,
+                    "drafts": [],
+                }
+            )
+        return ProjectTaskShapingOutput.model_validate(
+            {
+                "operation": "generateDrafts",
+                "assistantMessage": "Draft tasks are ready.",
+                "sharedUnderstanding": context.shared_understanding,
+                "drafts": [
+                    {
+                        "key": "api",
+                        "title": "Build auth API",
+                        "acceptanceCriteria": "API returns session",
+                        "prerequisites": [],
+                    }
+                ],
             }
         )
 
@@ -229,6 +274,37 @@ async def protected_client(
         yield client, stub_generator, stub_task_shaping_generator
 
 
+@pytest_asyncio.fixture
+async def protected_project_task_shaping_client(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> AsyncIterator[tuple[AsyncClient, StubProjectTaskShapingGenerator]]:
+    app = FastAPI()
+    app.add_middleware(
+        AuthMiddleware,
+        auth_boundary=RequestAuthBoundary(
+            StubAuthenticateRequest(),
+            whitelist_paths={
+                "/a2a/project-task-shaping/.well-known/agent-card.json",
+            },
+        ),
+    )
+    app.include_router(a2a_router)
+
+    async def override_get_db() -> AsyncIterator[AsyncSession]:
+        async with session_factory() as session:
+            yield session
+
+    stub_generator = StubProjectTaskShapingGenerator()
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_project_task_shaping_generator] = lambda: (
+        stub_generator
+    )
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client, stub_generator
+
+
 def test_acceptance_criteria_agent_card_is_reachable_without_bearer_auth() -> None:
     client = build_client()
 
@@ -274,6 +350,57 @@ def test_task_shaping_agent_card_is_reachable_without_bearer_auth() -> None:
     assert skill["outputModes"] == ["application/json"]
 
 
+def test_project_task_shaping_agent_card_is_static_public_metadata() -> None:
+    client = build_client()
+
+    response = client.get("/a2a/project-task-shaping/.well-known/agent-card.json")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["supportedInterfaces"] == [
+        {
+            "url": "https://api.example.test/a2a/project-task-shaping",
+            "protocolBinding": "JSONRPC",
+            "protocolVersion": "1.0",
+        }
+    ]
+    assert body["defaultOutputModes"] == ["application/json"]
+    assert body["skills"][0]["id"] == "project-task-shaping"
+    assert "Project" in body["name"]
+    assert "Project context" not in json.dumps(body)
+
+
+def test_project_task_shaping_output_rejects_malformed_prerequisites() -> None:
+    with pytest.raises(ValidationError):
+        ProjectTaskShapingOutput.model_validate(
+            {
+                "operation": "generateDrafts",
+                "assistantMessage": "Drafts are ready.",
+                "drafts": [
+                    {
+                        "key": "api",
+                        "title": "Build API",
+                        "prerequisites": [{"type": "existing", "key": "api"}],
+                    }
+                ],
+            }
+        )
+
+
+def test_project_task_shaping_output_rejects_duplicate_draft_keys() -> None:
+    with pytest.raises(ValidationError):
+        ProjectTaskShapingOutput.model_validate(
+            {
+                "operation": "generateDrafts",
+                "assistantMessage": "Drafts are ready.",
+                "drafts": [
+                    {"key": "api", "title": "Build API"},
+                    {"key": "API", "title": "Build API again"},
+                ],
+            }
+        )
+
+
 def test_unknown_a2a_agent_card_slug_returns_not_found() -> None:
     client = build_client()
 
@@ -293,6 +420,166 @@ def test_unknown_a2a_invocation_slug_returns_not_found() -> None:
 
     assert response.status_code == 404
     assert response.json() == {"detail": "A2A agent not found"}
+
+
+@pytest.mark.asyncio
+async def test_project_task_shaping_interview_streams_one_question(
+    protected_project_task_shaping_client: tuple[
+        AsyncClient, StubProjectTaskShapingGenerator
+    ],
+    seeded_project: UUID,
+) -> None:
+    client, stub_generator = protected_project_task_shaping_client
+
+    response = await client.post(
+        "/a2a/project-task-shaping",
+        headers=A2A_HEADERS,
+        json=build_a2a_request(
+            project_task_shaping={
+                "projectId": str(seeded_project),
+                "operation": "interview",
+                "idea": "Implement authentication",
+                "transcript": [],
+            }
+        ),
+    )
+
+    assert response.status_code == 200
+    artifact = extract_project_task_shaping_output(response.text)
+    assert artifact["operation"] == "interview"
+    assert artifact["question"] == {"text": "What is the first boundary?"}
+    assert len(stub_generator.contexts) == 1
+    assert stub_generator.contexts[0].idea == "Implement authentication"
+
+
+@pytest.mark.asyncio
+async def test_project_task_shaping_passes_only_eligible_backlog_context(
+    protected_project_task_shaping_client: tuple[
+        AsyncClient, StubProjectTaskShapingGenerator
+    ],
+    session_factory: async_sessionmaker[AsyncSession],
+    seeded_project: UUID,
+) -> None:
+    client, stub_generator = protected_project_task_shaping_client
+    async with session_factory() as session:
+        column = ProjectColumn(project_id=seeded_project, name="To Do", position=0)
+        session.add(column)
+        await session.commit()
+        await session.refresh(column)
+        assert column.id is not None
+        sprint = ProjectSprint(
+            project_id=seeded_project,
+            name="Sprint 1",
+            planned_start_date=date(2026, 6, 1),
+            planned_end_date=date(2026, 6, 14),
+        )
+        session.add(sprint)
+        await session.commit()
+        await session.refresh(sprint)
+        assert sprint.id is not None
+        backlog_task = Task(
+            project_id=seeded_project,
+            sprint_id=None,
+            column_id=column.id,
+            title="Eligible backlog task",
+            priority="",
+            rank="U",
+            backlog_rank="U",
+        )
+        sprint_task = Task(
+            project_id=seeded_project,
+            sprint_id=sprint.id,
+            column_id=column.id,
+            title="Sprint task",
+            priority="",
+            rank="j",
+            backlog_rank=None,
+        )
+        session.add_all([backlog_task, sprint_task])
+        await session.commit()
+        await session.refresh(backlog_task)
+        assert backlog_task.id is not None
+
+    response = await client.post(
+        "/a2a/project-task-shaping",
+        headers=A2A_HEADERS,
+        json=build_a2a_request(
+            project_task_shaping={
+                "projectId": str(seeded_project),
+                "operation": "generateDrafts",
+                "sharedUnderstanding": "Ship authentication.",
+                "transcript": [],
+            }
+        ),
+    )
+
+    assert response.status_code == 200
+    assert [task.id for task in stub_generator.contexts[0].existing_backlog_tasks] == [
+        backlog_task.id
+    ]
+
+
+@pytest.mark.asyncio
+async def test_project_task_shaping_generates_drafts_from_reviewed_understanding(
+    protected_project_task_shaping_client: tuple[
+        AsyncClient, StubProjectTaskShapingGenerator
+    ],
+    seeded_project: UUID,
+) -> None:
+    client, stub_generator = protected_project_task_shaping_client
+
+    response = await client.post(
+        "/a2a/project-task-shaping",
+        headers=A2A_HEADERS,
+        json=build_a2a_request(
+            project_task_shaping={
+                "projectId": str(seeded_project),
+                "operation": "generateDrafts",
+                "sharedUnderstanding": "Ship authentication in reviewable slices.",
+                "transcript": [
+                    {"role": "assistant", "message": "What is the first boundary?"},
+                    {"role": "user", "message": "Start with API before UI."},
+                ],
+            }
+        ),
+    )
+
+    assert response.status_code == 200
+    artifact = extract_project_task_shaping_output(response.text)
+    assert artifact["drafts"][0]["title"] == "Build auth API"
+    assert len(stub_generator.contexts) == 1
+    context = stub_generator.contexts[0]
+    assert context.project_id == seeded_project
+    assert context.operation == "generateDrafts"
+    assert context.shared_understanding == "Ship authentication in reviewable slices."
+    assert context.existing_backlog_tasks == []
+
+
+@pytest.mark.asyncio
+async def test_project_task_shaping_project_access_is_required_before_generation(
+    protected_project_task_shaping_client: tuple[
+        AsyncClient, StubProjectTaskShapingGenerator
+    ],
+    seeded_project: UUID,
+) -> None:
+    client, stub_generator = protected_project_task_shaping_client
+
+    response = await client.post(
+        "/a2a/project-task-shaping",
+        headers={"Authorization": "Bearer outsider-token", "A2A-Version": "1.0"},
+        json=build_a2a_request(
+            project_task_shaping={
+                "projectId": str(seeded_project),
+                "operation": "interview",
+                "idea": "Implement authentication",
+                "transcript": [],
+            }
+        ),
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Project not found"}
+    assert stub_generator.contexts == []
 
 
 @pytest.mark.asyncio
@@ -913,12 +1200,15 @@ def test_public_api_base_url_is_required_at_settings_construction(
 def build_a2a_request(
     *,
     project_task: Any | None = None,
+    project_task_shaping: Any | None = None,
     task_shaping_turn: Any | None = None,
     project_id: str | None = None,
 ) -> dict[str, Any]:
     data: dict[str, Any] = {}
     if project_task is not None:
         data["projectTask"] = project_task
+    if project_task_shaping is not None:
+        data["projectTaskShaping"] = project_task_shaping
     if task_shaping_turn is not None:
         data["taskShapingTurn"] = task_shaping_turn
     if project_id is not None:
@@ -976,6 +1266,30 @@ def extract_task_shaping_turn(body: str) -> dict[str, Any]:
                 return cast("dict[str, Any]", json.loads(part["text"]))
 
     raise AssertionError("taskShapingTurn artifact was not streamed")
+
+
+def extract_project_task_shaping_output(body: str) -> dict[str, Any]:
+    for message in parse_sse_jsonrpc_messages(body):
+        artifact = (
+            message.get("result", {}).get("artifactUpdate", {}).get("artifact", {})
+        )
+        if not isinstance(artifact, dict):
+            continue
+        if (
+            artifact.get("artifactId") != "project-task-shaping"
+            and artifact.get("name") != "projectTaskShaping"
+        ):
+            continue
+
+        for part in artifact.get("parts", []):
+            if not isinstance(part, dict):
+                continue
+            if isinstance(part.get("data"), dict):
+                return cast("dict[str, Any]", part["data"])
+            if isinstance(part.get("text"), str):
+                return cast("dict[str, Any]", json.loads(part["text"]))
+
+    raise AssertionError("projectTaskShaping artifact was not streamed")
 
 
 def assert_stream_error(body: str, expected_message: str) -> None:

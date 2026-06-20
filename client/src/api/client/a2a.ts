@@ -14,6 +14,8 @@ const ACCEPTANCE_CRITERIA_DELTA_ARTIFACT_ID = "acceptance-criteria-delta";
 const ACCEPTANCE_CRITERIA_DELTA_ARTIFACT_NAME = "acceptanceCriteriaDelta";
 const TASK_SHAPING_TURN_ARTIFACT_ID = "task-shaping-turn";
 const TASK_SHAPING_TURN_ARTIFACT_NAME = "taskShapingTurn";
+const PROJECT_TASK_SHAPING_ARTIFACT_ID = "project-task-shaping";
+const PROJECT_TASK_SHAPING_ARTIFACT_NAME = "projectTaskShaping";
 export const TASK_SHAPING_CUSTOM_RESPONSE_OPTION_IDENTIFIER = "custom_response";
 
 export type AcceptanceCriteriaTaskMetadata = {
@@ -79,6 +81,46 @@ export type StartTaskShapingInput = {
 	task: TaskShapingTaskMetadata;
 	drafts?: TaskShapingFieldDrafts;
 	transcript?: TaskShapingTranscriptEntry[];
+	signal?: AbortSignal;
+};
+
+export type ProjectTaskShapingTranscriptEntry = TaskShapingTranscriptEntry;
+
+export type ProjectTaskPrerequisiteRef =
+	| { type: "draft"; key: string }
+	| { type: "existing"; taskId: string };
+
+export type ProjectTaskDraft = {
+	key: string;
+	title: string;
+	description: string | null;
+	acceptanceCriteria: string | null;
+	priority: string | null;
+	storyPoints: number | null;
+	assigneeId: string | null;
+	tag: string | null;
+	prerequisites: ProjectTaskPrerequisiteRef[];
+};
+
+export type ProjectTaskShapingOutput = {
+	operation: "interview" | "generateDrafts";
+	assistantMessage: string;
+	question: { text: string } | null;
+	sharedUnderstanding: string | null;
+	drafts: ProjectTaskDraft[];
+};
+
+export type StartProjectTaskShapingInput = {
+	projectId: string;
+	idea?: string | null;
+	transcript?: ProjectTaskShapingTranscriptEntry[];
+	signal?: AbortSignal;
+};
+
+export type GenerateProjectTaskDraftsInput = {
+	projectId: string;
+	sharedUnderstanding: string;
+	transcript?: ProjectTaskShapingTranscriptEntry[];
 	signal?: AbortSignal;
 };
 
@@ -164,6 +206,68 @@ export async function startTaskShaping({
 	}
 
 	throw new Error("Task Shaping turn artifact was not returned");
+}
+
+export function startProjectTaskShaping({
+	idea,
+	projectId,
+	signal,
+	transcript = [],
+}: StartProjectTaskShapingInput): Promise<ProjectTaskShapingOutput> {
+	return sendProjectTaskShaping({
+		projectId,
+		signal,
+		payload: { operation: "interview", idea, transcript },
+	});
+}
+
+export function generateProjectTaskDrafts({
+	projectId,
+	sharedUnderstanding,
+	signal,
+	transcript = [],
+}: GenerateProjectTaskDraftsInput): Promise<ProjectTaskShapingOutput> {
+	return sendProjectTaskShaping({
+		projectId,
+		signal,
+		payload: {
+			operation: "generateDrafts",
+			sharedUnderstanding,
+			transcript,
+		},
+	});
+}
+
+async function sendProjectTaskShaping({
+	projectId,
+	payload,
+	signal,
+}: {
+	projectId: string;
+	payload: Record<string, unknown>;
+	signal?: AbortSignal;
+}): Promise<ProjectTaskShapingOutput> {
+	const client = await getA2aClient(
+		"project-task-shaping",
+		"/a2a/project-task-shaping/.well-known/agent-card.json",
+	);
+	const stream = client.sendMessageStream(
+		buildProjectTaskShapingRequest(projectId, payload),
+		{ signal },
+	);
+
+	for await (const event of stream) {
+		if (signal?.aborted) {
+			break;
+		}
+
+		const output = extractProjectTaskShapingOutput(event);
+		if (output) {
+			return output;
+		}
+	}
+
+	throw new Error("Project Task Shaping artifact was not returned");
 }
 
 function normalizeTaskShapingTurn(
@@ -301,6 +405,86 @@ function uiSafeAnswerOptionIdentifier(value: unknown, index: number): string {
 	return normalized || `option-${index + 1}`;
 }
 
+function normalizeProjectTaskShapingOutput(
+	value: unknown,
+): ProjectTaskShapingOutput | null {
+	if (!value || typeof value !== "object") {
+		return null;
+	}
+	const record = value as Record<string, unknown>;
+	if (
+		(record.operation !== "interview" &&
+			record.operation !== "generateDrafts") ||
+		typeof record.assistantMessage !== "string"
+	) {
+		return null;
+	}
+	return {
+		operation: record.operation,
+		assistantMessage: record.assistantMessage,
+		question:
+			record.question &&
+			typeof record.question === "object" &&
+			typeof (record.question as Record<string, unknown>).text === "string"
+				? { text: (record.question as Record<string, string>).text }
+				: null,
+		sharedUnderstanding:
+			typeof record.sharedUnderstanding === "string"
+				? record.sharedUnderstanding
+				: null,
+		drafts: Array.isArray(record.drafts)
+			? record.drafts.flatMap(normalizeProjectTaskDraft)
+			: [],
+	};
+}
+
+function normalizeProjectTaskDraft(value: unknown): ProjectTaskDraft[] {
+	if (!value || typeof value !== "object") {
+		return [];
+	}
+	const record = value as Record<string, unknown>;
+	if (typeof record.key !== "string" || typeof record.title !== "string") {
+		return [];
+	}
+	return [
+		{
+			key: record.key,
+			title: record.title,
+			description:
+				typeof record.description === "string" ? record.description : null,
+			acceptanceCriteria:
+				typeof record.acceptanceCriteria === "string"
+					? record.acceptanceCriteria
+					: null,
+			priority: typeof record.priority === "string" ? record.priority : null,
+			storyPoints:
+				typeof record.storyPoints === "number" ? record.storyPoints : null,
+			assigneeId:
+				typeof record.assigneeId === "string" ? record.assigneeId : null,
+			tag: typeof record.tag === "string" ? record.tag : null,
+			prerequisites: Array.isArray(record.prerequisites)
+				? record.prerequisites.flatMap(normalizeProjectTaskPrerequisite)
+				: [],
+		},
+	];
+}
+
+function normalizeProjectTaskPrerequisite(
+	value: unknown,
+): ProjectTaskPrerequisiteRef[] {
+	if (!value || typeof value !== "object") {
+		return [];
+	}
+	const record = value as Record<string, unknown>;
+	if (record.type === "draft" && typeof record.key === "string") {
+		return [{ type: "draft", key: record.key }];
+	}
+	if (record.type === "existing" && typeof record.taskId === "string") {
+		return [{ type: "existing", taskId: record.taskId }];
+	}
+	return [];
+}
+
 function normalizeTaskShapingFieldDrafts(
 	value: unknown,
 ): TaskShapingFieldDrafts {
@@ -416,6 +600,34 @@ function buildTaskShapingRequest(
 	};
 }
 
+function buildProjectTaskShapingRequest(
+	projectId: string,
+	payload: Record<string, unknown>,
+): SendMessageRequest {
+	return {
+		tenant: "",
+		message: {
+			messageId: crypto.randomUUID(),
+			contextId: "",
+			taskId: "",
+			role: Role.ROLE_USER,
+			parts: [
+				textPart("Shape project idea"),
+				dataPart({ projectTaskShaping: { projectId, ...payload } }),
+			],
+			metadata: undefined,
+			extensions: [],
+			referenceTaskIds: [],
+		},
+		configuration: {
+			acceptedOutputModes: ["application/json"],
+			taskPushNotificationConfig: undefined,
+			returnImmediately: false,
+		},
+		metadata: undefined,
+	};
+}
+
 function textPart(text: string): Part {
 	return {
 		content: { $case: "text", value: text },
@@ -471,6 +683,42 @@ function extractTaskShapingTurn(
 				}
 			} catch {
 				// Ignore text parts that are not JSON Task Shaping turns.
+			}
+		}
+	}
+	return null;
+}
+
+function extractProjectTaskShapingOutput(
+	event: StreamResponse,
+): ProjectTaskShapingOutput | null {
+	if (event.payload?.$case !== "artifactUpdate") {
+		return null;
+	}
+	const artifact = event.payload.value.artifact;
+	if (
+		artifact?.artifactId !== PROJECT_TASK_SHAPING_ARTIFACT_ID &&
+		artifact?.name !== PROJECT_TASK_SHAPING_ARTIFACT_NAME
+	) {
+		return null;
+	}
+	for (const part of artifact?.parts ?? []) {
+		if (part.content?.$case === "data") {
+			const output = normalizeProjectTaskShapingOutput(part.content.value);
+			if (output) {
+				return output;
+			}
+		}
+		if (part.content?.$case === "text") {
+			try {
+				const output = normalizeProjectTaskShapingOutput(
+					JSON.parse(part.content.value),
+				);
+				if (output) {
+					return output;
+				}
+			} catch {
+				// Ignore text parts that are not JSON Project Task Shaping output.
 			}
 		}
 	}

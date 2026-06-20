@@ -3,16 +3,17 @@
 from __future__ import annotations
 
 from builtins import list as list_
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.task import Task
+from app.models.task import Task, TaskDependency
 from app.repositories.project_repository import ProjectRepository
 from app.repositories.task_repository import TaskRepository
 from app.schemas.project import ProjectBacklogReorder
 from app.schemas.task import (
+    BacklogTaskBulkCreate,
     TaskCreate,
     TaskRead,
     normalize_task_priority,
@@ -37,15 +38,16 @@ class ProjectBacklogService:
     async def list(self, project_id: UUID, user_id: UUID) -> list_[TaskRead]:
         """Return unfinished non-sprint tasks in Backlog order."""
         project = await self._access.require_project(project_id, user_id)
-        return [
-            task_to_read(task)
-            for task in self._sort_backlog_tasks(
-                await self._task_repository.list_backlog_candidates(
-                    project_id,
-                    project.done_column_id,
-                )
+        tasks = self._sort_backlog_tasks(
+            await self._task_repository.list_backlog_candidates(
+                project_id,
+                project.done_column_id,
             )
-        ]
+        )
+        prerequisites = await self._task_repository.prerequisite_ids_by_task(
+            project_id, {task.id for task in tasks if task.id is not None}
+        )
+        return [task_to_read(task, prerequisites.get(task.id, [])) for task in tasks]
 
     async def reorder(
         self,
@@ -125,6 +127,162 @@ class ProjectBacklogService:
         )
         return task_to_read(await self._task_repository.create(task))
 
+    async def create_tasks_bulk(
+        self,
+        project_id: UUID,
+        user_id: UUID,
+        payload: BacklogTaskBulkCreate,
+    ) -> list_[TaskRead]:
+        """Atomically save reviewed draft tasks into the Backlog."""
+        project = await self._access.require_project(project_id, user_id)
+        assignee_ids = {
+            task.assignee_id for task in payload.tasks if task.assignee_id is not None
+        }
+        if assignee_ids:
+            await self._access.validate_project_users(project_id, assignee_ids)
+
+        columns = await self._project_repository.list_columns_by_project(project_id)
+        column = next(
+            (column for column in columns if column.id != project.done_column_id),
+            None,
+        )
+        if column is None or column.id is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Project has no non-Done columns",
+            )
+
+        backlog_tasks = self._sort_backlog_tasks(
+            await self._task_repository.list_backlog_candidates(
+                project_id,
+                project.done_column_id,
+            )
+        )
+        eligible_existing_ids: set[UUID] = {
+            task.id for task in backlog_tasks if task.id is not None
+        }
+        draft_ids = {draft.key: uuid4() for draft in payload.tasks}
+        self._validate_prerequisites(payload, eligible_existing_ids, draft_ids)
+
+        existing_edges = [
+            (edge.dependent_task_id, edge.prerequisite_task_id)
+            for edge in await self._task_repository.list_dependency_edges(project_id)
+        ]
+        new_edges = self._resolved_edges(payload, draft_ids)
+        self._reject_cycles(existing_edges + new_edges)
+
+        board_rank = await self._next_task_rank(project_id, column.id)
+        first_backlog_rank = backlog_tasks[0].backlog_rank if backlog_tasks else None
+        backlog_rank: str | None = None
+        saved_tasks: list_[Task] = []
+        try:
+            for draft in payload.tasks:
+                backlog_rank = rank_between(backlog_rank, first_backlog_rank)
+                task = Task(
+                    id=draft_ids[draft.key],
+                    project_id=project_id,
+                    sprint_id=None,
+                    column_id=column.id,
+                    title=draft.title,
+                    priority=task_priority_to_storage(draft.priority),
+                    story_points=draft.story_points,
+                    rank=board_rank,
+                    backlog_rank=backlog_rank,
+                    assignee_id=draft.assignee_id,
+                    description=draft.description,
+                    acceptance_criteria=draft.acceptance_criteria,
+                    tag=draft.tag,
+                )
+                board_rank = rank_between(board_rank, None)
+                self._session.add(task)
+                saved_tasks.append(task)
+            self._task_repository.add_dependency_edges(
+                [
+                    TaskDependency(
+                        project_id=project_id,
+                        dependent_task_id=dependent_id,
+                        prerequisite_task_id=prerequisite_id,
+                    )
+                    for dependent_id, prerequisite_id in new_edges
+                ]
+            )
+            await self._session.commit()
+        except Exception:
+            await self._session.rollback()
+            raise
+
+        for task in saved_tasks:
+            await self._session.refresh(task)
+        prerequisites = await self._task_repository.prerequisite_ids_by_task(
+            project_id, set(draft_ids.values())
+        )
+        return [
+            task_to_read(task, prerequisites.get(task.id, [])) for task in saved_tasks
+        ]
+
+    def _validate_prerequisites(
+        self,
+        payload: BacklogTaskBulkCreate,
+        eligible_existing_ids: set[UUID],
+        draft_ids: dict[str, UUID],
+    ) -> None:
+        for draft in payload.tasks:
+            seen: set[tuple[str, str]] = set()
+            for prerequisite in draft.prerequisites:
+                ref = (
+                    prerequisite.type,
+                    prerequisite.key or str(prerequisite.task_id),
+                )
+                if ref in seen:
+                    raise _invalid_bulk_payload("Duplicate prerequisite reference")
+                seen.add(ref)
+                if prerequisite.type == "draft":
+                    if prerequisite.key == draft.key:
+                        raise _invalid_bulk_payload("Task cannot depend on itself")
+                    if prerequisite.key not in draft_ids:
+                        raise _invalid_bulk_payload("Invalid prerequisite reference")
+                elif prerequisite.task_id not in eligible_existing_ids:
+                    raise _invalid_bulk_payload("Invalid prerequisite reference")
+
+    def _resolved_edges(
+        self, payload: BacklogTaskBulkCreate, draft_ids: dict[str, UUID]
+    ) -> list_[tuple[UUID, UUID]]:
+        edges: list_[tuple[UUID, UUID]] = []
+        for draft in payload.tasks:
+            dependent_id = draft_ids[draft.key]
+            for prerequisite in draft.prerequisites:
+                prerequisite_id = (
+                    draft_ids[prerequisite.key]
+                    if prerequisite.type == "draft" and prerequisite.key is not None
+                    else prerequisite.task_id
+                )
+                if prerequisite_id is None or prerequisite_id == dependent_id:
+                    raise _invalid_bulk_payload("Task cannot depend on itself")
+                edges.append((dependent_id, prerequisite_id))
+        return edges
+
+    def _reject_cycles(self, edges: list_[tuple[UUID, UUID]]) -> None:
+        graph: dict[UUID, list_[UUID]] = {}
+        for dependent_id, prerequisite_id in edges:
+            graph.setdefault(dependent_id, []).append(prerequisite_id)
+
+        visiting: set[UUID] = set()
+        visited: set[UUID] = set()
+
+        def visit(task_id: UUID) -> None:
+            if task_id in visiting:
+                raise _invalid_bulk_payload("Task dependencies cannot contain cycles")
+            if task_id in visited:
+                return
+            visiting.add(task_id)
+            for prerequisite_id in graph.get(task_id, []):
+                visit(prerequisite_id)
+            visiting.remove(task_id)
+            visited.add(task_id)
+
+        for task_id in graph:
+            visit(task_id)
+
     @staticmethod
     def _sort_backlog_tasks(tasks: list_[Task]) -> list_[Task]:
         return sorted(
@@ -144,7 +302,9 @@ class ProjectBacklogService:
         return rank_between(tasks[-1].rank, None) if tasks else DEFAULT_TASK_RANK
 
 
-def task_to_read(task: Task) -> TaskRead:
+def task_to_read(
+    task: Task, prerequisite_task_ids: list[UUID] | None = None
+) -> TaskRead:
     """Convert a task model into an API response schema."""
     if task.id is None:
         raise RuntimeError("Task ID is missing")
@@ -165,6 +325,7 @@ def task_to_read(task: Task) -> TaskRead:
         tag=task.tag,
         created_at=task.created_at,
         updated_at=task.updated_at,
+        prerequisite_task_ids=prerequisite_task_ids or [],
     )
 
 
@@ -194,6 +355,12 @@ def rank_between(before: str | None, after: str | None) -> str:
 
         prefix = f"{prefix}{RANK_ALPHABET[before_digit]}"
         index += 1
+
+
+def _invalid_bulk_payload(detail: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=detail
+    )
 
 
 def _rank_for_index(index: int) -> str:

@@ -1,6 +1,8 @@
 // @ts-nocheck
 /* tslint:disable */
 /* eslint-disable */
+export * from './BacklogTaskBulkCreate';
+export * from './BacklogTaskDraftCreate';
 export * from './HTTPValidationError';
 export * from './LocationInner';
 export * from './ProjectBacklogReorder';
@@ -26,6 +28,7 @@ export * from './ProjectSprintUpdate';
 export * from './ProjectUpdate';
 export * from './TaskCreate';
 export * from './TaskDestination';
+export * from './TaskPrerequisiteRef';
 export * from './TaskRead';
 export * from './TaskUpdate';
 export * from './UserCreate';

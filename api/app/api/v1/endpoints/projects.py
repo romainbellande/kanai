@@ -30,7 +30,7 @@ from app.schemas.project import (
     ProjectSprintUpdate,
     ProjectUpdate,
 )
-from app.schemas.task import TaskCreate, TaskRead
+from app.schemas.task import BacklogTaskBulkCreate, TaskCreate, TaskRead
 from app.services.project_chat_fanout import project_chat_fanout
 from app.services.project_chat_service import ProjectChatService
 from app.services.project_column_service import ProjectColumnService
@@ -168,6 +168,25 @@ async def reorder_project_backlog(
 ) -> list[TaskRead]:
     """Persist a complete manual Backlog task order."""
     return await ProjectBacklogService(session).reorder(
+        project_id,
+        require_current_user_id(current_user.id),
+        payload,
+    )
+
+
+@project_router.post(
+    "/{project_id}/backlog/tasks/bulk",
+    response_model=list[TaskRead],
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_project_backlog_tasks_bulk(
+    project_id: UUID,
+    payload: BacklogTaskBulkCreate,
+    session: DatabaseSession,
+    current_user: CurrentUser,
+) -> list[TaskRead]:
+    """Atomically save reviewed draft tasks into the project Backlog."""
+    return await ProjectBacklogService(session).create_tasks_bulk(
         project_id,
         require_current_user_id(current_user.id),
         payload,

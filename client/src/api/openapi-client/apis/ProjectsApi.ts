@@ -16,6 +16,7 @@
 
 import * as runtime from '../runtime';
 import type {
+  BacklogTaskBulkCreate,
   HTTPValidationError,
   ProjectBacklogReorder,
   ProjectChatMessageRead,
@@ -42,6 +43,8 @@ import type {
   TaskUpdate,
 } from '../models/index';
 import {
+    BacklogTaskBulkCreateFromJSON,
+    BacklogTaskBulkCreateToJSON,
     HTTPValidationErrorFromJSON,
     HTTPValidationErrorToJSON,
     ProjectBacklogReorderFromJSON,
@@ -109,6 +112,11 @@ export interface CloseActiveProjectSprintProjectsProjectIdSprintsActiveClosePost
 export interface CreateProjectBacklogTaskProjectsProjectIdBacklogTasksPostRequest {
     projectId: string;
     taskCreate: TaskCreate;
+}
+
+export interface CreateProjectBacklogTasksBulkProjectsProjectIdBacklogTasksBulkPostRequest {
+    projectId: string;
+    backlogTaskBulkCreate: BacklogTaskBulkCreate;
 }
 
 export interface CreateProjectColumnProjectsProjectIdColumnsPostRequest {
@@ -458,6 +466,63 @@ export class ProjectsApi extends runtime.BaseAPI {
      */
     async createProjectBacklogTaskProjectsProjectIdBacklogTasksPost(requestParameters: CreateProjectBacklogTaskProjectsProjectIdBacklogTasksPostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<TaskRead> {
         const response = await this.createProjectBacklogTaskProjectsProjectIdBacklogTasksPostRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for createProjectBacklogTasksBulkProjectsProjectIdBacklogTasksBulkPost without sending the request
+     */
+    async createProjectBacklogTasksBulkProjectsProjectIdBacklogTasksBulkPostRequestOpts(requestParameters: CreateProjectBacklogTasksBulkProjectsProjectIdBacklogTasksBulkPostRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling createProjectBacklogTasksBulkProjectsProjectIdBacklogTasksBulkPost().'
+            );
+        }
+
+        if (requestParameters['backlogTaskBulkCreate'] == null) {
+            throw new runtime.RequiredError(
+                'backlogTaskBulkCreate',
+                'Required parameter "backlogTaskBulkCreate" was null or undefined when calling createProjectBacklogTasksBulkProjectsProjectIdBacklogTasksBulkPost().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+
+        let urlPath = `/projects/{project_id}/backlog/tasks/bulk`;
+        urlPath = urlPath.replace(`{${"project_id"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        return {
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+            body: BacklogTaskBulkCreateToJSON(requestParameters['backlogTaskBulkCreate']),
+        };
+    }
+
+    /**
+     * Atomically save reviewed draft tasks into the project Backlog.
+     * Create Project Backlog Tasks Bulk
+     */
+    async createProjectBacklogTasksBulkProjectsProjectIdBacklogTasksBulkPostRaw(requestParameters: CreateProjectBacklogTasksBulkProjectsProjectIdBacklogTasksBulkPostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Array<TaskRead>>> {
+        const requestOptions = await this.createProjectBacklogTasksBulkProjectsProjectIdBacklogTasksBulkPostRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(TaskReadFromJSON));
+    }
+
+    /**
+     * Atomically save reviewed draft tasks into the project Backlog.
+     * Create Project Backlog Tasks Bulk
+     */
+    async createProjectBacklogTasksBulkProjectsProjectIdBacklogTasksBulkPost(requestParameters: CreateProjectBacklogTasksBulkProjectsProjectIdBacklogTasksBulkPostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Array<TaskRead>> {
+        const response = await this.createProjectBacklogTasksBulkProjectsProjectIdBacklogTasksBulkPostRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

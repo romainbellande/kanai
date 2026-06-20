@@ -3,8 +3,54 @@
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Uuid, func
+from sqlalchemy import (
+    CheckConstraint,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Uuid,
+    func,
+)
 from sqlmodel import Field, SQLModel
+
+
+class TaskDependency(SQLModel, table=True):
+    """Directed task dependency edge within one project."""
+
+    __tablename__ = "task_dependencies"  # type: ignore[bad-override]
+    __table_args__ = (
+        CheckConstraint(
+            "dependent_task_id != prerequisite_task_id",
+            name="ck_task_dependencies_no_self_edge",
+        ),
+    )
+
+    project_id: UUID = Field(
+        sa_column=Column(
+            Uuid(),
+            ForeignKey("projects.id", ondelete="CASCADE"),
+            primary_key=True,
+            nullable=False,
+        ),
+    )
+    dependent_task_id: UUID = Field(
+        sa_column=Column(
+            Uuid(),
+            ForeignKey("tasks.id", ondelete="CASCADE"),
+            primary_key=True,
+            nullable=False,
+        ),
+    )
+    prerequisite_task_id: UUID = Field(
+        sa_column=Column(
+            Uuid(),
+            ForeignKey("tasks.id", ondelete="CASCADE"),
+            primary_key=True,
+            nullable=False,
+        ),
+    )
 
 
 class Task(SQLModel, table=True):

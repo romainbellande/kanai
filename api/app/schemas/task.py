@@ -1,7 +1,7 @@
 """Schemas for project task request and response payloads."""
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -176,6 +176,77 @@ class TaskDestination(BaseModel):
     after_task_id: UUID | None = None
 
 
+class TaskPrerequisiteRef(BaseModel):
+    """Reviewed draft prerequisite reference."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["draft", "existing"]
+    key: str | None = None
+    task_id: UUID | None = None
+
+    @model_validator(mode="after")
+    def require_matching_value(self) -> "TaskPrerequisiteRef":
+        if self.type == "draft" and not (self.key and self.key.strip()):
+            raise ValueError("draft prerequisite key is required")
+        if self.type == "existing" and self.task_id is None:
+            raise ValueError("existing prerequisite task_id is required")
+        if self.type == "draft" and self.task_id is not None:
+            raise ValueError("draft prerequisite cannot include task_id")
+        if self.type == "existing" and self.key is not None:
+            raise ValueError("existing prerequisite cannot include key")
+        return self
+
+
+class BacklogTaskDraftCreate(BaseModel):
+    """Reviewed generated Backlog task draft."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    key: str = Field(min_length=1, max_length=80)
+    title: str = Field(min_length=1, max_length=200)
+    priority: str | None = None
+    story_points: int | None = None
+    assignee_id: UUID | None = None
+    description: str | None = Field(default=None, max_length=8000)
+    acceptance_criteria: str | None = Field(default=None, max_length=8000)
+    tag: str | None = Field(default=None, max_length=100)
+    prerequisites: list[TaskPrerequisiteRef] = Field(default_factory=list, max_length=5)
+
+    @field_validator("key", "title")
+    @classmethod
+    def reject_blank_text(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("value cannot be blank")
+        return value
+
+    @field_validator("priority")
+    @classmethod
+    def normalize_priority(cls, priority: str | None) -> str | None:
+        return normalize_task_priority(priority)
+
+    @field_validator("story_points", mode="before")
+    @classmethod
+    def validate_story_points(cls, story_points: Any) -> int | None:
+        return normalize_story_points(story_points)
+
+
+class BacklogTaskBulkCreate(BaseModel):
+    """Atomic reviewed draft save request."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    tasks: list[BacklogTaskDraftCreate] = Field(min_length=1, max_length=12)
+
+    @model_validator(mode="after")
+    def reject_duplicate_keys(self) -> "BacklogTaskBulkCreate":
+        keys = [task.key.casefold() for task in self.tasks]
+        if len(set(keys)) != len(keys):
+            raise ValueError("Task draft keys must be unique")
+        return self
+
+
 class TaskRead(BaseModel):
     """Response payload for reading a project task.
 
@@ -214,3 +285,4 @@ class TaskRead(BaseModel):
     tag: str | None
     created_at: datetime | None
     updated_at: datetime | None
+    prerequisite_task_ids: list[UUID] = Field(default_factory=list)

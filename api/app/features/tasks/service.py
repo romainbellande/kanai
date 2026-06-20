@@ -88,7 +88,10 @@ class TaskService:
         """List tasks for a project accessible to a user."""
         await self._project_access.require_project(project_id, user_id)
         tasks = await self._repository.list_by_project(project_id)
-        return [task_to_read(task) for task in tasks]
+        prerequisites = await self._repository.prerequisite_ids_by_task(
+            project_id, {task.id for task in tasks if task.id is not None}
+        )
+        return [task_to_read(task, prerequisites.get(task.id, [])) for task in tasks]
 
     async def list_active_sprint(
         self, *, project_id: UUID, user_id: UUID
@@ -104,7 +107,10 @@ class TaskService:
         tasks = await self._repository.list_by_project_and_sprint(
             project_id, active_sprint.id
         )
-        return [task_to_read(task) for task in tasks]
+        prerequisites = await self._repository.prerequisite_ids_by_task(
+            project_id, {task.id for task in tasks if task.id is not None}
+        )
+        return [task_to_read(task, prerequisites.get(task.id, [])) for task in tasks]
 
     async def get(self, *, project_id: UUID, task_id: UUID, user_id: UUID) -> TaskRead:
         """Get a single task from a project accessible to a user."""
@@ -114,7 +120,10 @@ class TaskService:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Task not found"
             )
-        return task_to_read(task)
+        prerequisites = await self._repository.prerequisite_ids_by_task(
+            project_id, {task_id}
+        )
+        return task_to_read(task, prerequisites.get(task_id, []))
 
     async def update(
         self,
@@ -146,7 +155,11 @@ class TaskService:
         for field_name, value in updates.items():
             setattr(task, field_name, value)
 
-        return task_to_read(await self._repository.update(task))
+        updated = await self._repository.update(task)
+        prerequisites = await self._repository.prerequisite_ids_by_task(
+            project_id, {task_id}
+        )
+        return task_to_read(updated, prerequisites.get(task_id, []))
 
     async def move(
         self,
@@ -169,7 +182,10 @@ class TaskService:
             project_id, destination.column_id
         )
         if _is_same_position(task, ordered_destination_tasks, destination):
-            return task_to_read(task)
+            prerequisites = await self._repository.prerequisite_ids_by_task(
+                project_id, {task_id}
+            )
+            return task_to_read(task, prerequisites.get(task_id, []))
 
         destination_tasks = [
             destination_task
@@ -192,7 +208,11 @@ class TaskService:
 
         task.column_id = destination.column_id
         task.rank = rank_between(before_rank, after_rank)
-        return task_to_read(await self._repository.update(task))
+        updated = await self._repository.update(task)
+        prerequisites = await self._repository.prerequisite_ids_by_task(
+            project_id, {task_id}
+        )
+        return task_to_read(updated, prerequisites.get(task_id, []))
 
     async def delete(self, *, project_id: UUID, task_id: UUID, user_id: UUID) -> None:
         """Delete a task from a project accessible to a user."""
@@ -290,7 +310,7 @@ async def next_task_rank(
     return rank_between(tasks[-1].rank, None) if tasks else DEFAULT_TASK_RANK
 
 
-def task_to_read(task: Task) -> TaskRead:
+def task_to_read(task: Task, prerequisite_task_ids: list[UUID] | None = None) -> TaskRead:
     """Convert a task ORM model into an API response schema."""
     if task.id is None:
         raise RuntimeError("Task ID is missing")
@@ -311,6 +331,7 @@ def task_to_read(task: Task) -> TaskRead:
         tag=task.tag,
         created_at=task.created_at,
         updated_at=task.updated_at,
+        prerequisite_task_ids=prerequisite_task_ids or [],
     )
 
 
