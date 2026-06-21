@@ -28,7 +28,7 @@ jobs:
 
       - name: Typecheck API
         working-directory: api
-        run: uvx ty check
+        run: uv run --frozen --with ty ty check
 
   api-tests:
     name: api - tests
