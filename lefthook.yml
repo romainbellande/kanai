@@ -66,6 +66,11 @@ pre-commit:
       glob: "*.{ts,tsx,js,jsx,json,html}"
       root: ./client
 
+    - name: client - build
+      run: bun run build
+      glob: "*.{ts,tsx,js,jsx,json,html}"
+      root: ./client
+
     - name: client - format
       run: bunx biome format --write .
       stage_fixed: true
