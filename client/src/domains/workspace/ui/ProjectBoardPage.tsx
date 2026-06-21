@@ -85,6 +85,7 @@ import {
 	useProjectTaskBoard,
 } from "#/domains/workspace/model/useProjectTaskBoard";
 import { WorkspaceIconButton } from "#/domains/workspace/ui/atoms/WorkspaceIconButton";
+import { BurndownChart } from "#/domains/workspace/ui/molecules/BurndownChart";
 import { SidebarNavItem } from "#/domains/workspace/ui/molecules/SidebarNavItem";
 import { ProjectBacklogShapingFlow } from "#/domains/workspace/ui/ProjectBacklogShapingFlow";
 import type { SidebarItem } from "#/domains/workspace/ui/types";
@@ -904,6 +905,8 @@ function ActiveSprintSummary({
 	goal,
 	pointSummary,
 	hasDoneColumn,
+	totalTasks,
+	remainingTasks,
 	isProjectOwner,
 	isEditing,
 	editPlannedStartDate,
@@ -926,6 +929,8 @@ function ActiveSprintSummary({
 	goal: string | null;
 	pointSummary: SprintPointSummary;
 	hasDoneColumn: boolean;
+	totalTasks: number;
+	remainingTasks: number;
 	isProjectOwner: boolean;
 	isEditing: boolean;
 	editPlannedStartDate: string;
@@ -994,6 +999,16 @@ function ActiveSprintSummary({
 							</p>
 						) : null}
 					</div>
+					{hasDoneColumn && pointSummary.estimatedPoints > 0 ? (
+						<BurndownChart
+							plannedStartDate={plannedStartDate}
+							plannedEndDate={plannedEndDate}
+							totalPoints={pointSummary.estimatedPoints}
+							totalTasks={totalTasks}
+							remainingPoints={pointSummary.remainingPoints}
+							remainingTasks={remainingTasks}
+						/>
+					) : null}
 				</div>
 				<div className="flex max-w-xl flex-1 flex-col items-end gap-3">
 					{goal ? (
@@ -1703,6 +1718,17 @@ function ProjectSprintHistoryView({
 									</p>
 								)}
 							</div>
+							<BurndownChart
+								plannedStartDate={entry.sprint.plannedStartDate}
+								plannedEndDate={entry.sprint.plannedEndDate}
+								closedAt={entry.sprint.closedAt?.toISOString().slice(0, 10)}
+								totalPoints={pointSummary.estimatedPoints}
+								totalTasks={
+									pointSummary.estimatedPoints > 0 ? entry.snapshots.length : 0
+								}
+								remainingPoints={pointSummary.unfinishedPoints}
+								remainingTasks={entry.unfinishedCount}
+							/>
 							<div className="mt-4 grid gap-4 md:grid-cols-2">
 								<HistoricalTaskGroup
 									projectId={projectId}
@@ -3584,6 +3610,14 @@ export function ProjectBoardContent({
 								onEditPlannedStartDateChange={setEditSprintStartDate}
 								onEditPlannedEndDateChange={setEditSprintEndDate}
 								onEditGoalChange={setEditSprintGoal}
+								totalTasks={activeSprintTasks.length}
+								remainingTasks={
+									doneColumn?.doneColumnId
+										? activeSprintTasks.filter(
+												(t) => t.columnId !== doneColumn.doneColumnId,
+											).length
+										: activeSprintTasks.length
+								}
 							/>
 						) : null}
 						{closeSprintError && closePreview === null ? (
