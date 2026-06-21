@@ -16,6 +16,7 @@ import {
 	STORY_POINT_OPTIONS,
 	useTaskForm,
 } from "#/domains/workspace/model/useTaskForm";
+import { TaskPrerequisitesField } from "#/domains/workspace/ui/TaskPrerequisitesField";
 import { TaskShapingChat } from "#/domains/workspace/ui/TaskShapingChat";
 import { WorkspaceLayout } from "#/domains/workspace/ui/templates/WorkspaceLayout";
 
@@ -260,6 +261,13 @@ export function CreateTaskPage({
 									onChange={(event) => form.setField("tag", event.target.value)}
 								/>
 							</Field>
+
+							<TaskPrerequisitesField
+								columns={columnsQuery.data}
+								onChange={form.setPrerequisiteTaskIds}
+								projectId={projectId}
+								selectedTaskIds={form.values.prerequisiteTaskIds}
+							/>
 
 							<div className="sm:col-span-2 rounded-2xl border border-dashed border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-4 text-sm leading-6 text-[var(--on-surface-variant)]">
 								Assignees are not editable until the user directory API is

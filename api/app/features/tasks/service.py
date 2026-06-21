@@ -8,7 +8,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.project import ProjectColumn
-from app.models.task import Task
+from app.models.task import Task, TaskDependency
 from app.repositories.project_repository import ProjectRepository
 from app.repositories.task_repository import TaskRepository
 from app.schemas.task import (
@@ -82,12 +82,41 @@ class TaskService:
             acceptance_criteria=payload.acceptance_criteria,
             tag=payload.tag,
         )
-        return task_to_read(await self._repository.create(task))
+        try:
+            self._session.add(task)
+            await self._session.flush()
+            if task.id is None:
+                raise RuntimeError("Task ID is missing")
+            await self._replace_prerequisites(
+                project_id, task.id, payload.prerequisite_task_ids
+            )
+            await self._session.commit()
+            await self._session.refresh(task)
+        except Exception:
+            await self._session.rollback()
+            raise
+        return task_to_read(task, payload.prerequisite_task_ids)
 
-    async def list(self, *, project_id: UUID, user_id: UUID) -> list[TaskRead]:
+    async def list(
+        self,
+        *,
+        project_id: UUID,
+        user_id: UUID,
+        title: str | None = None,
+        limit: int | None = None,
+        exclude_task_id: UUID | None = None,
+    ) -> list[TaskRead]:
         """List tasks for a project accessible to a user."""
         await self._project_access.require_project(project_id, user_id)
-        tasks = await self._repository.list_by_project(project_id)
+        if title is None and limit is None and exclude_task_id is None:
+            tasks = await self._repository.list_by_project(project_id)
+        else:
+            tasks = await self._repository.search_prerequisite_candidates(
+                project_id,
+                title=title,
+                limit=limit or 10,
+                exclude_task_id=exclude_task_id,
+            )
         prerequisites = await self._repository.prerequisite_ids_by_task(
             project_id, {task.id for task in tasks if task.id is not None}
         )
@@ -151,15 +180,24 @@ class TaskService:
 
         if "priority" in updates:
             updates["priority"] = task_priority_to_storage(payload.priority)
+        prerequisite_task_ids = updates.pop("prerequisite_task_ids", None)
 
-        for field_name, value in updates.items():
-            setattr(task, field_name, value)
-
-        updated = await self._repository.update(task)
+        try:
+            for field_name, value in updates.items():
+                setattr(task, field_name, value)
+            if prerequisite_task_ids is not None:
+                await self._replace_prerequisites(
+                    project_id, task_id, prerequisite_task_ids
+                )
+            await self._session.commit()
+            await self._session.refresh(task)
+        except Exception:
+            await self._session.rollback()
+            raise
         prerequisites = await self._repository.prerequisite_ids_by_task(
             project_id, {task_id}
         )
-        return task_to_read(updated, prerequisites.get(task_id, []))
+        return task_to_read(task, prerequisites.get(task_id, []))
 
     async def move(
         self,
@@ -256,6 +294,75 @@ class TaskService:
             )
 
         return column
+
+    async def _replace_prerequisites(
+        self,
+        project_id: UUID,
+        task_id: UUID,
+        prerequisite_task_ids: list[UUID],
+    ) -> None:
+        if len(set(prerequisite_task_ids)) != len(prerequisite_task_ids):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Prerequisite tasks must be unique",
+            )
+        prerequisite_ids = set(prerequisite_task_ids)
+        if task_id in prerequisite_ids:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="A task cannot depend on itself",
+            )
+        matches = await self._repository.list_by_project_ids(project_id, prerequisite_ids)
+        if {task.id for task in matches if task.id is not None} != prerequisite_ids:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Prerequisite tasks must belong to the project",
+            )
+        await self._reject_dependency_cycle(project_id, task_id, prerequisite_ids)
+        await self._repository.delete_outgoing_dependency_edges(task_id)
+        self._repository.add_dependency_edges(
+            [
+                TaskDependency(
+                    project_id=project_id,
+                    dependent_task_id=task_id,
+                    prerequisite_task_id=prerequisite_id,
+                )
+                for prerequisite_id in prerequisite_task_ids
+            ]
+        )
+
+    async def _reject_dependency_cycle(
+        self, project_id: UUID, task_id: UUID, prerequisite_ids: set[UUID]
+    ) -> None:
+        graph: dict[UUID, set[UUID]] = {}
+        for edge in await self._repository.list_dependency_edges(project_id):
+            if edge.dependent_task_id != task_id:
+                graph.setdefault(edge.dependent_task_id, set()).add(
+                    edge.prerequisite_task_id
+                )
+        graph[task_id] = prerequisite_ids
+
+        visiting: set[UUID] = set()
+        visited: set[UUID] = set()
+
+        def visit(node: UUID) -> bool:
+            if node in visiting:
+                return True
+            if node in visited:
+                return False
+            visiting.add(node)
+            for prerequisite_id in graph.get(node, set()):
+                if visit(prerequisite_id):
+                    return True
+            visiting.remove(node)
+            visited.add(node)
+            return False
+
+        if visit(task_id):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Prerequisite tasks cannot create a cycle",
+            )
 
     def _first_non_done_column(
         self,

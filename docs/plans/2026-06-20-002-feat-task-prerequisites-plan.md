@@ -1,7 +1,7 @@
 ---
 title: feat: Add Task Prerequisites to Task Forms
 type: feat
-status: active
+status: completed
 date: 2026-06-20
 origin: docs/brainstorms/2026-06-20-task-prerequisites-requirements.md
 ---

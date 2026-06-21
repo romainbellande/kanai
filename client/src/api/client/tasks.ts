@@ -47,7 +47,10 @@ export type BulkCreateProjectBacklogTasksInput = {
 	tasks: BacklogTaskDraftInput[];
 };
 
-export type CreateTaskInput = TaskCreate;
+export type CreateTaskInput = Omit<TaskCreate, "columnId"> & {
+	columnId?: string;
+	prerequisiteTaskIds?: string[];
+};
 export type CreateProjectTaskInput = CreateTaskInput & {
 	includeInActiveSprint?: boolean;
 };
@@ -57,16 +60,26 @@ export type ReorderProjectBacklogInput = {
 export type AddProjectSprintTaskInput = {
 	taskId: string;
 };
-export type UpdateTaskInput = TaskUpdate;
+export type UpdateTaskInput = Omit<TaskUpdate, "columnId"> & {
+	columnId?: string;
+	prerequisiteTaskIds?: string[];
+};
+export type ListProjectTasksInput = {
+	title?: string;
+	limit?: number;
+	excludeTaskId?: string;
+};
 export type MoveTaskInput = TaskDestination;
 
 export class ProjectTaskRequestError extends Error {
 	readonly status: number;
+	readonly detail: unknown;
 
-	constructor(status: number) {
+	constructor(status: number, detail?: unknown) {
 		super(`Project task request failed with ${status}.`);
 		this.name = "ProjectTaskRequestError";
 		this.status = status;
+		this.detail = detail;
 	}
 }
 
@@ -146,6 +159,7 @@ function taskInputToJson(values: CreateProjectTaskInput | UpdateTaskInput) {
 		description: values.description,
 		acceptance_criteria: values.acceptanceCriteria,
 		tag: values.tag,
+		prerequisite_task_ids: values.prerequisiteTaskIds,
 	};
 }
 
@@ -191,16 +205,42 @@ async function requestProjectTasks<T>(
 	});
 
 	if (!response.ok) {
-		throw new ProjectTaskRequestError(response.status);
+		let detail: unknown;
+		try {
+			detail = (await response.clone().json()).detail;
+		} catch {
+			detail = undefined;
+		}
+		throw new ProjectTaskRequestError(response.status, detail);
 	}
 
 	return response.json() as Promise<T>;
 }
 
-export async function listProjectTasks(projectId: string): Promise<Task[]> {
+function projectTasksPath(projectId: string, params?: ListProjectTasksInput) {
+	const search = new URLSearchParams();
+	if (params?.title !== undefined) {
+		search.set("title", params.title);
+	}
+	if (params?.limit !== undefined) {
+		search.set("limit", String(params.limit));
+	}
+	if (params?.excludeTaskId !== undefined) {
+		search.set("exclude_task_id", params.excludeTaskId);
+	}
+	const query = search.toString();
+	return `/projects/${projectId}/tasks${query ? `?${query}` : ""}`;
+}
+
+export async function listProjectTasks(
+	projectId: string,
+	params?: ListProjectTasksInput,
+): Promise<Task[]> {
 	const tasks = await requestProjectTasks<TaskJson[]>(
-		`/projects/${projectId}/tasks`,
-		{ method: "GET" },
+		projectTasksPath(projectId, params),
+		{
+			method: "GET",
+		},
 	);
 
 	return tasks.map(mapTask);
@@ -365,6 +405,29 @@ export function projectTasksQueryOptions(projectId: string) {
 	return queryOptions({
 		queryKey: projectTasksQueryKey(projectId),
 		queryFn: () => listProjectTasks(projectId),
+	});
+}
+
+export function projectTaskPrerequisiteCandidatesQueryKey(
+	projectId: string,
+	params: ListProjectTasksInput,
+) {
+	return [
+		"projects",
+		projectId,
+		"tasks",
+		"prerequisite-candidates",
+		params,
+	] as const;
+}
+
+export function projectTaskPrerequisiteCandidatesQueryOptions(
+	projectId: string,
+	params: ListProjectTasksInput,
+) {
+	return queryOptions({
+		queryKey: projectTaskPrerequisiteCandidatesQueryKey(projectId, params),
+		queryFn: () => listProjectTasks(projectId, params),
 	});
 }
 

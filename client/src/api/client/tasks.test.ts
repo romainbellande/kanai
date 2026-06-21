@@ -309,6 +309,31 @@ describe("tasks client", () => {
 		);
 	});
 
+	it("builds prerequisite candidate search query params", async () => {
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test/");
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({ accessToken: "task-token" }),
+		);
+		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(JSON.stringify([]), {
+				headers: { "content-type": "application/json" },
+				status: 200,
+			}),
+		);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		await listProjectTasks("project-1", {
+			title: "draft",
+			limit: 10,
+			excludeTaskId: "task-1",
+		});
+
+		expect(fetchSpy.mock.calls[0][0]).toBe(
+			"https://api.example.test/projects/project-1/tasks?title=draft&limit=10&exclude_task_id=task-1",
+		);
+	});
+
 	it("maps blank task priority responses to null", async () => {
 		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test/");
 		window.sessionStorage.setItem(

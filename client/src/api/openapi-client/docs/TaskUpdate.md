@@ -15,6 +15,7 @@ Name | Type
 `description` | string
 `acceptanceCriteria` | string
 `tag` | string
+`prerequisiteTaskIds` | Array&lt;string&gt;
 
 ## Example
 
@@ -31,6 +32,7 @@ const example = {
   "description": null,
   "acceptanceCriteria": null,
   "tag": null,
+  "prerequisiteTaskIds": null,
 } satisfies TaskUpdate
 
 console.log(example)

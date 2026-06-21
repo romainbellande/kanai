@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 
 from app.api.deps import CurrentUser, DatabaseSession
 from app.schemas.task import TaskCreate, TaskDestination, TaskRead, TaskUpdate
@@ -42,6 +42,9 @@ async def list_tasks_endpoint(
     project_id: UUID,
     session: DatabaseSession,
     current_user: CurrentUser,
+    title: str | None = Query(default=None),
+    limit: int | None = Query(default=None, ge=1, le=50),
+    exclude_task_id: UUID | None = Query(default=None),
 ) -> list[TaskRead]:
     """List tasks for a project accessible to the current user."""
     from app.features.tasks import TaskService
@@ -49,6 +52,9 @@ async def list_tasks_endpoint(
     return await TaskService(session).list(
         project_id=project_id,
         user_id=_require_current_user_id(current_user.id),
+        title=title,
+        limit=limit,
+        exclude_task_id=exclude_task_id,
     )
 
 

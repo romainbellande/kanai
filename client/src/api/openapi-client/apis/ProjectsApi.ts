@@ -196,6 +196,9 @@ export interface ListProjectSprintHistoryProjectsProjectIdSprintsHistoryGetReque
 
 export interface ListTasksEndpointProjectsProjectIdTasksGetRequest {
     projectId: string;
+    title?: string | null;
+    limit?: number | null;
+    excludeTaskId?: string | null;
 }
 
 export interface MoveTaskEndpointProjectsProjectIdTasksTaskIdMovePutRequest {
@@ -1433,6 +1436,18 @@ export class ProjectsApi extends runtime.BaseAPI {
         }
 
         const queryParameters: any = {};
+
+        if (requestParameters['title'] != null) {
+            queryParameters['title'] = requestParameters['title'];
+        }
+
+        if (requestParameters['limit'] != null) {
+            queryParameters['limit'] = requestParameters['limit'];
+        }
+
+        if (requestParameters['excludeTaskId'] != null) {
+            queryParameters['exclude_task_id'] = requestParameters['excludeTaskId'];
+        }
 
         const headerParameters: runtime.HTTPHeaders = {};
 
