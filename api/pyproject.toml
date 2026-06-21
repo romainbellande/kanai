@@ -34,3 +34,15 @@ dev = [
     "pytest-xdist>=3.8.0",
     "ruff>=0.15.6",
 ]
+
+[tool.pytest_env]
+DATABASE_URL = "sqlite+aiosqlite:///./test.db"
+REDIS_URL = "redis://localhost:6379/0"
+ENVIRONMENT = "local"
+CLIENT_ORIGIN = "http://localhost:5173"
+PUBLIC_API_BASE_URL = "https://api.example.test"
+AUTH__DISCOVERY_ENDPOINT = "https://example.test/.well-known/openid-configuration"
+AUTH__AUDIENCE = "kanai-api"
+AI__MODEL_NAME = "test-model"
+AI__BASE_URL = "https://ai.example.test/v1"
+AI__API_KEY = "test-api-key"
