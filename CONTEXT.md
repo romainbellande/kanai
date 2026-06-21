@@ -16,6 +16,22 @@ _Avoid_: Admin, manager
 A descriptive Project lifecycle label with one of four values: Active, Paused, Blocked, or Done.
 _Avoid_: Project phase, project health
 
+**Project Dashboard**:
+A Project analytics view that summarizes planning flow, delivery pace, and work health separately from the workflow board.
+_Avoid_: Project board, sprint history, reporting tab
+
+**Project Analytics History**:
+The time-based record of Project Task scope, workflow state, and completion changes used to explain delivery trends.
+_Avoid_: Reporting cache, chart data, metrics table
+
+**Project Task Change Event**:
+A recorded Project Task lifecycle change that can be used to reconstruct Project Analytics History.
+_Avoid_: Daily snapshot, audit log, chart point
+
+**Project Task Cycle Time**:
+The elapsed time from a Project Task first entering workflow execution until it becomes a Finished Task.
+_Avoid_: Lead time, task age, backlog wait
+
 **Project Member**:
 A Project participant who can work with project tasks and Sprint Membership.
 _Avoid_: Contributor, teammate
@@ -35,6 +51,10 @@ _Avoid_: Task notes, work notes, task body
 **Task Prerequisite**:
 A Project Task that must be considered before another Project Task can proceed.
 _Avoid_: Depends-on task, blocker, task dependency
+
+**Blocked Project Task**:
+A Project Task explicitly marked as unable to proceed, separate from Project Status and Task Prerequisites.
+_Avoid_: Blocker, blocked project, unmet prerequisite
 
 **Task Shaping Chat**:
 An agent-assisted conversation that interviews a Project Member to refine a Project Task before it is saved.
@@ -88,6 +108,10 @@ _Avoid_: Open sprint, running sprint
 A Task selected for a Sprint.
 _Avoid_: Sprint item, committed issue
 
+**Sprint Scope**:
+The Story Point total and Project Task count selected into Sprints for Project Dashboard scope tracking.
+_Avoid_: Project scope, backlog scope, release scope
+
 **Backlog Task**:
 A Task that is unfinished and not selected for the Current Sprint.
 _Avoid_: Unplanned task, unsprinted task
@@ -99,6 +123,10 @@ _Avoid_: Icebox, unscheduled work, workflow column, backlog column
 **Backlog Order**:
 The manual priority order of Backlog Tasks in a Project.
 _Avoid_: Queue order, backlog rank
+
+**Workflow Column**:
+A Project-owned board lane that groups Project Tasks by their current workflow position.
+_Avoid_: Dashboard state, task status, sprint state
 
 **Story Points**:
 An optional Task sizing value for planning work, using the point scale 1, 2, 3, 5, 8, or 13.
@@ -143,3 +171,7 @@ _Avoid_: Final column, completed lane
 **Finished Task**:
 A Task in the Done Column.
 _Avoid_: Completed task, closed task
+
+**Reworked Task**:
+A Project Task that was a Finished Task and later moved out of the Done Column.
+_Avoid_: Defect, bug, review bounce
