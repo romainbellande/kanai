@@ -24,7 +24,7 @@ This file is for coding agents working in `/home/naimor/dev/kanai/api`.
 - `app/models/`, `app/schemas/`, `app/repositories/`, and `app/services/` hold persistence models, API contracts, persistence adapters, and business logic.
 - `app/db/migrations/` contains Alembic migration environment files and revisions.
 - `Justfile` is the main command entrypoint for local workflows.
-- `pyproject.toml` currently defines dependencies only; there is no tool-specific config block yet.
+- `pyproject.toml` defines dependencies and pytest environment defaults under `[tool.pytest_env]`.
 
 ## Setup Commands
 
@@ -63,10 +63,10 @@ This file is for coding agents working in `/home/naimor/dev/kanai/api`.
 
 ## Current Testing State
 
-- No `tests/` directory exists yet.
-- No `pytest.ini`, `tox.ini`, or `conftest.py` exists yet.
-- Pytest behavior is currently defined by direct command flags in `Justfile`.
-- If you add tests, create a `tests/` package at the repo root unless a clearer layout emerges.
+- Tests live under `tests/`, with shared fixtures in `tests/conftest.py`.
+- Architecture boundary tests live under `tests/architecture/`; keep them passing when moving modules or changing feature boundaries.
+- Pytest environment defaults are configured in `pyproject.toml` under `[tool.pytest_env]`.
+- Pytest execution flags are primarily defined by `Justfile` recipes.
 
 ## Code Style Baseline
 

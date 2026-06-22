@@ -2,7 +2,7 @@
 
 ## Scope
 
-These instructions apply to the `/home/naimor/dev/perso/kanai/client` app.
+These instructions apply to the `/home/naimor/dev/kanai/client` app.
 
 ## Package Manager
 

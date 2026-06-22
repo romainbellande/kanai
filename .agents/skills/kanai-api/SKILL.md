@@ -24,6 +24,7 @@ Use this skill for backend work under `api/`, especially API routes, database mo
 - `api/app/db/migrations/` contains Alembic environment files and revisions.
 - `api/app/integrations/` contains external service clients/providers.
 - `api/app/utils/` contains shared utility helpers.
+- `api/tests/architecture/` contains boundary tests for bounded contexts, domain dependencies, feature modules, and shared services.
 
 ## Migration Policy
 
@@ -48,5 +49,7 @@ Use this skill for backend work under `api/`, especially API routes, database mo
 
 - Run backend commands from `api/`.
 - Prefer `just typecheck` and `just tests` for normal verification.
+- `just typecheck` currently runs `uv run --with ty ty check`.
 - Use `uv run pytest <path> -q -n 0` for targeted debugging so xdist does not add noise.
 - Treat `just check-all` as non-read-only because it ends with `just fix-all` and can rewrite files.
+- Run `uv run pytest tests/architecture -q -n 0` after moving modules or changing feature boundaries.
