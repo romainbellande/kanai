@@ -10,9 +10,9 @@ import pytest_asyncio
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlmodel import SQLModel
+from sqlmodel import SQLModel, col
 from starlette.websockets import WebSocketDisconnect
 
 import app.api.v1.endpoints.projects as project_routes
@@ -28,6 +28,7 @@ from app.models.project import (
     ProjectOwner,
     ProjectSprint,
     ProjectSprintTaskSnapshot,
+    ProjectTaskChangeEvent,
     SprintLifecycleState,
 )
 from app.models.task import Task, TaskDependency
@@ -266,6 +267,1532 @@ async def test_project_crud_endpoints(
     assert project is None
     assert project_owners.all() == []
     assert project_members.all() == []
+
+
+@pytest.mark.asyncio
+async def test_project_dashboard_returns_empty_chart_contract_for_participant(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    member_id = users["member"].id
+    assert member_id is not None
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "name": "Dashboard Project",
+            "code": "DSH",
+            "member_ids": [str(member_id)],
+        },
+    )
+    project_id = project_response.json()["id"]
+
+    response = await client.get(
+        f"/projects/{project_id}/dashboard",
+        headers={"Authorization": "Bearer member-token"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["project_id"] == project_id
+    assert [chart["title"] for chart in payload["charts"]] == [
+        "Burndown chart",
+        "Burnup chart",
+        "Scope change chart",
+        "Velocity chart",
+        "Cumulative Flow Diagram",
+        "Cycle time chart",
+        "Throughput chart",
+        "Blocked work chart",
+        "Defect / rework chart",
+        "Forecast cone",
+        "Work aging chart",
+    ]
+    for chart in payload["charts"]:
+        assert chart["series"] == []
+        assert chart["entries"] == []
+        assert chart["empty_state"]["reason"] == "no_project_task_change_events"
+        assert chart["empty_state"]["message"]
+
+
+@pytest.mark.asyncio
+async def test_project_dashboard_does_not_backfill_current_scope_without_events(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "No Backfill Project", "code": "NBF"},
+    )
+    project_id = project_response.json()["id"]
+    task_response = await client.post(
+        f"/projects/{project_id}/backlog/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={"title": "Existing estimated task", "story_points": 5},
+    )
+    sprint_response = await client.post(
+        f"/projects/{project_id}/sprints",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "planned_start_date": "2026-06-01",
+            "planned_end_date": "2026-06-14",
+            "task_ids": [task_response.json()["id"]],
+        },
+    )
+    assert task_response.status_code == 201
+    assert sprint_response.status_code == 201
+    async with session_factory() as session:
+        await session.execute(
+            delete(ProjectTaskChangeEvent).where(
+                col(ProjectTaskChangeEvent.project_id) == UUID(project_id)
+            )
+        )
+        await session.commit()
+
+    response = await client.get(
+        f"/projects/{project_id}/dashboard",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert response.status_code == 200
+    scope_chart = next(
+        chart
+        for chart in response.json()["charts"]
+        if chart["title"] == "Scope change chart"
+    )
+    assert scope_chart["series"] == []
+    assert scope_chart["entries"] == []
+    assert scope_chart["empty_state"]["reason"] == "no_project_task_change_events"
+
+
+@pytest.mark.asyncio
+async def test_project_dashboard_computes_scope_charts_from_task_change_events(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Dashboard Project", "code": "EVT"},
+    )
+    project_id = UUID(project_response.json()["id"])
+    done_column_response = await client.get(
+        f"/projects/{project_id}/done-column",
+        headers={"Authorization": "Bearer token"},
+    )
+    assert done_column_response.status_code == 200
+    sprint_id = uuid4()
+    estimated_task_id = uuid4()
+    unestimated_task_id = uuid4()
+
+    async with session_factory() as session:
+        session.add_all(
+            [
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=estimated_task_id,
+                    event_type="sprint_scope_added",
+                    sprint_id=sprint_id,
+                    new_sprint_id=sprint_id,
+                    new_story_points=5,
+                    occurred_at=datetime(2026, 6, 22, 10, tzinfo=UTC),
+                ),
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=unestimated_task_id,
+                    event_type="sprint_scope_added",
+                    sprint_id=sprint_id,
+                    new_sprint_id=sprint_id,
+                    new_story_points=None,
+                    occurred_at=datetime(2026, 6, 22, 11, tzinfo=UTC),
+                ),
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=estimated_task_id,
+                    event_type="story_points_changed",
+                    sprint_id=sprint_id,
+                    previous_story_points=5,
+                    new_story_points=8,
+                    occurred_at=datetime(2026, 6, 23, 10, tzinfo=UTC),
+                ),
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=estimated_task_id,
+                    event_type="sprint_scope_removed",
+                    sprint_id=sprint_id,
+                    previous_sprint_id=sprint_id,
+                    previous_story_points=8,
+                    occurred_at=datetime(2026, 6, 24, 10, tzinfo=UTC),
+                ),
+            ]
+        )
+        await session.commit()
+
+    response = await client.get(
+        f"/projects/{project_id}/dashboard",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert response.status_code == 200
+    charts = {chart["title"]: chart for chart in response.json()["charts"]}
+    burndown = charts["Burndown chart"]
+    burnup = charts["Burnup chart"]
+    scope_change = charts["Scope change chart"]
+    assert burndown["empty_state"] is None
+    assert burndown["series"][0]["name"] == "Remaining Sprint Scope"
+    assert [
+        entry["values"]["remaining_story_points"] for entry in burndown["entries"]
+    ] == [
+        0,
+    ]
+    assert burndown["entries"][0]["values"]["unestimated_tasks"] == 1
+    assert [series["name"] for series in burnup["series"]] == [
+        "Completed Story Points",
+        "Sprint Scope",
+    ]
+    assert [
+        entry["values"]["completed_story_points"]
+        for entry in burnup["series"][0]["entries"]
+    ] == [0]
+    assert [series["name"] for series in scope_change["series"]] == [
+        "Added Story Points",
+        "Removed Story Points",
+    ]
+    assert scope_change["entries"][0]["label"] == "2026-06-22"
+    assert scope_change["entries"][0]["values"] == {
+        "sprint_scope": 0,
+        "scope_delta": 0,
+        "added_story_points": 8,
+        "removed_story_points": 8,
+        "tasks_added": 2,
+        "tasks_removed": 1,
+        "unestimated_tasks": 1,
+        "unestimated_tasks_added": 1,
+        "unestimated_tasks_removed": 0,
+    }
+    assert scope_change["series"][0]["entries"][0]["values"] == {
+        "added_story_points": 8,
+        "tasks_added": 2,
+        "unestimated_tasks_added": 1,
+    }
+    assert scope_change["series"][1]["entries"][0]["values"] == {
+        "removed_story_points": 8,
+        "tasks_removed": 1,
+        "unestimated_tasks_removed": 0,
+    }
+    blocked_work = charts["Blocked work chart"]
+    assert blocked_work["entries"] == []
+    assert blocked_work["empty_state"]["reason"] == "no_blocked_project_task_events"
+
+
+@pytest.mark.asyncio
+async def test_project_dashboard_burndown_and_burnup_follow_done_column_events(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Completion Project", "code": "BCP"},
+    )
+    project_id = UUID(project_response.json()["id"])
+    columns_response = await client.get(
+        f"/projects/{project_id}/columns",
+        headers={"Authorization": "Bearer token"},
+    )
+    columns = columns_response.json()
+    todo_column_id = UUID(columns[0]["id"])
+    done_column_id = UUID(columns[-1]["id"])
+    done_column_response = await client.patch(
+        f"/projects/{project_id}/done-column",
+        headers={"Authorization": "Bearer token"},
+        json={"done_column_id": str(done_column_id)},
+    )
+    assert done_column_response.status_code == 200
+    sprint_id = uuid4()
+    first_task_id = uuid4()
+    second_task_id = uuid4()
+
+    async with session_factory() as session:
+        session.add_all(
+            [
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=first_task_id,
+                    event_type="sprint_scope_added",
+                    sprint_id=sprint_id,
+                    new_sprint_id=sprint_id,
+                    new_story_points=5,
+                    occurred_at=datetime(2026, 6, 22, 10, tzinfo=UTC),
+                ),
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=second_task_id,
+                    event_type="sprint_scope_added",
+                    sprint_id=sprint_id,
+                    new_sprint_id=sprint_id,
+                    new_story_points=3,
+                    occurred_at=datetime(2026, 6, 22, 11, tzinfo=UTC),
+                ),
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=first_task_id,
+                    event_type="workflow_column_changed",
+                    sprint_id=sprint_id,
+                    previous_column_id=todo_column_id,
+                    previous_column_name="To Do",
+                    previous_column_position=0,
+                    new_column_id=done_column_id,
+                    new_column_name="Done",
+                    new_column_position=2,
+                    occurred_at=datetime(2026, 6, 29, 10, tzinfo=UTC),
+                ),
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=first_task_id,
+                    event_type="workflow_column_changed",
+                    sprint_id=sprint_id,
+                    previous_column_id=done_column_id,
+                    previous_column_name="Done",
+                    previous_column_position=2,
+                    new_column_id=todo_column_id,
+                    new_column_name="To Do",
+                    new_column_position=0,
+                    occurred_at=datetime(2026, 7, 6, 10, tzinfo=UTC),
+                ),
+            ]
+        )
+        await session.commit()
+
+    response = await client.get(
+        f"/projects/{project_id}/dashboard",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert response.status_code == 200
+    charts = {chart["title"]: chart for chart in response.json()["charts"]}
+    burndown = charts["Burndown chart"]
+    burnup = charts["Burnup chart"]
+    assert [entry["label"] for entry in burndown["entries"]] == [
+        "2026-06-22",
+        "2026-06-29",
+        "2026-07-06",
+    ]
+    assert [
+        entry["values"]["remaining_story_points"] for entry in burndown["entries"]
+    ] == [8, 3, 8]
+    assert [
+        entry["values"]["completed_story_points"]
+        for entry in burnup["series"][0]["entries"]
+    ] == [0, 5, 0]
+    assert [
+        entry["values"]["sprint_scope"] for entry in burnup["series"][1]["entries"]
+    ] == [8, 8, 8]
+
+
+@pytest.mark.asyncio
+async def test_project_dashboard_burndown_and_burnup_need_done_column(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Missing Done Project", "code": "MDP"},
+    )
+    project_id = UUID(project_response.json()["id"])
+    sprint_id = uuid4()
+    task_id = uuid4()
+
+    async with session_factory() as session:
+        session.add(
+            ProjectTaskChangeEvent(
+                project_id=project_id,
+                task_id=task_id,
+                event_type="sprint_scope_added",
+                sprint_id=sprint_id,
+                new_sprint_id=sprint_id,
+                new_story_points=5,
+                occurred_at=datetime(2026, 6, 22, 10, tzinfo=UTC),
+            )
+        )
+        await session.commit()
+
+    response = await client.get(
+        f"/projects/{project_id}/dashboard",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert response.status_code == 200
+    charts = {chart["title"]: chart for chart in response.json()["charts"]}
+    assert charts["Burndown chart"]["entries"] == []
+    assert charts["Burnup chart"]["series"] == []
+    assert charts["Burndown chart"]["empty_state"]["reason"] == "no_done_column"
+    assert charts["Burnup chart"]["empty_state"]["reason"] == "no_done_column"
+
+
+@pytest.mark.asyncio
+async def test_project_dashboard_scope_chart_limits_to_current_plus_last_six_sprints(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Recent Scope Project", "code": "RSP"},
+    )
+    project_id = UUID(project_response.json()["id"])
+    sprint_ids = [uuid4() for _ in range(8)]
+
+    async with session_factory() as session:
+        session.add_all(
+            [
+                ProjectSprint(
+                    id=sprint_id,
+                    project_id=project_id,
+                    name=f"Sprint {index + 1}",
+                    lifecycle_state=(
+                        SprintLifecycleState.ACTIVE
+                        if index == 7
+                        else SprintLifecycleState.CLOSED
+                    ),
+                    planned_start_date=(
+                        datetime(2026, 1, 5) + timedelta(days=index * 7)
+                    ).date(),
+                    planned_end_date=(
+                        datetime(2026, 1, 11) + timedelta(days=index * 7)
+                    ).date(),
+                    closed_at=(
+                        datetime(2026, 1, 11, 17, tzinfo=UTC)
+                        + timedelta(days=index * 7)
+                        if index < 7
+                        else None
+                    ),
+                )
+                for index, sprint_id in enumerate(sprint_ids)
+            ]
+            + [
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=uuid4(),
+                    event_type="sprint_scope_added",
+                    sprint_id=sprint_id,
+                    new_sprint_id=sprint_id,
+                    new_story_points=1,
+                    occurred_at=datetime(2026, 1, 5, 10, tzinfo=UTC)
+                    + timedelta(days=index * 7),
+                )
+                for index, sprint_id in enumerate(sprint_ids)
+            ]
+        )
+        await session.commit()
+
+    response = await client.get(
+        f"/projects/{project_id}/dashboard",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert response.status_code == 200
+    scope_chart = next(
+        chart
+        for chart in response.json()["charts"]
+        if chart["title"] == "Scope change chart"
+    )
+    assert [entry["label"] for entry in scope_chart["entries"]] == [
+        "2026-01-12",
+        "2026-01-19",
+        "2026-01-26",
+        "2026-02-02",
+        "2026-02-09",
+        "2026-02-16",
+        "2026-02-23",
+    ]
+    assert scope_chart["entries"][-1]["values"]["sprint_scope"] == 7
+
+
+@pytest.mark.asyncio
+async def test_project_dashboard_cfd_preserves_arbitrary_workflow_columns(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Flow Project", "code": "CFD"},
+    )
+    project_id = UUID(project_response.json()["id"])
+    discovery_response = await client.post(
+        f"/projects/{project_id}/columns",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Discovery"},
+    )
+    build_response = await client.post(
+        f"/projects/{project_id}/columns",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Build"},
+    )
+    signoff_response = await client.post(
+        f"/projects/{project_id}/columns",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Customer Sign-off"},
+    )
+    discovery = discovery_response.json()
+    build = build_response.json()
+    signoff = signoff_response.json()
+    first_task_id = uuid4()
+    second_task_id = uuid4()
+
+    async with session_factory() as session:
+        session.add_all(
+            [
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=first_task_id,
+                    event_type="workflow_column_changed",
+                    previous_column_id=UUID(discovery["id"]),
+                    previous_column_name=discovery["name"],
+                    previous_column_position=discovery["position"],
+                    new_column_id=UUID(build["id"]),
+                    new_column_name=build["name"],
+                    new_column_position=build["position"],
+                    occurred_at=datetime(2026, 6, 22, 10, tzinfo=UTC),
+                ),
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=second_task_id,
+                    event_type="workflow_column_changed",
+                    previous_column_id=UUID(build["id"]),
+                    previous_column_name=build["name"],
+                    previous_column_position=build["position"],
+                    new_column_id=UUID(signoff["id"]),
+                    new_column_name=signoff["name"],
+                    new_column_position=signoff["position"],
+                    occurred_at=datetime(2026, 6, 22, 11, tzinfo=UTC),
+                ),
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=first_task_id,
+                    event_type="workflow_column_changed",
+                    previous_column_id=UUID(build["id"]),
+                    previous_column_name="Build - renamed in history",
+                    previous_column_position=build["position"],
+                    new_column_id=UUID(signoff["id"]),
+                    new_column_name=signoff["name"],
+                    new_column_position=signoff["position"],
+                    occurred_at=datetime(2026, 6, 22, 12, tzinfo=UTC),
+                ),
+            ]
+        )
+        await session.commit()
+
+    response = await client.get(
+        f"/projects/{project_id}/dashboard",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert response.status_code == 200
+    charts = {chart["title"]: chart for chart in response.json()["charts"]}
+    cfd = charts["Cumulative Flow Diagram"]
+    assert cfd["empty_state"] is None
+    assert [series["name"] for series in cfd["series"]] == [
+        "Discovery",
+        "Build - renamed in history",
+        "Customer Sign-off",
+    ]
+    assert "To Do" not in [series["name"] for series in cfd["series"]]
+    assert cfd["series"][0]["entries"][-1]["values"] == {
+        "workflow_column_id": discovery["id"],
+        "workflow_column_name": "Discovery",
+        "workflow_column_position": discovery["position"],
+        "task_count": 0,
+    }
+    assert cfd["series"][1]["entries"][-1]["values"]["task_count"] == 0
+    assert cfd["series"][2]["entries"][-1]["values"]["task_count"] == 2
+    assert cfd["entries"][-1]["values"]["from_column_name"] == (
+        "Build - renamed in history"
+    )
+    assert cfd["entries"][-1]["values"]["to_column_name"] == "Customer Sign-off"
+
+
+@pytest.mark.asyncio
+async def test_project_dashboard_computes_cycle_time_from_first_workflow_entry_to_done_column(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Cycle Time Project", "code": "CTP"},
+    )
+    project_id = UUID(project_response.json()["id"])
+    columns_response = await client.get(
+        f"/projects/{project_id}/columns",
+        headers={"Authorization": "Bearer token"},
+    )
+    columns = columns_response.json()
+    todo_column = next(column for column in columns if column["name"] == "To Do")
+    progress_column = next(
+        column for column in columns if column["name"] == "In Progress"
+    )
+    done_column = next(column for column in columns if column["name"] == "Done")
+    await client.patch(
+        f"/projects/{project_id}/done-column",
+        headers={"Authorization": "Bearer token"},
+        json={"done_column_id": done_column["id"]},
+    )
+    sprint_id = uuid4()
+    closed_sprint_id = uuid4()
+    active_task_id = uuid4()
+    finished_task_id = uuid4()
+    backlog_task_id = uuid4()
+    backlog_workflow_task_id = uuid4()
+    backlog_sprint_task_id = uuid4()
+    removed_sprint_task_id = uuid4()
+    closed_sprint_task_id = uuid4()
+
+    async with session_factory() as session:
+        session.add_all(
+            [
+                ProjectSprint(
+                    id=sprint_id,
+                    project_id=project_id,
+                    name="Active Sprint",
+                    lifecycle_state=SprintLifecycleState.ACTIVE,
+                    planned_start_date=datetime(2026, 1, 1).date(),
+                    planned_end_date=datetime(2026, 1, 14).date(),
+                ),
+                ProjectSprint(
+                    id=closed_sprint_id,
+                    project_id=project_id,
+                    name="Closed Sprint",
+                    lifecycle_state=SprintLifecycleState.CLOSED,
+                    planned_start_date=datetime(2025, 12, 1).date(),
+                    planned_end_date=datetime(2025, 12, 14).date(),
+                    closed_at=datetime(2025, 12, 14, 17, tzinfo=UTC),
+                ),
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=active_task_id,
+                    event_type="sprint_scope_added",
+                    sprint_id=sprint_id,
+                    new_sprint_id=sprint_id,
+                    occurred_at=datetime(2026, 1, 1, 9, tzinfo=UTC),
+                ),
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=active_task_id,
+                    event_type="workflow_column_changed",
+                    previous_column_id=None,
+                    previous_column_name="Backlog",
+                    previous_column_position=0,
+                    new_column_id=UUID(todo_column["id"]),
+                    new_column_name=todo_column["name"],
+                    new_column_position=todo_column["position"],
+                    occurred_at=datetime(2026, 1, 2, 9, tzinfo=UTC),
+                ),
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=active_task_id,
+                    event_type="workflow_column_changed",
+                    previous_column_id=UUID(todo_column["id"]),
+                    previous_column_name=todo_column["name"],
+                    previous_column_position=todo_column["position"],
+                    new_column_id=UUID(progress_column["id"]),
+                    new_column_name=progress_column["name"],
+                    new_column_position=progress_column["position"],
+                    occurred_at=datetime(2026, 1, 4, 9, tzinfo=UTC),
+                ),
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=finished_task_id,
+                    event_type="sprint_scope_added",
+                    sprint_id=sprint_id,
+                    new_sprint_id=sprint_id,
+                    occurred_at=datetime(2026, 1, 1, 10, tzinfo=UTC),
+                ),
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=finished_task_id,
+                    event_type="workflow_column_changed",
+                    previous_column_id=None,
+                    previous_column_name="Backlog",
+                    previous_column_position=0,
+                    new_column_id=UUID(progress_column["id"]),
+                    new_column_name=progress_column["name"],
+                    new_column_position=progress_column["position"],
+                    occurred_at=datetime(2026, 1, 3, 9, tzinfo=UTC),
+                ),
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=finished_task_id,
+                    event_type="workflow_column_changed",
+                    previous_column_id=UUID(progress_column["id"]),
+                    previous_column_name=progress_column["name"],
+                    previous_column_position=progress_column["position"],
+                    new_column_id=UUID(done_column["id"]),
+                    new_column_name=done_column["name"],
+                    new_column_position=done_column["position"],
+                    occurred_at=datetime(2026, 1, 5, 9, tzinfo=UTC),
+                ),
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=backlog_sprint_task_id,
+                    event_type="sprint_scope_added",
+                    sprint_id=sprint_id,
+                    new_sprint_id=sprint_id,
+                    occurred_at=datetime(2026, 1, 1, 11, tzinfo=UTC),
+                ),
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=removed_sprint_task_id,
+                    event_type="sprint_scope_added",
+                    sprint_id=sprint_id,
+                    new_sprint_id=sprint_id,
+                    occurred_at=datetime(2026, 1, 1, 12, tzinfo=UTC),
+                ),
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=removed_sprint_task_id,
+                    event_type="workflow_column_changed",
+                    previous_column_id=None,
+                    previous_column_name="Backlog",
+                    previous_column_position=0,
+                    new_column_id=UUID(progress_column["id"]),
+                    new_column_name=progress_column["name"],
+                    new_column_position=progress_column["position"],
+                    occurred_at=datetime(2026, 1, 3, 12, tzinfo=UTC),
+                ),
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=removed_sprint_task_id,
+                    event_type="sprint_scope_removed",
+                    sprint_id=sprint_id,
+                    previous_sprint_id=sprint_id,
+                    occurred_at=datetime(2026, 1, 4, 12, tzinfo=UTC),
+                ),
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=closed_sprint_task_id,
+                    event_type="sprint_scope_added",
+                    sprint_id=closed_sprint_id,
+                    new_sprint_id=closed_sprint_id,
+                    occurred_at=datetime(2025, 12, 1, 9, tzinfo=UTC),
+                ),
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=closed_sprint_task_id,
+                    event_type="workflow_column_changed",
+                    previous_column_id=None,
+                    previous_column_name="Backlog",
+                    previous_column_position=0,
+                    new_column_id=UUID(progress_column["id"]),
+                    new_column_name=progress_column["name"],
+                    new_column_position=progress_column["position"],
+                    occurred_at=datetime(2025, 12, 2, 9, tzinfo=UTC),
+                ),
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=backlog_task_id,
+                    event_type="blocked_state_changed",
+                    is_blocked=True,
+                    occurred_at=datetime(2026, 1, 6, 9, tzinfo=UTC),
+                ),
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=backlog_workflow_task_id,
+                    event_type="workflow_column_changed",
+                    previous_column_id=None,
+                    previous_column_name="Backlog",
+                    previous_column_position=0,
+                    new_column_id=UUID(progress_column["id"]),
+                    new_column_name=progress_column["name"],
+                    new_column_position=progress_column["position"],
+                    occurred_at=datetime(2026, 1, 6, 10, tzinfo=UTC),
+                ),
+            ]
+        )
+        await session.commit()
+
+    response = await client.get(
+        f"/projects/{project_id}/dashboard",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert response.status_code == 200
+    charts = {chart["title"]: chart for chart in response.json()["charts"]}
+    cycle_time = charts["Cycle time chart"]
+    work_aging = charts["Work aging chart"]
+    assert cycle_time["empty_state"] is None
+    assert cycle_time["series"][0]["name"] == "Project Task Cycle Time"
+    assert cycle_time["entries"] == [
+        {
+            "label": "2026-01-05",
+            "values": {
+                "task_id": str(finished_task_id),
+                "cycle_time_seconds": 172800,
+                "cycle_time_days": 2,
+                "completed_task_count": 1,
+                "average_cycle_time_seconds": 172800,
+                "average_cycle_time_days": 2,
+            },
+        }
+    ]
+    assert work_aging["empty_state"] is None
+    assert work_aging["series"][0]["name"] == "Active Sprint Task Age"
+    assert [entry["values"]["task_id"] for entry in work_aging["entries"]] == [
+        str(active_task_id)
+    ]
+    assert work_aging["entries"][0]["values"]["started_at"] == (
+        "2026-01-02T09:00:00+00:00"
+    )
+    assert work_aging["entries"][0]["values"]["work_age_days"] > 0
+
+
+@pytest.mark.asyncio
+async def test_project_dashboard_explains_missing_done_column_for_cycle_time_and_work_aging(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Missing Done Project", "code": "MDP"},
+    )
+    project_id = UUID(project_response.json()["id"])
+    columns_response = await client.get(
+        f"/projects/{project_id}/columns",
+        headers={"Authorization": "Bearer token"},
+    )
+    progress_column = next(
+        column for column in columns_response.json() if column["name"] == "In Progress"
+    )
+    task_id = uuid4()
+
+    async with session_factory() as session:
+        session.add(
+            ProjectTaskChangeEvent(
+                project_id=project_id,
+                task_id=task_id,
+                event_type="workflow_column_changed",
+                previous_column_id=None,
+                previous_column_name="Backlog",
+                previous_column_position=0,
+                new_column_id=UUID(progress_column["id"]),
+                new_column_name=progress_column["name"],
+                new_column_position=progress_column["position"],
+                occurred_at=datetime(2026, 1, 7, 9, tzinfo=UTC),
+            )
+        )
+        await session.commit()
+
+    response = await client.get(
+        f"/projects/{project_id}/dashboard",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert response.status_code == 200
+    charts = {chart["title"]: chart for chart in response.json()["charts"]}
+    assert charts["Cycle time chart"]["entries"] == []
+    assert charts["Cycle time chart"]["empty_state"]["reason"] == (
+        "missing_done_column_configuration"
+    )
+    assert charts["Work aging chart"]["entries"] == []
+    assert charts["Work aging chart"]["empty_state"]["reason"] == (
+        "missing_done_column_configuration"
+    )
+    assert charts["Defect / rework chart"]["entries"] == []
+    assert charts["Defect / rework chart"]["empty_state"]["reason"] == (
+        "missing_done_column_configuration"
+    )
+
+
+@pytest.mark.asyncio
+async def test_project_dashboard_groups_reworked_tasks_when_finished_tasks_leave_done(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Rework Project", "code": "RWK"},
+    )
+    project_id = UUID(project_response.json()["id"])
+    columns_response = await client.get(
+        f"/projects/{project_id}/columns",
+        headers={"Authorization": "Bearer token"},
+    )
+    columns = columns_response.json()
+    todo_column = next(column for column in columns if column["name"] == "To Do")
+    progress_column = next(
+        column for column in columns if column["name"] == "In Progress"
+    )
+    done_column = next(column for column in columns if column["name"] == "Done")
+    await client.patch(
+        f"/projects/{project_id}/done-column",
+        headers={"Authorization": "Bearer token"},
+        json={"done_column_id": done_column["id"]},
+    )
+    first_task_id = uuid4()
+    second_task_id = uuid4()
+    active_task_id = uuid4()
+
+    async with session_factory() as session:
+        session.add_all(
+            [
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=first_task_id,
+                    event_type="workflow_column_changed",
+                    previous_column_id=UUID(progress_column["id"]),
+                    previous_column_name=progress_column["name"],
+                    previous_column_position=progress_column["position"],
+                    new_column_id=UUID(done_column["id"]),
+                    new_column_name=done_column["name"],
+                    new_column_position=done_column["position"],
+                    occurred_at=datetime(2026, 1, 5, 9, tzinfo=UTC),
+                ),
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=first_task_id,
+                    event_type="workflow_column_changed",
+                    previous_column_id=UUID(done_column["id"]),
+                    previous_column_name=done_column["name"],
+                    previous_column_position=done_column["position"],
+                    new_column_id=UUID(progress_column["id"]),
+                    new_column_name=progress_column["name"],
+                    new_column_position=progress_column["position"],
+                    occurred_at=datetime(2026, 1, 7, 9, tzinfo=UTC),
+                ),
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=active_task_id,
+                    event_type="workflow_column_changed",
+                    previous_column_id=UUID(todo_column["id"]),
+                    previous_column_name=todo_column["name"],
+                    previous_column_position=todo_column["position"],
+                    new_column_id=UUID(progress_column["id"]),
+                    new_column_name=progress_column["name"],
+                    new_column_position=progress_column["position"],
+                    occurred_at=datetime(2026, 1, 8, 9, tzinfo=UTC),
+                ),
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=second_task_id,
+                    event_type="workflow_column_changed",
+                    previous_column_id=UUID(done_column["id"]),
+                    previous_column_name=done_column["name"],
+                    previous_column_position=done_column["position"],
+                    new_column_id=UUID(todo_column["id"]),
+                    new_column_name=todo_column["name"],
+                    new_column_position=todo_column["position"],
+                    occurred_at=datetime(2026, 1, 12, 9, tzinfo=UTC),
+                ),
+            ]
+        )
+        await session.commit()
+
+    response = await client.get(
+        f"/projects/{project_id}/dashboard",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert response.status_code == 200
+    charts = {chart["title"]: chart for chart in response.json()["charts"]}
+    rework = charts["Defect / rework chart"]
+    assert rework["empty_state"] is None
+    assert rework["series"][0]["name"] == "Reworked Tasks"
+    assert rework["entries"] == [
+        {
+            "label": "2026-01-05",
+            "values": {
+                "reworked_task_count": 1,
+                "cumulative_reworked_task_count": 1,
+            },
+        },
+        {
+            "label": "2026-01-12",
+            "values": {
+                "reworked_task_count": 1,
+                "cumulative_reworked_task_count": 2,
+            },
+        },
+    ]
+
+
+@pytest.mark.asyncio
+async def test_project_dashboard_does_not_count_non_done_workflow_movement_as_rework(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Non Rework Project", "code": "NRW"},
+    )
+    project_id = UUID(project_response.json()["id"])
+    columns_response = await client.get(
+        f"/projects/{project_id}/columns",
+        headers={"Authorization": "Bearer token"},
+    )
+    columns = columns_response.json()
+    todo_column = next(column for column in columns if column["name"] == "To Do")
+    progress_column = next(
+        column for column in columns if column["name"] == "In Progress"
+    )
+    done_column = next(column for column in columns if column["name"] == "Done")
+    await client.patch(
+        f"/projects/{project_id}/done-column",
+        headers={"Authorization": "Bearer token"},
+        json={"done_column_id": done_column["id"]},
+    )
+
+    async with session_factory() as session:
+        session.add(
+            ProjectTaskChangeEvent(
+                project_id=project_id,
+                task_id=uuid4(),
+                event_type="workflow_column_changed",
+                previous_column_id=UUID(todo_column["id"]),
+                previous_column_name=todo_column["name"],
+                previous_column_position=todo_column["position"],
+                new_column_id=UUID(progress_column["id"]),
+                new_column_name=progress_column["name"],
+                new_column_position=progress_column["position"],
+                occurred_at=datetime(2026, 1, 8, 9, tzinfo=UTC),
+            )
+        )
+        await session.commit()
+
+    response = await client.get(
+        f"/projects/{project_id}/dashboard",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert response.status_code == 200
+    charts = {chart["title"]: chart for chart in response.json()["charts"]}
+    rework = charts["Defect / rework chart"]
+    assert rework["entries"] == []
+    assert rework["series"] == []
+    assert rework["empty_state"]["reason"] == "no_reworked_task_events"
+
+
+@pytest.mark.asyncio
+async def test_project_dashboard_does_not_infer_blocked_work_from_project_status_or_prerequisites(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Blocked Status Project", "code": "BLK", "status": "blocked"},
+    )
+    project_id = project_response.json()["id"]
+    first_task_response = await client.post(
+        f"/projects/{project_id}/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={"title": "Prerequisite"},
+    )
+    await client.post(
+        f"/projects/{project_id}/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "title": "Waiting task",
+            "prerequisite_task_ids": [first_task_response.json()["id"]],
+        },
+    )
+
+    response = await client.get(
+        f"/projects/{project_id}/dashboard",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert response.status_code == 200
+    charts = {chart["title"]: chart for chart in response.json()["charts"]}
+    blocked_work = charts["Blocked work chart"]
+    assert blocked_work["entries"] == []
+    assert blocked_work["series"] == []
+    assert blocked_work["empty_state"]["reason"] == "no_project_task_change_events"
+
+
+@pytest.mark.asyncio
+async def test_task_api_marks_blocked_and_unblocked_with_reason_events(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Blocked API Project", "code": "BAP"},
+    )
+    project_id = project_response.json()["id"]
+    task_response = await client.post(
+        f"/projects/{project_id}/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={"title": "Investigate outage"},
+    )
+    task_id = task_response.json()["id"]
+
+    marked_response = await client.patch(
+        f"/projects/{project_id}/tasks/{task_id}",
+        headers={"Authorization": "Bearer token"},
+        json={"is_blocked": True, "blocked_reason": "Waiting on vendor"},
+    )
+    unblocked_response = await client.patch(
+        f"/projects/{project_id}/tasks/{task_id}",
+        headers={"Authorization": "Bearer token"},
+        json={"is_blocked": False, "blocked_reason": "ignored"},
+    )
+
+    assert marked_response.status_code == 200
+    assert marked_response.json()["is_blocked"] is True
+    assert marked_response.json()["blocked_reason"] == "Waiting on vendor"
+    assert unblocked_response.status_code == 200
+    assert unblocked_response.json()["is_blocked"] is False
+    assert unblocked_response.json()["blocked_reason"] is None
+
+    async with session_factory() as session:
+        events = (
+            await session.scalars(
+                select(ProjectTaskChangeEvent)
+                .filter_by(project_id=UUID(project_id))
+                .order_by(
+                    col(ProjectTaskChangeEvent.occurred_at),
+                    col(ProjectTaskChangeEvent.id),
+                )
+            )
+        ).all()
+    assert [event.event_type for event in events] == [
+        "blocked_state_changed",
+        "blocked_state_changed",
+    ]
+    assert [event.is_blocked for event in events] == [True, False]
+    assert events[0].blocked_reason == "Waiting on vendor"
+    assert events[1].blocked_reason is None
+
+
+@pytest.mark.asyncio
+async def test_project_dashboard_computes_blocked_count_and_age_from_blocked_events(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Blocked Work Project", "code": "BWA", "status": "blocked"},
+    )
+    project_id = UUID(project_response.json()["id"])
+    first_task_id = uuid4()
+    second_task_id = uuid4()
+
+    async with session_factory() as session:
+        session.add_all(
+            [
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=first_task_id,
+                    event_type="blocked_state_changed",
+                    is_blocked=True,
+                    blocked_reason="Waiting on customer access",
+                    occurred_at=datetime(2026, 1, 1, 9, tzinfo=UTC),
+                ),
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=second_task_id,
+                    event_type="blocked_state_changed",
+                    is_blocked=True,
+                    blocked_reason=None,
+                    occurred_at=datetime(2026, 1, 3, 9, tzinfo=UTC),
+                ),
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=first_task_id,
+                    event_type="blocked_state_changed",
+                    is_blocked=False,
+                    occurred_at=datetime(2026, 1, 6, 9, tzinfo=UTC),
+                ),
+            ]
+        )
+        await session.commit()
+
+    response = await client.get(
+        f"/projects/{project_id}/dashboard",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert response.status_code == 200
+    charts = {chart["title"]: chart for chart in response.json()["charts"]}
+    blocked_work = charts["Blocked work chart"]
+    assert blocked_work["empty_state"] is None
+    assert blocked_work["series"][0]["name"] == "Blocked Project Tasks"
+    assert [
+        entry["values"]["blocked_count"] for entry in blocked_work["entries"][:3]
+    ] == [1, 2, 1]
+    assert blocked_work["entries"][2]["values"]["oldest_blocked_age_days"] == 3
+    assert blocked_work["entries"][-1]["label"] == "Current"
+    assert blocked_work["entries"][-1]["values"]["blocked_count"] == 1
+    assert blocked_work["entries"][-1]["values"]["oldest_blocked_age_days"] >= 3
+
+
+@pytest.mark.asyncio
+async def test_project_dashboard_computes_velocity_throughput_and_forecast_from_completion_events(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Delivery Analytics Project", "code": "DAP"},
+    )
+    project_id = UUID(project_response.json()["id"])
+    sprint_ids = [uuid4(), uuid4(), uuid4()]
+    finished_task_ids = [uuid4(), uuid4(), uuid4(), uuid4()]
+    remaining_estimated_task_id = uuid4()
+    remaining_unestimated_task_id = uuid4()
+
+    async with session_factory() as session:
+        session.add_all(
+            [
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=finished_task_ids[0],
+                    event_type="sprint_scope_added",
+                    sprint_id=sprint_ids[0],
+                    new_sprint_id=sprint_ids[0],
+                    new_story_points=4,
+                    occurred_at=datetime(2026, 1, 5, 9, tzinfo=UTC),
+                ),
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=finished_task_ids[1],
+                    event_type="sprint_scope_added",
+                    sprint_id=sprint_ids[0],
+                    new_sprint_id=sprint_ids[0],
+                    new_story_points=6,
+                    occurred_at=datetime(2026, 1, 5, 10, tzinfo=UTC),
+                ),
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=finished_task_ids[2],
+                    event_type="sprint_scope_added",
+                    sprint_id=sprint_ids[1],
+                    new_sprint_id=sprint_ids[1],
+                    new_story_points=5,
+                    occurred_at=datetime(2026, 1, 12, 9, tzinfo=UTC),
+                ),
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=finished_task_ids[3],
+                    event_type="sprint_scope_added",
+                    sprint_id=sprint_ids[2],
+                    new_sprint_id=sprint_ids[2],
+                    new_story_points=20,
+                    occurred_at=datetime(2026, 1, 19, 9, tzinfo=UTC),
+                ),
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=remaining_estimated_task_id,
+                    event_type="sprint_scope_added",
+                    sprint_id=sprint_ids[2],
+                    new_sprint_id=sprint_ids[2],
+                    new_story_points=30,
+                    occurred_at=datetime(2026, 1, 19, 10, tzinfo=UTC),
+                ),
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=remaining_unestimated_task_id,
+                    event_type="sprint_scope_added",
+                    sprint_id=sprint_ids[2],
+                    new_sprint_id=sprint_ids[2],
+                    new_story_points=None,
+                    occurred_at=datetime(2026, 1, 19, 11, tzinfo=UTC),
+                ),
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=finished_task_ids[0],
+                    event_type="sprint_task_finished",
+                    sprint_id=sprint_ids[0],
+                    new_story_points=4,
+                    occurred_at=datetime(2026, 1, 12, 12, tzinfo=UTC),
+                ),
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=finished_task_ids[1],
+                    event_type="sprint_task_finished",
+                    sprint_id=sprint_ids[0],
+                    new_story_points=6,
+                    occurred_at=datetime(2026, 1, 12, 12, tzinfo=UTC),
+                ),
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=finished_task_ids[2],
+                    event_type="sprint_task_finished",
+                    sprint_id=sprint_ids[1],
+                    new_story_points=5,
+                    occurred_at=datetime(2026, 1, 19, 12, tzinfo=UTC),
+                ),
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=finished_task_ids[3],
+                    event_type="sprint_task_finished",
+                    sprint_id=sprint_ids[2],
+                    new_story_points=20,
+                    occurred_at=datetime(2026, 1, 26, 12, tzinfo=UTC),
+                ),
+            ]
+        )
+        await session.commit()
+
+    response = await client.get(
+        f"/projects/{project_id}/dashboard",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    charts = {chart["title"]: chart for chart in payload["charts"]}
+    velocity = charts["Velocity chart"]
+    throughput = charts["Throughput chart"]
+    forecast = charts["Forecast cone"]
+    assert velocity["empty_state"] is None
+    assert velocity["series"][0]["name"] == "Completed Story Points"
+    assert [
+        entry["values"]["completed_story_points"] for entry in velocity["entries"]
+    ] == [
+        10,
+        5,
+        20,
+    ]
+    assert velocity["entries"][0]["values"]["finished_task_count"] == 2
+    assert throughput["empty_state"] is None
+    assert throughput["series"][0]["name"] == "Finished Tasks"
+    assert [
+        entry["values"]["finished_task_count"] for entry in throughput["entries"]
+    ] == [2, 1, 1]
+    assert [entry["label"] for entry in throughput["entries"]] == [
+        "2026-01-12",
+        "2026-01-19",
+        "2026-01-26",
+    ]
+    assert forecast["empty_state"] is None
+    forecast_values = forecast["entries"][0]["values"]
+    generated_date = datetime.fromisoformat(
+        payload["generated_at"].replace("Z", "+00:00")
+    ).date()
+    assert forecast_values["estimated_remaining_story_points"] == 30
+    assert forecast_values["unestimated_tasks"] == 1
+    assert forecast_values["sprints_used"] == 3
+    assert (
+        forecast_values["best_forecast_date"]
+        == (generated_date + timedelta(days=14)).isoformat()
+    )
+    assert (
+        forecast_values["likely_forecast_date"]
+        == (generated_date + timedelta(days=21)).isoformat()
+    )
+    assert (
+        forecast_values["worst_forecast_date"]
+        == (generated_date + timedelta(days=42)).isoformat()
+    )
+
+
+@pytest.mark.asyncio
+async def test_project_dashboard_keeps_throughput_but_explains_no_estimated_velocity(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Unestimated Delivery Project", "code": "UDP"},
+    )
+    project_id = UUID(project_response.json()["id"])
+    sprint_id = uuid4()
+    task_id = uuid4()
+
+    async with session_factory() as session:
+        session.add(
+            ProjectTaskChangeEvent(
+                project_id=project_id,
+                task_id=task_id,
+                event_type="sprint_task_finished",
+                sprint_id=sprint_id,
+                new_story_points=None,
+                occurred_at=datetime(2026, 2, 2, 12, tzinfo=UTC),
+            )
+        )
+        await session.commit()
+
+    response = await client.get(
+        f"/projects/{project_id}/dashboard",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert response.status_code == 200
+    charts = {chart["title"]: chart for chart in response.json()["charts"]}
+    assert charts["Velocity chart"]["empty_state"]["reason"] == "no_estimated_velocity"
+    assert charts["Forecast cone"]["empty_state"]["reason"] == "no_estimated_velocity"
+    assert charts["Throughput chart"]["empty_state"] is None
+    assert charts["Throughput chart"]["entries"][0]["values"] == {
+        "finished_task_count": 1
+    }
+
+
+@pytest.mark.asyncio
+async def test_sprint_membership_mutations_append_project_task_change_events(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Dashboard Project", "code": "EV2"},
+    )
+    project_id = project_response.json()["id"]
+    first_task_response = await client.post(
+        f"/projects/{project_id}/backlog/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={"title": "First task", "story_points": 5},
+    )
+    sprint_response = await client.post(
+        f"/projects/{project_id}/sprints",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "planned_start_date": "2026-06-01",
+            "planned_end_date": "2026-06-14",
+            "task_ids": [first_task_response.json()["id"]],
+        },
+    )
+    second_task_response = await client.post(
+        f"/projects/{project_id}/backlog/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={"title": "Second task"},
+    )
+
+    add_response = await client.post(
+        f"/projects/{project_id}/sprints/active/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={"task_id": second_task_response.json()["id"]},
+    )
+    created_sprint_task_response = await client.post(
+        f"/projects/{project_id}/tasks",
+        headers={"Authorization": "Bearer token"},
+        json={
+            "title": "Created sprint task",
+            "include_in_active_sprint": True,
+            "story_points": 3,
+        },
+    )
+    update_response = await client.patch(
+        f"/projects/{project_id}/tasks/{created_sprint_task_response.json()['id']}",
+        headers={"Authorization": "Bearer token"},
+        json={"story_points": 8},
+    )
+    unchanged_update_response = await client.patch(
+        f"/projects/{project_id}/tasks/{created_sprint_task_response.json()['id']}",
+        headers={"Authorization": "Bearer token"},
+        json={"story_points": 8},
+    )
+    remove_response = await client.delete(
+        f"/projects/{project_id}/sprints/active/tasks/{first_task_response.json()['id']}",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert sprint_response.status_code == 201
+    assert add_response.status_code == 200
+    assert created_sprint_task_response.status_code == 201
+    assert update_response.status_code == 200
+    assert unchanged_update_response.status_code == 200
+    assert remove_response.status_code == 200
+    async with session_factory() as session:
+        events = (
+            await session.scalars(
+                select(ProjectTaskChangeEvent)
+                .filter_by(project_id=UUID(project_id))
+                .order_by(
+                    col(ProjectTaskChangeEvent.occurred_at),
+                    col(ProjectTaskChangeEvent.id),
+                )
+            )
+        ).all()
+
+    assert [event.event_type for event in events] == [
+        "story_points_changed",
+        "sprint_scope_added",
+        "sprint_scope_added",
+        "story_points_changed",
+        "sprint_scope_added",
+        "story_points_changed",
+        "sprint_scope_removed",
+    ]
+    assert events[0].task_id == UUID(first_task_response.json()["id"])
+    assert events[0].previous_story_points is None
+    assert events[0].new_story_points == 5
+    assert events[1].task_id == UUID(first_task_response.json()["id"])
+    assert events[1].new_story_points == 5
+    assert events[2].task_id == UUID(second_task_response.json()["id"])
+    assert events[2].new_story_points is None
+    assert events[3].task_id == UUID(created_sprint_task_response.json()["id"])
+    assert events[3].previous_story_points is None
+    assert events[3].new_story_points == 3
+    assert events[4].task_id == UUID(created_sprint_task_response.json()["id"])
+    assert events[4].new_story_points == 3
+    assert events[5].previous_story_points == 3
+    assert events[5].new_story_points == 8
+    assert events[6].previous_story_points == 5
+
+
+@pytest.mark.asyncio
+async def test_project_dashboard_denies_outsiders_like_project_reads(
+    client: AsyncClient,
+    users: dict[str, User],
+) -> None:
+    del users
+    project_response = await client.post(
+        "/projects",
+        headers={"Authorization": "Bearer token"},
+        json={"name": "Dashboard Project", "code": "DAO"},
+    )
+    project_id = project_response.json()["id"]
+
+    response = await client.get(
+        f"/projects/{project_id}/dashboard",
+        headers={"Authorization": "Bearer outsider-token"},
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Project not found"}
 
 
 @pytest.mark.asyncio
@@ -2083,12 +3610,27 @@ async def test_project_owner_closes_active_sprint_with_snapshots_and_carryover(
                 )
             )
         ).all()
+        completion_events = (
+            await session.scalars(
+                select(ProjectTaskChangeEvent)
+                .filter_by(
+                    project_id=UUID(project_id),
+                    event_type="sprint_task_finished",
+                )
+                .order_by(col(ProjectTaskChangeEvent.occurred_at))
+            )
+        ).all()
         assert first_task is not None
         assert second_task is not None
         assert finished_task is not None
         assert first_task.sprint_id is None
         assert second_task.sprint_id is None
         assert finished_task.sprint_id == UUID(sprint_response.json()["id"])
+        assert [event.task_id for event in completion_events] == [
+            UUID(finished_response.json()["id"])
+        ]
+        assert completion_events[0].sprint_id == UUID(sprint_response.json()["id"])
+        assert completion_events[0].new_story_points == 3
         first_task.title = "Edited after close"
         await session.delete(first_task)
         await session.commit()
@@ -2170,6 +3712,23 @@ async def test_project_owner_closes_active_sprint_with_snapshots_and_carryover(
         "First unfinished": ("unfinished", 5, False),
         "Second unfinished": ("unfinished", 8, True),
         "Finished task": ("finished", 3, True),
+    }
+
+    dashboard_response = await client.get(
+        f"/projects/{project_id}/dashboard",
+        headers={"Authorization": "Bearer member-token"},
+    )
+
+    assert dashboard_response.status_code == 200
+    dashboard_charts = {
+        chart["title"]: chart for chart in dashboard_response.json()["charts"]
+    }
+    velocity = dashboard_charts["Velocity chart"]
+    assert velocity["empty_state"] is None
+    assert velocity["entries"][0]["values"] == {
+        "completed_story_points": 3,
+        "finished_task_count": 1,
+        "unestimated_finished_tasks": 0,
     }
 
 

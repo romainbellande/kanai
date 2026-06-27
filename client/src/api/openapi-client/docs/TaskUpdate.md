@@ -1,7 +1,7 @@
 
 # TaskUpdate
 
-Request payload for updating a project task.  Parameters:     title: Optional replacement task title.     column_id: Optional replacement workflow column ID.     priority: Optional replacement priority level. Explicit null clears it.     story_points: Optional replacement Story Points estimate. Explicit null clears it.     assignee_id: Optional replacement user ID assigned to the task.     description: Optional replacement task details.     acceptance_criteria: Optional replacement completion criteria.     tag: Optional replacement task tag.
+Request payload for updating a project task.  Parameters:     title: Optional replacement task title.     column_id: Optional replacement workflow column ID.     priority: Optional replacement priority level. Explicit null clears it.     story_points: Optional replacement Story Points estimate. Explicit null clears it.     assignee_id: Optional replacement user ID assigned to the task.     description: Optional replacement task details.     acceptance_criteria: Optional replacement completion criteria.     tag: Optional replacement task tag.     is_blocked: Optional explicit Blocked Project Task marker.     blocked_reason: Optional replacement blocked reason. Explicit null clears it.
 
 ## Properties
 
@@ -15,6 +15,8 @@ Name | Type
 `description` | string
 `acceptanceCriteria` | string
 `tag` | string
+`isBlocked` | boolean
+`blockedReason` | string
 `prerequisiteTaskIds` | Array&lt;string&gt;
 
 ## Example
@@ -32,6 +34,8 @@ const example = {
   "description": null,
   "acceptanceCriteria": null,
   "tag": null,
+  "isBlocked": null,
+  "blockedReason": null,
   "prerequisiteTaskIds": null,
 } satisfies TaskUpdate
 

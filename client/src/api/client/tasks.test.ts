@@ -1,6 +1,9 @@
 // @vitest-environment jsdom
 
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, renderHook } from "@testing-library/react";
 import * as client from "openid-client";
+import { createElement, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("openid-client", () => ({
@@ -25,7 +28,27 @@ import {
 	removeProjectActiveSprintTaskToBacklog,
 	reorderProjectBacklog,
 	updateProjectTask,
+	useMoveProjectTaskMutation,
 } from "#/api/client";
+
+function createTestQueryClient() {
+	return new QueryClient({
+		defaultOptions: {
+			queries: { retry: false },
+			mutations: { retry: false },
+		},
+	});
+}
+
+function createWrapper(queryClient: QueryClient) {
+	return function Wrapper({ children }: { children: ReactNode }) {
+		return createElement(
+			QueryClientProvider,
+			{ client: queryClient },
+			children,
+		);
+	};
+}
 
 describe("tasks client", () => {
 	beforeEach(() => {
@@ -389,6 +412,8 @@ describe("tasks client", () => {
 					description: "Notes",
 					acceptance_criteria: "Done means shipped",
 					tag: null,
+					is_blocked: true,
+					blocked_reason: "Waiting on customer access",
 					created_at: null,
 					updated_at: null,
 				}),
@@ -405,6 +430,8 @@ describe("tasks client", () => {
 				priority: "medium",
 				description: "Notes",
 				acceptanceCriteria: "Done means shipped",
+				isBlocked: true,
+				blockedReason: "Waiting on customer access",
 			},
 		});
 
@@ -418,6 +445,8 @@ describe("tasks client", () => {
 			priority: "medium",
 			description: "Notes",
 			acceptance_criteria: "Done means shipped",
+			is_blocked: true,
+			blocked_reason: "Waiting on customer access",
 		});
 	});
 
@@ -440,6 +469,8 @@ describe("tasks client", () => {
 					description: null,
 					acceptance_criteria: null,
 					tag: null,
+					is_blocked: false,
+					blocked_reason: null,
 					created_at: null,
 					updated_at: null,
 				}),
@@ -451,7 +482,7 @@ describe("tasks client", () => {
 		await updateProjectTask({
 			projectId: "project-1",
 			taskId: "task-1",
-			taskUpdate: { priority: "low" },
+			taskUpdate: { isBlocked: false, priority: "low" },
 		});
 
 		const [url, init] = fetchSpy.mock.calls[0];
@@ -462,6 +493,7 @@ describe("tasks client", () => {
 		expect(init?.method).toBe("PATCH");
 		expect(JSON.parse(String(init?.body))).toEqual({
 			priority: "low",
+			is_blocked: false,
 		});
 	});
 
@@ -518,6 +550,72 @@ describe("tasks client", () => {
 			before_task_id: "task-before",
 			after_task_id: "task-after",
 		});
+	});
+
+	it("invalidates dashboard analytics from direct task mutation hooks", async () => {
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({ accessToken: "task-token" }),
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(["projects", "project-1", "tasks"], []);
+		queryClient.setQueryData(
+			["projects", "project-1", "tasks", "active-sprint"],
+			[],
+		);
+		queryClient.setQueryData(["projects", "project-1", "dashboard"], {
+			projectId: "project-1",
+		});
+		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					id: "task-1",
+					project_id: "project-1",
+					title: "Moved Task",
+					column_id: "column-done",
+					priority: "medium",
+					rank: "b",
+					assignee_id: null,
+					description: null,
+					acceptance_criteria: null,
+					tag: null,
+					created_at: null,
+					updated_at: null,
+				}),
+				{ headers: { "content-type": "application/json" }, status: 200 },
+			),
+		);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		const { result } = renderHook(() => useMoveProjectTaskMutation(), {
+			wrapper: createWrapper(queryClient),
+		});
+
+		await act(async () => {
+			await result.current.mutateAsync({
+				projectId: "project-1",
+				taskId: "task-1",
+				destination: { columnId: "column-done" },
+			});
+		});
+
+		expect(
+			queryClient.getQueryState(["projects", "project-1", "tasks"])
+				?.isInvalidated,
+		).toBe(true);
+		expect(
+			queryClient.getQueryState([
+				"projects",
+				"project-1",
+				"tasks",
+				"active-sprint",
+			])?.isInvalidated,
+		).toBe(true);
+		expect(
+			queryClient.getQueryState(["projects", "project-1", "dashboard"])
+				?.isInvalidated,
+		).toBe(true);
 	});
 
 	it("refreshes and retries custom task requests once after a 401", async () => {

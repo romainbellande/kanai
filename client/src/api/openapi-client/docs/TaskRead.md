@@ -1,7 +1,7 @@
 
 # TaskRead
 
-Response payload for reading a project task.  Parameters:     id: Task ID.     project_id: ID of the project that owns the task.     sprint_id: Optional active or historical sprint membership ID.     title: Task title.     column_id: Workflow column ID for the task.     priority: Optional priority level for the task.     story_points: Optional Story Points estimate.     rank: Sortable LexoRank-style position within the task column.     backlog_rank: Optional manual rank within the project backlog.     assignee_id: Optional user ID assigned to the task.     description: Optional task details.     acceptance_criteria: Optional criteria required to complete the task.     tag: Optional task tag.     created_at: Optional timestamp when the task was created.     updated_at: Optional timestamp when the task was last updated.
+Response payload for reading a project task.  Parameters:     id: Task ID.     project_id: ID of the project that owns the task.     sprint_id: Optional active or historical sprint membership ID.     title: Task title.     column_id: Workflow column ID for the task.     priority: Optional priority level for the task.     story_points: Optional Story Points estimate.     rank: Sortable LexoRank-style position within the task column.     backlog_rank: Optional manual rank within the project backlog.     assignee_id: Optional user ID assigned to the task.     description: Optional task details.     acceptance_criteria: Optional criteria required to complete the task.     tag: Optional task tag.     is_blocked: Whether the task is explicitly marked as a Blocked Project Task.     blocked_reason: Optional explanation for why the task is blocked.     created_at: Optional timestamp when the task was created.     updated_at: Optional timestamp when the task was last updated.
 
 ## Properties
 
@@ -20,6 +20,8 @@ Name | Type
 `description` | string
 `acceptanceCriteria` | string
 `tag` | string
+`isBlocked` | boolean
+`blockedReason` | string
 `createdAt` | Date
 `updatedAt` | Date
 `prerequisiteTaskIds` | Array&lt;string&gt;
@@ -44,6 +46,8 @@ const example = {
   "description": null,
   "acceptanceCriteria": null,
   "tag": null,
+  "isBlocked": null,
+  "blockedReason": null,
   "createdAt": null,
   "updatedAt": null,
   "prerequisiteTaskIds": null,

@@ -73,7 +73,7 @@ export function TaskDetailPage({
 
 	function updateField(
 		field: keyof Omit<typeof form.values, "prerequisiteTaskIds">,
-		value: string,
+		value: string | boolean,
 	) {
 		form.setField(field, value);
 		setSavedMessage(null);
@@ -294,6 +294,54 @@ export function TaskDetailPage({
 									type="text"
 									value={form.values.tag}
 								/>
+							</Field>
+
+							<Field className="sm:col-span-2">
+								<label
+									htmlFor="taskIsBlocked"
+									className="flex cursor-pointer items-start gap-3 rounded-2xl border border-[var(--outline-variant)] bg-[var(--surface)] p-4 hover:bg-[var(--surface-container-high)]"
+								>
+									<input
+										id="taskIsBlocked"
+										type="checkbox"
+										checked={form.values.isBlocked}
+										onChange={(event) =>
+											updateField("isBlocked", event.currentTarget.checked)
+										}
+										className="mt-1 h-4 w-4 flex-shrink-0 accent-[var(--primary)]"
+									/>
+									<span>
+										<span className="block text-sm font-semibold text-[var(--on-surface)]">
+											Blocked Project Task
+										</span>
+										<span className="mt-1 block text-sm text-[var(--on-surface-variant)]">
+											Mark this task explicitly blocked without changing
+											prerequisites or Project status.
+										</span>
+									</span>
+								</label>
+							</Field>
+
+							<Field className="sm:col-span-2">
+								<FieldLabel
+									className="text-sm font-semibold text-[var(--on-surface)]"
+									htmlFor="taskBlockedReason"
+								>
+									Blocked Reason
+								</FieldLabel>
+								<Textarea
+									id="taskBlockedReason"
+									disabled={!form.values.isBlocked}
+									onChange={(event) =>
+										updateField("blockedReason", event.target.value)
+									}
+									placeholder="Why is this task blocked?"
+									rows={3}
+									value={form.values.blockedReason}
+								/>
+								<FieldDescription className="text-sm font-medium text-[var(--on-surface-variant)]">
+									The reason is saved only while the task is marked blocked.
+								</FieldDescription>
 							</Field>
 
 							<TaskPrerequisitesField

@@ -8,6 +8,7 @@ export function SidebarNavItem({
 	label,
 	icon: Icon,
 	active,
+	params,
 	to,
 }: SidebarNavItemProps) {
 	const className = [
@@ -26,7 +27,7 @@ export function SidebarNavItem({
 
 	if (to) {
 		return (
-			<Link to={to} className={className}>
+			<Link to={to} params={params} className={className}>
 				{content}
 			</Link>
 		);

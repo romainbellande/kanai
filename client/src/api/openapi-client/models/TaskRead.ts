@@ -31,6 +31,8 @@ import { mapValues } from '../runtime';
  *     description: Optional task details.
  *     acceptance_criteria: Optional criteria required to complete the task.
  *     tag: Optional task tag.
+ *     is_blocked: Whether the task is explicitly marked as a Blocked Project Task.
+ *     blocked_reason: Optional explanation for why the task is blocked.
  *     created_at: Optional timestamp when the task was created.
  *     updated_at: Optional timestamp when the task was last updated.
  * @export
@@ -117,6 +119,18 @@ export interface TaskRead {
     tag: string | null;
     /**
      * 
+     * @type {boolean}
+     * @memberof TaskRead
+     */
+    isBlocked: boolean;
+    /**
+     * 
+     * @type {string}
+     * @memberof TaskRead
+     */
+    blockedReason: string | null;
+    /**
+     * 
      * @type {Date}
      * @memberof TaskRead
      */
@@ -152,6 +166,8 @@ export function instanceOfTaskRead(value: object): value is TaskRead {
     if (!('description' in value) || value['description'] === undefined) return false;
     if (!('acceptanceCriteria' in value) || value['acceptanceCriteria'] === undefined) return false;
     if (!('tag' in value) || value['tag'] === undefined) return false;
+    if (!('isBlocked' in value) || value['isBlocked'] === undefined) return false;
+    if (!('blockedReason' in value) || value['blockedReason'] === undefined) return false;
     if (!('createdAt' in value) || value['createdAt'] === undefined) return false;
     if (!('updatedAt' in value) || value['updatedAt'] === undefined) return false;
     return true;
@@ -180,6 +196,8 @@ export function TaskReadFromJSONTyped(json: any, ignoreDiscriminator: boolean): 
         'description': json['description'],
         'acceptanceCriteria': json['acceptance_criteria'],
         'tag': json['tag'],
+        'isBlocked': json['is_blocked'],
+        'blockedReason': json['blocked_reason'],
         'createdAt': (json['created_at'] == null ? null : new Date(json['created_at'])),
         'updatedAt': (json['updated_at'] == null ? null : new Date(json['updated_at'])),
         'prerequisiteTaskIds': json['prerequisite_task_ids'] == null ? undefined : json['prerequisite_task_ids'],
@@ -210,6 +228,8 @@ export function TaskReadToJSONTyped(value?: TaskRead | null, ignoreDiscriminator
         'description': value['description'],
         'acceptance_criteria': value['acceptanceCriteria'],
         'tag': value['tag'],
+        'is_blocked': value['isBlocked'],
+        'blocked_reason': value['blockedReason'],
         'created_at': value['createdAt'] == null ? value['createdAt'] : value['createdAt'].toISOString(),
         'updated_at': value['updatedAt'] == null ? value['updatedAt'] : value['updatedAt'].toISOString(),
         'prerequisite_task_ids': value['prerequisiteTaskIds'],

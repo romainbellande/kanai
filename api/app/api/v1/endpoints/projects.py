@@ -20,6 +20,7 @@ from app.schemas.project import (
     ProjectDoneColumnRead,
     ProjectDoneColumnUpdate,
     ProjectMemberCreate,
+    ProjectDashboardRead,
     ProjectRead,
     ProjectSprintCreate,
     ProjectSprintClosePreviewRead,
@@ -36,6 +37,7 @@ from app.services.project_chat_service import ProjectChatService
 from app.services.project_column_service import ProjectColumnService
 from app.services.project_access import ProjectAccess
 from app.services.project_backlog_service import ProjectBacklogService
+from app.services.project_dashboard_service import ProjectDashboardService
 from app.services.project_done_column_service import ProjectDoneColumnService
 from app.services.project_sprint_service import ProjectSprintService
 from app.services.project_service import (
@@ -103,6 +105,19 @@ async def get_project(
         require_current_user_id(current_user.id),
     )
     return await project_to_read(session, project)
+
+
+@project_router.get("/{project_id}/dashboard", response_model=ProjectDashboardRead)
+async def get_project_dashboard(
+    project_id: UUID,
+    session: DatabaseSession,
+    current_user: CurrentUser,
+) -> ProjectDashboardRead:
+    """Get the aggregated Project Dashboard visible to project participants."""
+    return await ProjectDashboardService(session).get(
+        project_id,
+        require_current_user_id(current_user.id),
+    )
 
 
 @project_router.get("/{project_id}/columns", response_model=list[ProjectColumnRead])

@@ -7,11 +7,17 @@ import pytest
 import pytest_asyncio
 from fastapi import HTTPException
 from pydantic import ValidationError
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel
 
 from app.features.tasks import TaskService
-from app.models.project import Project, ProjectColumn, ProjectOwner
+from app.models.project import (
+    Project,
+    ProjectColumn,
+    ProjectOwner,
+    ProjectTaskChangeEvent,
+)
 from app.models.task import Task
 from app.models.user import User
 from app.schemas.task import TaskCreate, TaskUpdate
@@ -248,6 +254,15 @@ async def test_update_task_moves_to_project_column(
         )
         assert fetched.column_id == second_column.id
         assert "status" not in fetched.model_dump()
+        event = await session.scalar(select(ProjectTaskChangeEvent))
+        assert event is not None
+        assert event.event_type == "workflow_column_changed"
+        assert event.previous_column_id == first_column.id
+        assert event.previous_column_name == "Backlog"
+        assert event.previous_column_position == 0
+        assert event.new_column_id == second_column.id
+        assert event.new_column_name == "Review"
+        assert event.new_column_position == 1
 
 
 def test_task_api_payloads_reject_legacy_status() -> None:

@@ -16,6 +16,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProjectsNewRouteImport } from './routes/projects/new'
 import { Route as ProjectsProjectIdRouteImport } from './routes/projects/$projectId'
 import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
+import { Route as ProjectsProjectIdDashboardRouteImport } from './routes/projects_.$projectId.dashboard'
 import { Route as ProjectsProjectIdBacklogRouteImport } from './routes/projects_.$projectId.backlog'
 import { Route as ProjectsProjectIdTasksNewRouteImport } from './routes/projects_.$projectId.tasks.new'
 import { Route as ProjectsProjectIdTasksTaskIdRouteImport } from './routes/projects_.$projectId.tasks.$taskId'
@@ -57,6 +58,12 @@ const AuthCallbackRoute = AuthCallbackRouteImport.update({
   path: '/auth/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProjectsProjectIdDashboardRoute =
+  ProjectsProjectIdDashboardRouteImport.update({
+    id: '/projects_/$projectId/dashboard',
+    path: '/projects/$projectId/dashboard',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ProjectsProjectIdBacklogRoute =
   ProjectsProjectIdBacklogRouteImport.update({
     id: '/projects_/$projectId/backlog',
@@ -97,6 +104,7 @@ export interface FileRoutesByFullPath {
   '/projects/$projectId': typeof ProjectsProjectIdRoute
   '/projects/new': typeof ProjectsNewRoute
   '/projects/$projectId/backlog': typeof ProjectsProjectIdBacklogRoute
+  '/projects/$projectId/dashboard': typeof ProjectsProjectIdDashboardRoute
   '/projects/$projectId/columns/$columnId': typeof ProjectsProjectIdColumnsColumnIdRoute
   '/projects/$projectId/columns/new': typeof ProjectsProjectIdColumnsNewRoute
   '/projects/$projectId/tasks/$taskId': typeof ProjectsProjectIdTasksTaskIdRoute
@@ -111,6 +119,7 @@ export interface FileRoutesByTo {
   '/projects/$projectId': typeof ProjectsProjectIdRoute
   '/projects/new': typeof ProjectsNewRoute
   '/projects/$projectId/backlog': typeof ProjectsProjectIdBacklogRoute
+  '/projects/$projectId/dashboard': typeof ProjectsProjectIdDashboardRoute
   '/projects/$projectId/columns/$columnId': typeof ProjectsProjectIdColumnsColumnIdRoute
   '/projects/$projectId/columns/new': typeof ProjectsProjectIdColumnsNewRoute
   '/projects/$projectId/tasks/$taskId': typeof ProjectsProjectIdTasksTaskIdRoute
@@ -126,6 +135,7 @@ export interface FileRoutesById {
   '/projects/$projectId': typeof ProjectsProjectIdRoute
   '/projects/new': typeof ProjectsNewRoute
   '/projects_/$projectId/backlog': typeof ProjectsProjectIdBacklogRoute
+  '/projects_/$projectId/dashboard': typeof ProjectsProjectIdDashboardRoute
   '/projects_/$projectId/columns/$columnId': typeof ProjectsProjectIdColumnsColumnIdRoute
   '/projects_/$projectId/columns/new': typeof ProjectsProjectIdColumnsNewRoute
   '/projects_/$projectId/tasks/$taskId': typeof ProjectsProjectIdTasksTaskIdRoute
@@ -142,6 +152,7 @@ export interface FileRouteTypes {
     | '/projects/$projectId'
     | '/projects/new'
     | '/projects/$projectId/backlog'
+    | '/projects/$projectId/dashboard'
     | '/projects/$projectId/columns/$columnId'
     | '/projects/$projectId/columns/new'
     | '/projects/$projectId/tasks/$taskId'
@@ -156,6 +167,7 @@ export interface FileRouteTypes {
     | '/projects/$projectId'
     | '/projects/new'
     | '/projects/$projectId/backlog'
+    | '/projects/$projectId/dashboard'
     | '/projects/$projectId/columns/$columnId'
     | '/projects/$projectId/columns/new'
     | '/projects/$projectId/tasks/$taskId'
@@ -170,6 +182,7 @@ export interface FileRouteTypes {
     | '/projects/$projectId'
     | '/projects/new'
     | '/projects_/$projectId/backlog'
+    | '/projects_/$projectId/dashboard'
     | '/projects_/$projectId/columns/$columnId'
     | '/projects_/$projectId/columns/new'
     | '/projects_/$projectId/tasks/$taskId'
@@ -185,6 +198,7 @@ export interface RootRouteChildren {
   ProjectsProjectIdRoute: typeof ProjectsProjectIdRoute
   ProjectsNewRoute: typeof ProjectsNewRoute
   ProjectsProjectIdBacklogRoute: typeof ProjectsProjectIdBacklogRoute
+  ProjectsProjectIdDashboardRoute: typeof ProjectsProjectIdDashboardRoute
   ProjectsProjectIdColumnsColumnIdRoute: typeof ProjectsProjectIdColumnsColumnIdRoute
   ProjectsProjectIdColumnsNewRoute: typeof ProjectsProjectIdColumnsNewRoute
   ProjectsProjectIdTasksTaskIdRoute: typeof ProjectsProjectIdTasksTaskIdRoute
@@ -242,6 +256,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/projects_/$projectId/dashboard': {
+      id: '/projects_/$projectId/dashboard'
+      path: '/projects/$projectId/dashboard'
+      fullPath: '/projects/$projectId/dashboard'
+      preLoaderRoute: typeof ProjectsProjectIdDashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/projects_/$projectId/backlog': {
       id: '/projects_/$projectId/backlog'
       path: '/projects/$projectId/backlog'
@@ -289,6 +310,7 @@ const rootRouteChildren: RootRouteChildren = {
   ProjectsProjectIdRoute: ProjectsProjectIdRoute,
   ProjectsNewRoute: ProjectsNewRoute,
   ProjectsProjectIdBacklogRoute: ProjectsProjectIdBacklogRoute,
+  ProjectsProjectIdDashboardRoute: ProjectsProjectIdDashboardRoute,
   ProjectsProjectIdColumnsColumnIdRoute: ProjectsProjectIdColumnsColumnIdRoute,
   ProjectsProjectIdColumnsNewRoute: ProjectsProjectIdColumnsNewRoute,
   ProjectsProjectIdTasksTaskIdRoute: ProjectsProjectIdTasksTaskIdRoute,

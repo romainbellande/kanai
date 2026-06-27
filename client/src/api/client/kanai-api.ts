@@ -19,6 +19,8 @@ import {
 	projectActiveSprintQueryOptions,
 	projectColumnsQueryKey,
 	projectColumnsQueryOptions,
+	projectDashboardQueryKey,
+	projectDashboardQueryOptions,
 	projectDoneColumnQueryKey,
 	projectDoneColumnQueryOptions,
 	projectQueryOptions,
@@ -72,6 +74,33 @@ import {
 export function useKanaiApi() {
 	const queryClient = useQueryClient();
 
+	const invalidateDashboard = (projectId: string) =>
+		queryClient.invalidateQueries({
+			queryKey: projectDashboardQueryKey(projectId),
+		});
+
+	const invalidateProjectTaskState = (projectId: string) =>
+		Promise.all([
+			queryClient.invalidateQueries({
+				queryKey: projectTasksQueryKey(projectId),
+			}),
+			queryClient.invalidateQueries({
+				queryKey: projectActiveSprintTasksQueryKey(projectId),
+			}),
+			invalidateDashboard(projectId),
+		]);
+
+	const invalidateProjectBacklogTaskState = (projectId: string) =>
+		Promise.all([
+			queryClient.invalidateQueries({
+				queryKey: projectBacklogQueryKey(projectId),
+			}),
+			queryClient.invalidateQueries({
+				queryKey: projectTasksQueryKey(projectId),
+			}),
+			invalidateDashboard(projectId),
+		]);
+
 	return {
 		projects: {
 			list: () => projectsQueryOptions(),
@@ -105,6 +134,10 @@ export function useKanaiApi() {
 				});
 				return project;
 			},
+		},
+		dashboard: {
+			get: (projectId: string) => projectDashboardQueryOptions(projectId),
+			invalidate: invalidateDashboard,
 		},
 		projectColumns: {
 			list: (projectId: string) => projectColumnsQueryOptions(projectId),
@@ -184,18 +217,21 @@ export function useKanaiApi() {
 			closeActive: async (projectId: string) => {
 				const result = await closeActiveProjectSprint(projectId);
 				queryClient.setQueryData(projectActiveSprintQueryKey(projectId), null);
-				await queryClient.invalidateQueries({
-					queryKey: projectTasksQueryKey(projectId),
-				});
-				await queryClient.invalidateQueries({
-					queryKey: projectActiveSprintTasksQueryKey(projectId),
-				});
-				await queryClient.invalidateQueries({
-					queryKey: projectBacklogQueryKey(projectId),
-				});
-				await queryClient.invalidateQueries({
-					queryKey: projectSprintHistoryQueryKey(projectId),
-				});
+				await Promise.all([
+					queryClient.invalidateQueries({
+						queryKey: projectTasksQueryKey(projectId),
+					}),
+					queryClient.invalidateQueries({
+						queryKey: projectActiveSprintTasksQueryKey(projectId),
+					}),
+					queryClient.invalidateQueries({
+						queryKey: projectBacklogQueryKey(projectId),
+					}),
+					queryClient.invalidateQueries({
+						queryKey: projectSprintHistoryQueryKey(projectId),
+					}),
+					invalidateDashboard(projectId),
+				]);
 				return result;
 			},
 			invalidateActiveSprint: (projectId: string) =>
@@ -215,9 +251,12 @@ export function useKanaiApi() {
 					projectDoneColumnQueryKey(projectId),
 					doneColumn,
 				);
-				await queryClient.invalidateQueries({
-					queryKey: projectColumnsQueryKey(projectId),
-				});
+				await Promise.all([
+					queryClient.invalidateQueries({
+						queryKey: projectColumnsQueryKey(projectId),
+					}),
+					invalidateDashboard(projectId),
+				]);
 				return doneColumn;
 			},
 		},
@@ -233,12 +272,7 @@ export function useKanaiApi() {
 				listProjectActiveSprintTasks(projectId),
 			create: async (projectId: string, values: CreateProjectTaskInput) => {
 				const task = await createProjectTask({ projectId, taskCreate: values });
-				await queryClient.invalidateQueries({
-					queryKey: projectTasksQueryKey(projectId),
-				});
-				await queryClient.invalidateQueries({
-					queryKey: projectActiveSprintTasksQueryKey(projectId),
-				});
+				await invalidateProjectTaskState(projectId);
 				return task;
 			},
 			update: async (
@@ -250,12 +284,7 @@ export function useKanaiApi() {
 					taskId,
 					taskUpdate: values,
 				});
-				await queryClient.invalidateQueries({
-					queryKey: projectTasksQueryKey(projectId),
-				});
-				await queryClient.invalidateQueries({
-					queryKey: projectActiveSprintTasksQueryKey(projectId),
-				});
+				await invalidateProjectTaskState(projectId);
 				return task;
 			},
 			move: async (
@@ -267,12 +296,7 @@ export function useKanaiApi() {
 					taskId,
 					destination,
 				});
-				await queryClient.invalidateQueries({
-					queryKey: projectTasksQueryKey(projectId),
-				});
-				await queryClient.invalidateQueries({
-					queryKey: projectActiveSprintTasksQueryKey(projectId),
-				});
+				await invalidateProjectTaskState(projectId);
 				return task;
 			},
 			patchCached: (
@@ -313,12 +337,7 @@ export function useKanaiApi() {
 				values: BulkCreateProjectBacklogTasksInput,
 			) => {
 				const tasks = await bulkCreateProjectBacklogTasks(projectId, values);
-				await queryClient.invalidateQueries({
-					queryKey: projectBacklogQueryKey(projectId),
-				});
-				await queryClient.invalidateQueries({
-					queryKey: projectTasksQueryKey(projectId),
-				});
+				await invalidateProjectBacklogTaskState(projectId);
 				return tasks;
 			},
 			createTask: async (projectId: string, values: CreateTaskInput) => {
@@ -326,12 +345,7 @@ export function useKanaiApi() {
 					projectId,
 					taskCreate: values,
 				});
-				await queryClient.invalidateQueries({
-					queryKey: projectBacklogQueryKey(projectId),
-				});
-				await queryClient.invalidateQueries({
-					queryKey: projectTasksQueryKey(projectId),
-				});
+				await invalidateProjectBacklogTaskState(projectId);
 				return task;
 			},
 			reorder: async (
@@ -349,15 +363,18 @@ export function useKanaiApi() {
 				const task = await addProjectBacklogTaskToActiveSprint(projectId, {
 					taskId,
 				});
-				await queryClient.invalidateQueries({
-					queryKey: projectBacklogQueryKey(projectId),
-				});
-				await queryClient.invalidateQueries({
-					queryKey: projectTasksQueryKey(projectId),
-				});
-				await queryClient.invalidateQueries({
-					queryKey: projectActiveSprintTasksQueryKey(projectId),
-				});
+				await Promise.all([
+					queryClient.invalidateQueries({
+						queryKey: projectBacklogQueryKey(projectId),
+					}),
+					queryClient.invalidateQueries({
+						queryKey: projectTasksQueryKey(projectId),
+					}),
+					queryClient.invalidateQueries({
+						queryKey: projectActiveSprintTasksQueryKey(projectId),
+					}),
+					invalidateDashboard(projectId),
+				]);
 				return task;
 			},
 			removeFromActiveSprint: async (projectId: string, taskId: string) => {
@@ -365,15 +382,18 @@ export function useKanaiApi() {
 					projectId,
 					taskId,
 				);
-				await queryClient.invalidateQueries({
-					queryKey: projectActiveSprintTasksQueryKey(projectId),
-				});
-				await queryClient.invalidateQueries({
-					queryKey: projectBacklogQueryKey(projectId),
-				});
-				await queryClient.invalidateQueries({
-					queryKey: projectTasksQueryKey(projectId),
-				});
+				await Promise.all([
+					queryClient.invalidateQueries({
+						queryKey: projectActiveSprintTasksQueryKey(projectId),
+					}),
+					queryClient.invalidateQueries({
+						queryKey: projectBacklogQueryKey(projectId),
+					}),
+					queryClient.invalidateQueries({
+						queryKey: projectTasksQueryKey(projectId),
+					}),
+					invalidateDashboard(projectId),
+				]);
 				return task;
 			},
 		},

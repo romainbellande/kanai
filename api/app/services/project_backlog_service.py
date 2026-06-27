@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 from builtins import list as list_
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.project import ProjectTaskChangeEvent
 from app.models.task import Task, TaskDependency
 from app.repositories.project_repository import ProjectRepository
+from app.repositories.project_task_change_event_repository import (
+    ProjectTaskChangeEventRepository,
+)
 from app.repositories.task_repository import TaskRepository
 from app.schemas.project import ProjectBacklogReorder
 from app.schemas.task import (
@@ -34,6 +39,7 @@ class ProjectBacklogService:
         self._access = ProjectAccess(session)
         self._project_repository = ProjectRepository(session)
         self._task_repository = TaskRepository(session)
+        self._events = ProjectTaskChangeEventRepository(session)
 
     async def list(self, project_id: UUID, user_id: UUID) -> list_[TaskRead]:
         """Return unfinished non-sprint tasks in Backlog order."""
@@ -88,15 +94,28 @@ class ProjectBacklogService:
             await self._access.validate_users_exist({payload.assignee_id})
 
         columns = await self._project_repository.list_columns_by_project(project_id)
-        column = next(
-            (column for column in columns if column.id != project.done_column_id),
-            None,
+        column = (
+            next((column for column in columns if column.id == payload.column_id), None)
+            if payload.column_id is not None
+            else next(
+                (column for column in columns if column.id != project.done_column_id),
+                None,
+            )
         )
         if column is None or column.id is None:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="Project has no non-Done columns",
+                detail="Project column not found",
             )
+        sprint_id: UUID | None = None
+        if payload.include_in_active_sprint:
+            sprint = await self._project_repository.get_active_sprint(project_id)
+            if sprint is None or sprint.id is None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Project has no active sprint",
+                )
+            sprint_id = sprint.id
 
         first_backlog_task = next(
             iter(
@@ -111,15 +130,19 @@ class ProjectBacklogService:
         )
         task = Task(
             project_id=project_id,
-            sprint_id=None,
+            sprint_id=sprint_id,
             column_id=column.id,
             title=payload.title,
             priority=task_priority_to_storage(payload.priority),
             story_points=payload.story_points,
             rank=await self._next_task_rank(project_id, column.id),
-            backlog_rank=rank_between(None, first_backlog_task.backlog_rank)
-            if first_backlog_task and first_backlog_task.backlog_rank
-            else DEFAULT_TASK_RANK,
+            backlog_rank=(
+                None
+                if sprint_id is not None
+                else rank_between(None, first_backlog_task.backlog_rank)
+                if first_backlog_task and first_backlog_task.backlog_rank
+                else DEFAULT_TASK_RANK
+            ),
             assignee_id=payload.assignee_id,
             description=payload.description,
             acceptance_criteria=payload.acceptance_criteria,
@@ -133,6 +156,30 @@ class ProjectBacklogService:
             await self._replace_prerequisites(
                 project_id, task.id, payload.prerequisite_task_ids
             )
+            if task.story_points is not None:
+                self._events.add(
+                    ProjectTaskChangeEvent(
+                        project_id=project_id,
+                        task_id=task.id,
+                        event_type="story_points_changed",
+                        sprint_id=task.sprint_id,
+                        previous_story_points=None,
+                        new_story_points=task.story_points,
+                        occurred_at=datetime.now(UTC),
+                    )
+                )
+            if sprint_id is not None:
+                self._events.add(
+                    ProjectTaskChangeEvent(
+                        project_id=project_id,
+                        task_id=task.id,
+                        event_type="sprint_scope_added",
+                        sprint_id=sprint_id,
+                        new_sprint_id=sprint_id,
+                        new_story_points=task.story_points,
+                        occurred_at=datetime.now(UTC),
+                    )
+                )
             await self._session.commit()
             await self._session.refresh(task)
         except Exception:
@@ -406,6 +453,8 @@ def task_to_read(
         assignee_id=task.assignee_id,
         description=task.description,
         acceptance_criteria=task.acceptance_criteria,
+        is_blocked=task.is_blocked,
+        blocked_reason=task.blocked_reason,
         tag=task.tag,
         created_at=task.created_at,
         updated_at=task.updated_at,

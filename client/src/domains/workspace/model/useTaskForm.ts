@@ -26,6 +26,8 @@ export type TaskFormValues = {
 	acceptanceCriteria: string;
 	tag: string;
 	prerequisiteTaskIds: string[];
+	isBlocked: boolean;
+	blockedReason: string;
 };
 
 export type TaskShapingDraftField = Extract<
@@ -181,6 +183,8 @@ function createInitialValues(
 		acceptanceCriteria: "",
 		tag: "",
 		prerequisiteTaskIds: [],
+		isBlocked: false,
+		blockedReason: "",
 	};
 }
 
@@ -194,6 +198,8 @@ function editInitialValues(task: Task | null | undefined): TaskFormValues {
 		acceptanceCriteria: task?.acceptanceCriteria ?? "",
 		tag: task?.tag ?? "",
 		prerequisiteTaskIds: task?.prerequisiteTaskIds ?? [],
+		isBlocked: task?.isBlocked ?? false,
+		blockedReason: task?.blockedReason ?? "",
 	};
 }
 
@@ -316,7 +322,7 @@ export function useTaskForm(input: UseTaskFormInput) {
 
 	function setField(
 		name: keyof Omit<TaskFormValues, "prerequisiteTaskIds">,
-		value: string,
+		value: string | boolean,
 	) {
 		setValues((currentValues) => ({ ...currentValues, [name]: value }));
 		setIsDirty(true);
@@ -455,6 +461,12 @@ export function useTaskForm(input: UseTaskFormInput) {
 		const priority = normalizeTaskPriority(values.priority);
 		const storyPoints = taskStoryPointsToPayload(values.storyPoints);
 
+		const blockedReason = values.blockedReason.trim();
+		const nextBlockedReason = values.isBlocked ? blockedReason || null : null;
+		const blockedFieldsChanged =
+			input.mode === "edit" &&
+			((editTask?.isBlocked ?? false) !== values.isBlocked ||
+				(editTask?.blockedReason ?? null) !== nextBlockedReason);
 		if (!title) {
 			setErrorMessage("Task title is required.");
 			return null;
@@ -477,6 +489,12 @@ export function useTaskForm(input: UseTaskFormInput) {
 						description: description || null,
 						acceptanceCriteria: acceptanceCriteria || null,
 						tag: tag || null,
+						...(blockedFieldsChanged
+							? {
+									isBlocked: values.isBlocked,
+									blockedReason: nextBlockedReason,
+								}
+							: {}),
 						...(editTask?.prerequisiteTaskIds !== undefined ||
 						values.prerequisiteTaskIds.length
 							? { prerequisiteTaskIds: values.prerequisiteTaskIds }
@@ -502,6 +520,9 @@ export function useTaskForm(input: UseTaskFormInput) {
 				description: description || undefined,
 				acceptanceCriteria: acceptanceCriteria || undefined,
 				tag: tag || undefined,
+				...(values.isBlocked
+					? { isBlocked: true, blockedReason: blockedReason || undefined }
+					: {}),
 				...(values.prerequisiteTaskIds.length
 					? { prerequisiteTaskIds: values.prerequisiteTaskIds }
 					: {}),

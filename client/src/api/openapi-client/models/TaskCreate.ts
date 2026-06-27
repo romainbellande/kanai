@@ -27,6 +27,8 @@ import { mapValues } from '../runtime';
  *     description: Optional task details.
  *     acceptance_criteria: Optional criteria required to complete the task.
  *     tag: Optional task tag.
+ *     is_blocked: Whether the task is explicitly marked as a Blocked Project Task.
+ *     blocked_reason: Optional explanation for why the task is blocked.
  * @export
  * @interface TaskCreate
  */
@@ -91,6 +93,18 @@ export interface TaskCreate {
      * @memberof TaskCreate
      */
     prerequisiteTaskIds?: Array<string>;
+    /**
+     * 
+     * @type {boolean}
+     * @memberof TaskCreate
+     */
+    isBlocked?: boolean;
+    /**
+     * 
+     * @type {string}
+     * @memberof TaskCreate
+     */
+    blockedReason?: string | null;
 }
 
 /**
@@ -121,6 +135,8 @@ export function TaskCreateFromJSONTyped(json: any, ignoreDiscriminator: boolean)
         'acceptanceCriteria': json['acceptance_criteria'] == null ? undefined : json['acceptance_criteria'],
         'tag': json['tag'] == null ? undefined : json['tag'],
         'prerequisiteTaskIds': json['prerequisite_task_ids'] == null ? undefined : json['prerequisite_task_ids'],
+        'isBlocked': json['is_blocked'] == null ? undefined : json['is_blocked'],
+        'blockedReason': json['blocked_reason'] == null ? undefined : json['blocked_reason'],
     };
 }
 
@@ -145,6 +161,8 @@ export function TaskCreateToJSONTyped(value?: TaskCreate | null, ignoreDiscrimin
         'acceptance_criteria': value['acceptanceCriteria'],
         'tag': value['tag'],
         'prerequisite_task_ids': value['prerequisiteTaskIds'],
+        'is_blocked': value['isBlocked'],
+        'blocked_reason': value['blockedReason'],
     };
 }
 

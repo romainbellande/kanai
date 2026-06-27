@@ -10,10 +10,15 @@ import pytest_asyncio
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlmodel import SQLModel
+from sqlmodel import SQLModel, col
 
 from app.features.tasks import TaskService
-from app.models.project import Project, ProjectColumn, ProjectOwner
+from app.models.project import (
+    Project,
+    ProjectColumn,
+    ProjectOwner,
+    ProjectTaskChangeEvent,
+)
 from app.models.task import Task, TaskDependency
 from app.models.user import User
 from app.schemas.task import TaskCreate, TaskUpdate
@@ -185,6 +190,70 @@ async def test_update_replaces_omits_and_clears_prerequisites(
             payload=TaskUpdate(prerequisite_task_ids=[]),
         )
         assert cleared.prerequisite_task_ids == []
+
+
+@pytest.mark.asyncio
+async def test_blocked_marker_is_separate_from_prerequisites_and_appends_events(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with session_factory() as session:
+        owner, project, column = await create_board(session)
+        assert owner.id is not None
+        assert project.id is not None
+        prerequisite = await add_task(session, project, column, "Prerequisite")
+        blocked = await add_task(session, project, column, "Blocked")
+        assert prerequisite.id is not None
+        assert blocked.id is not None
+        service = TaskService(session)
+
+        marked = await service.update(
+            project_id=project.id,
+            task_id=blocked.id,
+            user_id=owner.id,
+            payload=TaskUpdate(
+                is_blocked=True,
+                blocked_reason="  Waiting on customer access  ",
+                prerequisite_task_ids=[prerequisite.id],
+            ),
+        )
+        unchanged = await service.update(
+            project_id=project.id,
+            task_id=blocked.id,
+            user_id=owner.id,
+            payload=TaskUpdate(blocked_reason="New reason without state change"),
+        )
+        unblocked = await service.update(
+            project_id=project.id,
+            task_id=blocked.id,
+            user_id=owner.id,
+            payload=TaskUpdate(is_blocked=False, blocked_reason="ignored"),
+        )
+
+        assert marked.is_blocked is True
+        assert marked.blocked_reason == "Waiting on customer access"
+        assert marked.prerequisite_task_ids == [prerequisite.id]
+        assert unchanged.is_blocked is True
+        assert unchanged.blocked_reason == "New reason without state change"
+        assert unchanged.prerequisite_task_ids == [prerequisite.id]
+        assert unblocked.is_blocked is False
+        assert unblocked.blocked_reason is None
+        assert unblocked.prerequisite_task_ids == [prerequisite.id]
+
+        events = (
+            await session.scalars(
+                select(ProjectTaskChangeEvent).order_by(
+                    col(ProjectTaskChangeEvent.occurred_at),
+                    col(ProjectTaskChangeEvent.id),
+                )
+            )
+        ).all()
+        assert [event.event_type for event in events] == [
+            "blocked_state_changed",
+            "blocked_state_changed",
+        ]
+        assert [event.is_blocked for event in events] == [True, False]
+        assert events[0].blocked_reason == "Waiting on customer access"
+        assert events[1].blocked_reason is None
 
 
 @pytest.mark.asyncio

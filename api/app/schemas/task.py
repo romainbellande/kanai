@@ -45,6 +45,14 @@ def normalize_story_points(story_points: Any) -> int | None:
     return story_points
 
 
+def normalize_blocked_reason(reason: str | None) -> str | None:
+    """Normalize optional Blocked Project Task reason text."""
+    if reason is None:
+        return None
+    normalized_reason = reason.strip()
+    return normalized_reason or None
+
+
 class TaskCreate(BaseModel):
     """Request payload for creating a project task.
 
@@ -58,6 +66,8 @@ class TaskCreate(BaseModel):
         description: Optional task details.
         acceptance_criteria: Optional criteria required to complete the task.
         tag: Optional task tag.
+        is_blocked: Whether the task is explicitly marked as a Blocked Project Task.
+        blocked_reason: Optional explanation for why the task is blocked.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -72,6 +82,8 @@ class TaskCreate(BaseModel):
     acceptance_criteria: str | None = None
     tag: str | None = None
     prerequisite_task_ids: list[UUID] = Field(default_factory=list)
+    is_blocked: bool = False
+    blocked_reason: str | None = None
 
     @field_validator("priority")
     @classmethod
@@ -84,6 +96,12 @@ class TaskCreate(BaseModel):
     def validate_story_points(cls, story_points: Any) -> int | None:
         """Allow no estimation and reject values outside the fixed scale."""
         return normalize_story_points(story_points)
+
+    @field_validator("blocked_reason")
+    @classmethod
+    def normalize_blocked_reason(cls, reason: str | None) -> str | None:
+        """Store blank Blocked Project Task reasons as absent."""
+        return normalize_blocked_reason(reason)
 
 
 class TaskUpdate(BaseModel):
@@ -98,6 +116,8 @@ class TaskUpdate(BaseModel):
         description: Optional replacement task details.
         acceptance_criteria: Optional replacement completion criteria.
         tag: Optional replacement task tag.
+        is_blocked: Optional explicit Blocked Project Task marker.
+        blocked_reason: Optional replacement blocked reason. Explicit null clears it.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -128,6 +148,11 @@ class TaskUpdate(BaseModel):
         default=None,
         json_schema_extra={NULLABLE_UPDATE_FIELD: True},
     )
+    is_blocked: bool | None = None
+    blocked_reason: str | None = Field(
+        default=None,
+        json_schema_extra={NULLABLE_UPDATE_FIELD: True},
+    )
     prerequisite_task_ids: list[UUID] = Field(default_factory=list)
 
     @field_validator("priority")
@@ -141,6 +166,12 @@ class TaskUpdate(BaseModel):
     def validate_story_points(cls, story_points: Any) -> int | None:
         """Allow no estimation and reject values outside the fixed scale."""
         return normalize_story_points(story_points)
+
+    @field_validator("blocked_reason")
+    @classmethod
+    def normalize_blocked_reason(cls, reason: str | None) -> str | None:
+        """Store blank Blocked Project Task reasons as absent."""
+        return normalize_blocked_reason(reason)
 
     @model_validator(mode="before")
     @classmethod
@@ -266,6 +297,8 @@ class TaskRead(BaseModel):
         description: Optional task details.
         acceptance_criteria: Optional criteria required to complete the task.
         tag: Optional task tag.
+        is_blocked: Whether the task is explicitly marked as a Blocked Project Task.
+        blocked_reason: Optional explanation for why the task is blocked.
         created_at: Optional timestamp when the task was created.
         updated_at: Optional timestamp when the task was last updated.
     """
@@ -285,6 +318,8 @@ class TaskRead(BaseModel):
     description: str | None
     acceptance_criteria: str | None
     tag: str | None
+    is_blocked: bool
+    blocked_reason: str | None
     created_at: datetime | None
     updated_at: datetime | None
     prerequisite_task_ids: list[UUID] = Field(default_factory=list)

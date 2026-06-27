@@ -1,10 +1,17 @@
-import { queryOptions, useMutation, useQuery } from "@tanstack/react-query";
+import {
+	type QueryClient,
+	queryOptions,
+	useMutation,
+	useQuery,
+	useQueryClient,
+} from "@tanstack/react-query";
 
 import type {
 	TaskCreate,
 	TaskDestination,
 	TaskUpdate,
 } from "#/api/openapi-client";
+import { projectDashboardQueryKey } from "./projects";
 
 import { fetchAuthenticatedApi } from "./utils";
 
@@ -22,6 +29,8 @@ export type Task = {
 	description: string | null;
 	acceptanceCriteria: string | null;
 	tag: string | null;
+	isBlocked?: boolean;
+	blockedReason?: string | null;
 	createdAt: Date | null;
 	updatedAt: Date | null;
 	prerequisiteTaskIds?: string[];
@@ -50,6 +59,8 @@ export type BulkCreateProjectBacklogTasksInput = {
 export type CreateTaskInput = Omit<TaskCreate, "columnId"> & {
 	columnId?: string;
 	prerequisiteTaskIds?: string[];
+	isBlocked?: boolean;
+	blockedReason?: string | null;
 };
 export type CreateProjectTaskInput = CreateTaskInput & {
 	includeInActiveSprint?: boolean;
@@ -63,6 +74,8 @@ export type AddProjectSprintTaskInput = {
 export type UpdateTaskInput = Omit<TaskUpdate, "columnId"> & {
 	columnId?: string;
 	prerequisiteTaskIds?: string[];
+	isBlocked?: boolean;
+	blockedReason?: string | null;
 };
 export type ListProjectTasksInput = {
 	title?: string;
@@ -97,6 +110,8 @@ type TaskJson = {
 	description: string | null;
 	acceptance_criteria: string | null;
 	tag: string | null;
+	is_blocked?: boolean;
+	blocked_reason?: string | null;
 	created_at: string | null;
 	updated_at: string | null;
 	prerequisite_task_ids?: string[];
@@ -114,6 +129,23 @@ export function projectBacklogQueryKey(projectId: string) {
 	return ["projects", projectId, "backlog"] as const;
 }
 
+function invalidateProjectTaskMutationQueries(
+	queryClient: QueryClient,
+	projectId: string,
+) {
+	return Promise.all([
+		queryClient.invalidateQueries({
+			queryKey: projectTasksQueryKey(projectId),
+		}),
+		queryClient.invalidateQueries({
+			queryKey: projectActiveSprintTasksQueryKey(projectId),
+		}),
+		queryClient.invalidateQueries({
+			queryKey: projectDashboardQueryKey(projectId),
+		}),
+	]);
+}
+
 function mapTask(task: TaskJson): Task {
 	return {
 		id: task.id,
@@ -129,6 +161,8 @@ function mapTask(task: TaskJson): Task {
 		description: task.description,
 		acceptanceCriteria: task.acceptance_criteria,
 		tag: task.tag,
+		isBlocked: task.is_blocked ?? false,
+		blockedReason: task.blocked_reason ?? null,
 		createdAt: task.created_at === null ? null : new Date(task.created_at),
 		updatedAt: task.updated_at === null ? null : new Date(task.updated_at),
 		prerequisiteTaskIds: task.prerequisite_task_ids ?? [],
@@ -160,6 +194,8 @@ function taskInputToJson(values: CreateProjectTaskInput | UpdateTaskInput) {
 		acceptance_criteria: values.acceptanceCriteria,
 		tag: values.tag,
 		prerequisite_task_ids: values.prerequisiteTaskIds,
+		is_blocked: values.isBlocked,
+		blocked_reason: values.blockedReason,
 	};
 }
 
@@ -450,13 +486,31 @@ export function useProjectTasksQuery(projectId: string) {
 }
 
 export function useCreateProjectTaskMutation() {
-	return useMutation({ mutationFn: createProjectTask });
+	const queryClient = useQueryClient();
+
+	return useMutation({
+		mutationFn: createProjectTask,
+		onSuccess: (_task, variables) =>
+			invalidateProjectTaskMutationQueries(queryClient, variables.projectId),
+	});
 }
 
 export function useUpdateProjectTaskMutation() {
-	return useMutation({ mutationFn: updateProjectTask });
+	const queryClient = useQueryClient();
+
+	return useMutation({
+		mutationFn: updateProjectTask,
+		onSuccess: (_task, variables) =>
+			invalidateProjectTaskMutationQueries(queryClient, variables.projectId),
+	});
 }
 
 export function useMoveProjectTaskMutation() {
-	return useMutation({ mutationFn: moveProjectTask });
+	const queryClient = useQueryClient();
+
+	return useMutation({
+		mutationFn: moveProjectTask,
+		onSuccess: (_task, variables) =>
+			invalidateProjectTaskMutationQueries(queryClient, variables.projectId),
+	});
 }

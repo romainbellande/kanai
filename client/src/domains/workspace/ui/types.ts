@@ -5,6 +5,7 @@ export type SidebarItem = {
 	icon: LucideIcon;
 	active?: boolean;
 	to?: string;
+	params?: Record<string, string>;
 };
 
 export type BoardMetaItem = {

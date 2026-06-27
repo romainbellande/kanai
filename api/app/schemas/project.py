@@ -129,6 +129,45 @@ class ProjectRead(BaseModel):
     updated_at: datetime | None
 
 
+class ProjectDashboardCardEmptyStateRead(BaseModel):
+    """Empty-state metadata for a dashboard chart card."""
+
+    reason: str
+    message: str
+
+
+class ProjectDashboardCardEntryRead(BaseModel):
+    """One chart-ready dashboard data entry."""
+
+    label: str
+    values: dict[str, int | float | str | None] = Field(default_factory=dict)
+
+
+class ProjectDashboardSeriesRead(BaseModel):
+    """One chart-ready dashboard series."""
+
+    name: str
+    entries: list[ProjectDashboardCardEntryRead] = Field(default_factory=list)
+
+
+class ProjectDashboardCardRead(BaseModel):
+    """One supported Project Dashboard chart card."""
+
+    key: str
+    title: str
+    series: list[ProjectDashboardSeriesRead] = Field(default_factory=list)
+    entries: list[ProjectDashboardCardEntryRead] = Field(default_factory=list)
+    empty_state: ProjectDashboardCardEmptyStateRead | None = None
+
+
+class ProjectDashboardRead(BaseModel):
+    """Aggregated Project Dashboard payload."""
+
+    project_id: UUID
+    generated_at: datetime
+    charts: list[ProjectDashboardCardRead]
+
+
 class ProjectColumnRead(BaseModel):
     """Defines a project workflow column response payload."""
 

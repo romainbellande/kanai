@@ -25,6 +25,7 @@ import type {
   ProjectColumnReorder,
   ProjectColumnUpdate,
   ProjectCreate,
+  ProjectDashboardRead,
   ProjectDoneColumnRead,
   ProjectDoneColumnUpdate,
   ProjectMemberCreate,
@@ -61,6 +62,8 @@ import {
     ProjectColumnUpdateToJSON,
     ProjectCreateFromJSON,
     ProjectCreateToJSON,
+    ProjectDashboardReadFromJSON,
+    ProjectDashboardReadToJSON,
     ProjectDoneColumnReadFromJSON,
     ProjectDoneColumnReadToJSON,
     ProjectDoneColumnUpdateFromJSON,
@@ -157,6 +160,10 @@ export interface GetActiveProjectSprintCloseConfirmationProjectsProjectIdSprints
 }
 
 export interface GetActiveProjectSprintProjectsProjectIdSprintsActiveGetRequest {
+    projectId: string;
+}
+
+export interface GetProjectDashboardProjectsProjectIdDashboardGetRequest {
     projectId: string;
 }
 
@@ -994,6 +1001,53 @@ export class ProjectsApi extends runtime.BaseAPI {
      */
     async getActiveProjectSprintProjectsProjectIdSprintsActiveGet(requestParameters: GetActiveProjectSprintProjectsProjectIdSprintsActiveGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectSprintRead> {
         const response = await this.getActiveProjectSprintProjectsProjectIdSprintsActiveGetRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for getProjectDashboardProjectsProjectIdDashboardGet without sending the request
+     */
+    async getProjectDashboardProjectsProjectIdDashboardGetRequestOpts(requestParameters: GetProjectDashboardProjectsProjectIdDashboardGetRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling getProjectDashboardProjectsProjectIdDashboardGet().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/projects/{project_id}/dashboard`;
+        urlPath = urlPath.replace(`{${"project_id"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        return {
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     * Get the aggregated Project Dashboard visible to project participants.
+     * Get Project Dashboard
+     */
+    async getProjectDashboardProjectsProjectIdDashboardGetRaw(requestParameters: GetProjectDashboardProjectsProjectIdDashboardGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectDashboardRead>> {
+        const requestOptions = await this.getProjectDashboardProjectsProjectIdDashboardGetRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ProjectDashboardReadFromJSON(jsonValue));
+    }
+
+    /**
+     * Get the aggregated Project Dashboard visible to project participants.
+     * Get Project Dashboard
+     */
+    async getProjectDashboardProjectsProjectIdDashboardGet(requestParameters: GetProjectDashboardProjectsProjectIdDashboardGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectDashboardRead> {
+        const response = await this.getProjectDashboardProjectsProjectIdDashboardGetRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

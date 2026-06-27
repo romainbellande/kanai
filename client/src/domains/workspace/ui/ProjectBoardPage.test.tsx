@@ -1115,6 +1115,11 @@ describe("ProjectBoardPage", () => {
 			}),
 		).toBeTruthy();
 		expect(screen.queryByText(/%/)).toBeNull();
+		expect(screen.queryByLabelText("Sprint burndown chart")).toBeNull();
+		expect(screen.getByRole("link", { name: "Dashboard" })).toHaveProperty(
+			"href",
+			expect.stringContaining("/projects/project-1/dashboard"),
+		);
 	});
 
 	it("omits Current Sprint progress bar when no Done Column is configured", async () => {

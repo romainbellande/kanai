@@ -49,6 +49,33 @@ function task(overrides: Partial<Task> = {}): Task {
 	};
 }
 
+function taskJson(overrides: Record<string, unknown> = {}) {
+	return {
+		id: "task-1",
+		project_id: "project-1",
+		title: "Task",
+		column_id: "column-todo",
+		priority: "medium",
+		rank: "U",
+		assignee_id: null,
+		description: null,
+		acceptance_criteria: null,
+		tag: null,
+		is_blocked: false,
+		blocked_reason: null,
+		created_at: null,
+		updated_at: null,
+		...overrides,
+	};
+}
+
+function jsonResponse(data: unknown) {
+	return new Response(JSON.stringify(data), {
+		headers: { "content-type": "application/json" },
+		status: 200,
+	});
+}
+
 describe("useKanaiApi", () => {
 	beforeEach(() => {
 		vi.restoreAllMocks();
@@ -145,28 +172,15 @@ describe("useKanaiApi", () => {
 		).toEqual(originalTasks);
 	});
 
-	it("creates a project task with app-shaped input and invalidates project tasks", async () => {
+	it("creates a project task with app-shaped input and invalidates project task and dashboard queries", async () => {
 		const queryClient = createTestQueryClient();
 		queryClient.setQueryData(["projects", "project-1", "tasks"], []);
-		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
-			new Response(
-				JSON.stringify({
-					id: "task-1",
-					project_id: "project-1",
-					title: "Created",
-					column_id: "column-todo",
-					priority: "medium",
-					rank: "U",
-					assignee_id: null,
-					description: null,
-					acceptance_criteria: null,
-					tag: null,
-					created_at: null,
-					updated_at: null,
-				}),
-				{ headers: { "content-type": "application/json" }, status: 200 },
-			),
-		);
+		queryClient.setQueryData(["projects", "project-1", "dashboard"], {
+			projectId: "project-1",
+		});
+		const fetchSpy = vi
+			.fn<typeof fetch>()
+			.mockResolvedValue(jsonResponse(taskJson({ title: "Created" })));
 		vi.stubGlobal("fetch", fetchSpy);
 
 		const { result } = renderHook(() => useKanaiApi(), {
@@ -191,6 +205,98 @@ describe("useKanaiApi", () => {
 			queryClient.getQueryState(["projects", "project-1", "tasks"])
 				?.isInvalidated,
 		).toBe(true);
+		expect(
+			queryClient.getQueryState(["projects", "project-1", "dashboard"])
+				?.isInvalidated,
+		).toBe(true);
+	});
+
+	it("invalidates dashboard analytics after dashboard-changing task mutations", async () => {
+		const mutationCases = [
+			{
+				name: "task update with blocked state changes",
+				response: () =>
+					jsonResponse(
+						taskJson({
+							is_blocked: true,
+							blocked_reason: "Waiting on approval",
+						}),
+					),
+				act: (api: ReturnType<typeof useKanaiApi>) =>
+					api.tasks.update("project-1", {
+						taskId: "task-1",
+						values: {
+							isBlocked: true,
+							blockedReason: "Waiting on approval",
+						},
+					}),
+			},
+			{
+				name: "task move",
+				response: () => jsonResponse(taskJson({ column_id: "column-done" })),
+				act: (api: ReturnType<typeof useKanaiApi>) =>
+					api.tasks.move("project-1", {
+						taskId: "task-1",
+						destination: { columnId: "column-done" },
+					}),
+			},
+			{
+				name: "adding backlog task to active sprint",
+				response: () => jsonResponse(taskJson({ sprint_id: "sprint-1" })),
+				act: (api: ReturnType<typeof useKanaiApi>) =>
+					api.backlog.addToActiveSprint("project-1", "task-1"),
+			},
+			{
+				name: "removing active sprint task to backlog",
+				response: () =>
+					jsonResponse(
+						taskJson({
+							sprint_id: null,
+							backlog_rank: "U",
+							column_id: "column-todo",
+						}),
+					),
+				act: (api: ReturnType<typeof useKanaiApi>) =>
+					api.backlog.removeFromActiveSprint("project-1", "task-1"),
+			},
+			{
+				name: "backlog task create",
+				response: () => jsonResponse(taskJson({ backlog_rank: "U" })),
+				act: (api: ReturnType<typeof useKanaiApi>) =>
+					api.backlog.createTask("project-1", {
+						title: "Backlog task",
+						priority: "medium",
+					}),
+			},
+		];
+
+		for (const mutationCase of mutationCases) {
+			const queryClient = createTestQueryClient();
+			queryClient.setQueryData(["projects", "project-1", "dashboard"], {
+				projectId: "project-1",
+			});
+			const fetchSpy = vi
+				.fn<typeof fetch>()
+				.mockResolvedValue(mutationCase.response());
+			vi.stubGlobal("fetch", fetchSpy);
+
+			const { result, unmount } = renderHook(() => useKanaiApi(), {
+				wrapper: createWrapper(queryClient),
+			});
+
+			await act(async () => {
+				await mutationCase.act(result.current);
+			});
+
+			expect(
+				queryClient.getQueryState(["projects", "project-1", "dashboard"])
+					?.isInvalidated,
+			).toBe(true);
+			expect(fetchSpy, mutationCase.name).toHaveBeenCalledTimes(1);
+
+			unmount();
+			vi.unstubAllGlobals();
+		}
 	});
 
 	it("invalidates project tasks on request", async () => {
@@ -210,7 +316,7 @@ describe("useKanaiApi", () => {
 		).toBe(true);
 	});
 
-	it("exposes project and current-user queries through stable facade keys", () => {
+	it("exposes shared project context, dashboard, and current-user queries through stable facade keys", () => {
 		const queryClient = createTestQueryClient();
 		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
 			new Response(JSON.stringify({ id: "user-1" }), {
@@ -224,12 +330,16 @@ describe("useKanaiApi", () => {
 			() => {
 				const api = useKanaiApi();
 				useQuery(api.projects.get("project-1"));
+				useQuery(api.dashboard.get("project-1"));
 				useQuery(api.currentUser.get());
 			},
 			{ wrapper: createWrapper(queryClient) },
 		);
 
 		expect(queryClient.getQueryState(["projects", "project-1"])).toBeDefined();
+		expect(
+			queryClient.getQueryState(["projects", "project-1", "dashboard"]),
+		).toBeDefined();
 		expect(queryClient.getQueryState(["users", "me"])).toBeDefined();
 	});
 

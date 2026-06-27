@@ -21,12 +21,14 @@ import {
 	getActiveProjectSprint,
 	getActiveProjectSprintCloseConfirmation,
 	getProject,
+	getProjectDashboard,
 	getProjectDoneColumn,
 	listProjectColumns,
 	listProjectSprintHistory,
 	listProjects,
 	projectActiveSprintQueryOptions,
 	projectColumnsQueryOptions,
+	projectDashboardQueryOptions,
 	projectDoneColumnQueryOptions,
 	projectQueryOptions,
 	projectSprintHistoryQueryOptions,
@@ -128,6 +130,55 @@ describe("projects client", () => {
 
 		expect(fetchSpy.mock.calls[0][0]).toBe(
 			"https://api.example.test/projects/project-1",
+		);
+		expect(fetchSpy.mock.calls[0][1]?.method).toBe("GET");
+	});
+
+	it("gets a project dashboard by API ID", async () => {
+		vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
+		window.sessionStorage.setItem(
+			"kanai.openid-client.auth-session",
+			JSON.stringify({ accessToken: "project-token" }),
+		);
+		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					project_id: "project-1",
+					generated_at: "2026-06-22T10:00:00Z",
+					charts: [
+						{
+							key: "burndown-chart",
+							title: "Burndown chart",
+							series: [],
+							entries: [],
+							empty_state: {
+								reason: "no_project_task_change_events",
+								message: "Waiting for Sprint Scope and completion events.",
+							},
+						},
+					],
+				}),
+				{ headers: { "content-type": "application/json" }, status: 200 },
+			),
+		);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		await expect(getProjectDashboard("project-1")).resolves.toMatchObject({
+			projectId: "project-1",
+			charts: [
+				{
+					title: "Burndown chart",
+					emptyState: { reason: "no_project_task_change_events" },
+				},
+			],
+		});
+		expect(projectDashboardQueryOptions("project-1").queryKey).toEqual([
+			"projects",
+			"project-1",
+			"dashboard",
+		]);
+		expect(fetchSpy.mock.calls[0][0]).toBe(
+			"https://api.example.test/projects/project-1/dashboard",
 		);
 		expect(fetchSpy.mock.calls[0][1]?.method).toBe("GET");
 	});

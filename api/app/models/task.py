@@ -4,6 +4,7 @@ from datetime import datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Column,
     DateTime,
@@ -116,6 +117,14 @@ class Task(SQLModel, table=True):
         sa_column=Column(String(), nullable=True),
     )
     tag: str | None = Field(
+        default=None,
+        sa_column=Column(String(), nullable=True),
+    )
+    is_blocked: bool = Field(
+        default=False,
+        sa_column=Column(Boolean(), nullable=False, server_default="0"),
+    )
+    blocked_reason: str | None = Field(
         default=None,
         sa_column=Column(String(), nullable=True),
     )

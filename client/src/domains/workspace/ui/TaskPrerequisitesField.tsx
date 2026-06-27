@@ -7,13 +7,15 @@ import { Button } from "#/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
 
+const EMPTY_TASKS: readonly Task[] = [];
+
 export function TaskPrerequisitesField({
 	columns,
 	currentTaskId,
 	onChange,
 	projectId,
 	selectedTaskIds,
-	tasks = [],
+	tasks = EMPTY_TASKS,
 }: {
 	columns: readonly Pick<ProjectColumn, "id" | "name">[] | undefined;
 	currentTaskId?: string;

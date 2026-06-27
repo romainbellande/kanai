@@ -298,6 +298,8 @@ describe("getStaleTaskShapingDraftFields", () => {
 		description: "Source description",
 		acceptanceCriteria: "Source criteria",
 		tag: "",
+		isBlocked: false,
+		blockedReason: "",
 		prerequisiteTaskIds: [],
 	};
 
@@ -380,6 +382,8 @@ describe("useTaskForm create mode", () => {
 			description: "",
 			acceptanceCriteria: "",
 			tag: "",
+			isBlocked: false,
+			blockedReason: "",
 			prerequisiteTaskIds: [],
 		});
 		expect(result.current.isDirty).toBe(false);
@@ -881,6 +885,8 @@ describe("useTaskForm edit mode", () => {
 			description: "Current notes",
 			acceptanceCriteria: "Current criteria",
 			tag: "frontend",
+			isBlocked: false,
+			blockedReason: "",
 			prerequisiteTaskIds: [],
 		});
 		expect(result.current.isDirty).toBe(false);

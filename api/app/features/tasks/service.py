@@ -2,20 +2,25 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.project import ProjectColumn
+from app.models.project import ProjectColumn, ProjectTaskChangeEvent
 from app.models.task import Task, TaskDependency
 from app.repositories.project_repository import ProjectRepository
+from app.repositories.project_task_change_event_repository import (
+    ProjectTaskChangeEventRepository,
+)
 from app.repositories.task_repository import TaskRepository
 from app.schemas.task import (
     TaskCreate,
     TaskDestination,
     TaskRead,
     TaskUpdate,
+    normalize_blocked_reason,
     normalize_task_priority,
     task_priority_to_storage,
 )
@@ -34,6 +39,7 @@ class TaskService:
         self._project_access = ProjectAccess(session)
         self._project_repository = ProjectRepository(session)
         self._repository = TaskRepository(session)
+        self._events = ProjectTaskChangeEventRepository(session)
 
     async def create(
         self,
@@ -81,6 +87,8 @@ class TaskService:
             description=payload.description,
             acceptance_criteria=payload.acceptance_criteria,
             tag=payload.tag,
+            is_blocked=payload.is_blocked,
+            blocked_reason=payload.blocked_reason if payload.is_blocked else None,
         )
         try:
             self._session.add(task)
@@ -90,6 +98,42 @@ class TaskService:
             await self._replace_prerequisites(
                 project_id, task.id, payload.prerequisite_task_ids
             )
+            if task.story_points is not None:
+                self._events.add(
+                    ProjectTaskChangeEvent(
+                        project_id=project_id,
+                        task_id=task.id,
+                        event_type="story_points_changed",
+                        sprint_id=task.sprint_id,
+                        previous_story_points=None,
+                        new_story_points=task.story_points,
+                        occurred_at=datetime.now(UTC),
+                    )
+                )
+            if task.is_blocked:
+                self._events.add(
+                    ProjectTaskChangeEvent(
+                        project_id=project_id,
+                        task_id=task.id,
+                        event_type="blocked_state_changed",
+                        sprint_id=task.sprint_id,
+                        is_blocked=True,
+                        blocked_reason=task.blocked_reason,
+                        occurred_at=datetime.now(UTC),
+                    )
+                )
+            if active_sprint is not None and active_sprint.id is not None:
+                self._events.add(
+                    ProjectTaskChangeEvent(
+                        project_id=project_id,
+                        task_id=task.id,
+                        event_type="sprint_scope_added",
+                        sprint_id=active_sprint.id,
+                        new_sprint_id=active_sprint.id,
+                        new_story_points=task.story_points,
+                        occurred_at=datetime.now(UTC),
+                    )
+                )
             await self._session.commit()
             await self._session.refresh(task)
         except Exception:
@@ -175,16 +219,76 @@ class TaskService:
         if isinstance(assignee_id, UUID):
             await self._project_access.validate_users_exist({assignee_id})
         column_id = updates.get("column_id")
+        destination_column = None
         if isinstance(column_id, UUID):
-            await self._resolve_column(project_id, column_id)
+            destination_column = await self._resolve_column(project_id, column_id)
 
         if "priority" in updates:
             updates["priority"] = task_priority_to_storage(payload.priority)
         prerequisite_task_ids = updates.pop("prerequisite_task_ids", None)
+        story_points_changed = (
+            "story_points" in updates and updates["story_points"] != task.story_points
+        )
+        previous_story_points = task.story_points
+        blocked_state_changed = (
+            "is_blocked" in updates and updates["is_blocked"] != task.is_blocked
+        )
+        new_blocked_reason = updates.get("blocked_reason", task.blocked_reason)
+        if "is_blocked" in updates and updates["is_blocked"] is False:
+            updates["blocked_reason"] = None
+            new_blocked_reason = None
+        elif updates.get("is_blocked") is True and "blocked_reason" not in updates:
+            new_blocked_reason = task.blocked_reason
+        elif "blocked_reason" in updates:
+            submitted_reason = updates["blocked_reason"]
+            new_blocked_reason = normalize_blocked_reason(
+                submitted_reason if isinstance(submitted_reason, str) else None
+            )
+            updates["blocked_reason"] = new_blocked_reason
+        previous_column = None
+        if destination_column is not None and destination_column.id != task.column_id:
+            previous_column = await self._resolve_column(project_id, task.column_id)
 
         try:
             for field_name, value in updates.items():
                 setattr(task, field_name, value)
+            if not task.is_blocked:
+                task.blocked_reason = None
+            if story_points_changed and task.sprint_id is not None:
+                self._events.add(
+                    ProjectTaskChangeEvent(
+                        project_id=project_id,
+                        task_id=task_id,
+                        event_type="story_points_changed",
+                        sprint_id=task.sprint_id,
+                        previous_story_points=previous_story_points,
+                        new_story_points=task.story_points,
+                        occurred_at=datetime.now(UTC),
+                    )
+                )
+            if blocked_state_changed:
+                is_blocked = bool(task.is_blocked)
+                self._events.add(
+                    ProjectTaskChangeEvent(
+                        project_id=project_id,
+                        task_id=task_id,
+                        event_type="blocked_state_changed",
+                        sprint_id=task.sprint_id,
+                        is_blocked=is_blocked,
+                        blocked_reason=new_blocked_reason if is_blocked else None,
+                        occurred_at=datetime.now(UTC),
+                    )
+                )
+            if previous_column is not None and destination_column is not None:
+                self._events.add(
+                    _workflow_column_changed_event(
+                        project_id=project_id,
+                        task_id=task_id,
+                        sprint_id=task.sprint_id,
+                        previous_column=previous_column,
+                        new_column=destination_column,
+                    )
+                )
             if prerequisite_task_ids is not None:
                 await self._replace_prerequisites(
                     project_id, task_id, prerequisite_task_ids
@@ -215,7 +319,7 @@ class TaskService:
                 status_code=status.HTTP_404_NOT_FOUND, detail="Task not found"
             )
 
-        await self._resolve_column(project_id, destination.column_id)
+        destination_column = await self._resolve_column(project_id, destination.column_id)
         ordered_destination_tasks = await self._repository.list_by_project_and_column(
             project_id, destination.column_id
         )
@@ -244,8 +348,24 @@ class TaskService:
                 detail="Task destination neighbors are out of order",
             )
 
+        previous_column_id = task.column_id
+        previous_column = (
+            await self._resolve_column(project_id, previous_column_id)
+            if previous_column_id != destination.column_id
+            else None
+        )
         task.column_id = destination.column_id
         task.rank = rank_between(before_rank, after_rank)
+        if previous_column is not None:
+            self._events.add(
+                _workflow_column_changed_event(
+                    project_id=project_id,
+                    task_id=task_id,
+                    sprint_id=task.sprint_id,
+                    previous_column=previous_column,
+                    new_column=destination_column,
+                )
+            )
         updated = await self._repository.update(task)
         prerequisites = await self._repository.prerequisite_ids_by_task(
             project_id, {task_id}
@@ -381,6 +501,31 @@ class TaskService:
         return non_done_column
 
 
+def _workflow_column_changed_event(
+    *,
+    project_id: UUID,
+    task_id: UUID,
+    sprint_id: UUID | None,
+    previous_column: ProjectColumn,
+    new_column: ProjectColumn,
+) -> ProjectTaskChangeEvent:
+    if previous_column.id is None or new_column.id is None:
+        raise RuntimeError("Workflow column ID is missing")
+    return ProjectTaskChangeEvent(
+        project_id=project_id,
+        task_id=task_id,
+        event_type="workflow_column_changed",
+        sprint_id=sprint_id,
+        previous_column_id=previous_column.id,
+        previous_column_name=previous_column.name,
+        previous_column_position=previous_column.position,
+        new_column_id=new_column.id,
+        new_column_name=new_column.name,
+        new_column_position=new_column.position,
+        occurred_at=datetime.now(UTC),
+    )
+
+
 def rank_between(before: str | None, after: str | None) -> str:
     """Return a lexicographic rank strictly between neighboring ranks."""
     if before is not None and after is not None and before >= after:
@@ -439,6 +584,8 @@ def task_to_read(task: Task, prerequisite_task_ids: list[UUID] | None = None) ->
         created_at=task.created_at,
         updated_at=task.updated_at,
         prerequisite_task_ids=prerequisite_task_ids or [],
+        is_blocked=task.is_blocked,
+        blocked_reason=task.blocked_reason,
     )
 
 

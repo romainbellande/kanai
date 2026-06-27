@@ -5,6 +5,7 @@ from enum import StrEnum
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    Boolean,
     Column,
     Date,
     DateTime,
@@ -241,6 +242,88 @@ class ProjectSprintTaskSnapshot(SQLModel, table=True):
             DateTime(timezone=True),
             server_default=func.now(),
             nullable=False,
+        ),
+    )
+
+
+class ProjectTaskChangeEvent(SQLModel, table=True):
+    """Append-only domain event used as Project Analytics History."""
+
+    __tablename__ = "project_task_change_events"  # type: ignore[bad-override]
+
+    id: UUID | None = Field(
+        default=None,
+        sa_column=Column(Uuid(), primary_key=True, nullable=False, default=uuid4),
+    )
+    project_id: UUID = Field(
+        sa_column=Column(
+            Uuid(),
+            ForeignKey("projects.id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+        ),
+    )
+    task_id: UUID = Field(sa_column=Column(Uuid(), nullable=False, index=True))
+    event_type: str = Field(sa_column=Column(String(length=40), nullable=False))
+    sprint_id: UUID | None = Field(
+        default=None,
+        sa_column=Column(Uuid(), nullable=True, index=True),
+    )
+    previous_sprint_id: UUID | None = Field(
+        default=None,
+        sa_column=Column(Uuid(), nullable=True),
+    )
+    new_sprint_id: UUID | None = Field(
+        default=None,
+        sa_column=Column(Uuid(), nullable=True),
+    )
+    previous_column_id: UUID | None = Field(
+        default=None,
+        sa_column=Column(Uuid(), nullable=True),
+    )
+    new_column_id: UUID | None = Field(
+        default=None,
+        sa_column=Column(Uuid(), nullable=True),
+    )
+    previous_column_name: str | None = Field(
+        default=None,
+        sa_column=Column(String(), nullable=True),
+    )
+    previous_column_position: int | None = Field(
+        default=None,
+        sa_column=Column(Integer(), nullable=True),
+    )
+    new_column_name: str | None = Field(
+        default=None,
+        sa_column=Column(String(), nullable=True),
+    )
+    new_column_position: int | None = Field(
+        default=None,
+        sa_column=Column(Integer(), nullable=True),
+    )
+    previous_story_points: int | None = Field(
+        default=None,
+        sa_column=Column(Integer(), nullable=True),
+    )
+    new_story_points: int | None = Field(
+        default=None,
+        sa_column=Column(Integer(), nullable=True),
+    )
+    is_blocked: bool | None = Field(
+        default=None,
+        sa_column=Column(Boolean(), nullable=True),
+    )
+    blocked_reason: str | None = Field(
+        default=None,
+        sa_column=Column(String(), nullable=True),
+    )
+    occurred_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(
+            DateTime(timezone=True),
+            server_default=func.now(),
+            nullable=False,
+            index=True,
         ),
     )
 

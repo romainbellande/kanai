@@ -18,6 +18,7 @@ All URIs are relative to *http://localhost*
 | [**deleteTaskEndpointProjectsProjectIdTasksTaskIdDelete**](ProjectsApi.md#deletetaskendpointprojectsprojectidtaskstaskiddelete) | **DELETE** /projects/{project_id}/tasks/{task_id} | Delete Task Endpoint |
 | [**getActiveProjectSprintCloseConfirmationProjectsProjectIdSprintsActiveCloseConfirmationGet**](ProjectsApi.md#getactiveprojectsprintcloseconfirmationprojectsprojectidsprintsactivecloseconfirmationget) | **GET** /projects/{project_id}/sprints/active/close-confirmation | Get Active Project Sprint Close Confirmation |
 | [**getActiveProjectSprintProjectsProjectIdSprintsActiveGet**](ProjectsApi.md#getactiveprojectsprintprojectsprojectidsprintsactiveget) | **GET** /projects/{project_id}/sprints/active | Get Active Project Sprint |
+| [**getProjectDashboardProjectsProjectIdDashboardGet**](ProjectsApi.md#getprojectdashboardprojectsprojectiddashboardget) | **GET** /projects/{project_id}/dashboard | Get Project Dashboard |
 | [**getProjectDoneColumnProjectsProjectIdDoneColumnGet**](ProjectsApi.md#getprojectdonecolumnprojectsprojectiddonecolumnget) | **GET** /projects/{project_id}/done-column | Get Project Done Column |
 | [**getProjectProjectsProjectIdGet**](ProjectsApi.md#getprojectprojectsprojectidget) | **GET** /projects/{project_id} | Get Project |
 | [**getTaskEndpointProjectsProjectIdTasksTaskIdGet**](ProjectsApi.md#gettaskendpointprojectsprojectidtaskstaskidget) | **GET** /projects/{project_id}/tasks/{task_id} | Get Task Endpoint |
@@ -999,6 +1000,74 @@ example().catch(console.error);
 ### Return type
 
 [**ProjectSprintRead**](ProjectSprintRead.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: `application/json`
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+| **200** | Successful Response |  -  |
+| **422** | Validation Error |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+
+## getProjectDashboardProjectsProjectIdDashboardGet
+
+> ProjectDashboardRead getProjectDashboardProjectsProjectIdDashboardGet(projectId)
+
+Get Project Dashboard
+
+Get the aggregated Project Dashboard visible to project participants.
+
+### Example
+
+```ts
+import {
+  Configuration,
+  ProjectsApi,
+} from '';
+import type { GetProjectDashboardProjectsProjectIdDashboardGetRequest } from '';
+
+async function example() {
+  console.log("🚀 Testing  SDK...");
+  const api = new ProjectsApi();
+
+  const body = {
+    // string
+    projectId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+  } satisfies GetProjectDashboardProjectsProjectIdDashboardGetRequest;
+
+  try {
+    const data = await api.getProjectDashboardProjectsProjectIdDashboardGet(body);
+    console.log(data);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+// Run the test
+example().catch(console.error);
+```
+
+### Parameters
+
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **projectId** | `string` |  | [Defaults to `undefined`] |
+
+### Return type
+
+[**ProjectDashboardRead**](ProjectDashboardRead.md)
 
 ### Authorization
 

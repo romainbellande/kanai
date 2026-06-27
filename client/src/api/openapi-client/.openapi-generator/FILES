@@ -16,6 +16,11 @@ docs/ProjectColumnRead.md
 docs/ProjectColumnReorder.md
 docs/ProjectColumnUpdate.md
 docs/ProjectCreate.md
+docs/ProjectDashboardCardEmptyStateRead.md
+docs/ProjectDashboardCardEntryRead.md
+docs/ProjectDashboardCardRead.md
+docs/ProjectDashboardRead.md
+docs/ProjectDashboardSeriesRead.md
 docs/ProjectDoneColumnRead.md
 docs/ProjectDoneColumnUpdate.md
 docs/ProjectMemberCreate.md
@@ -41,6 +46,7 @@ docs/UserRead.md
 docs/UserUpdate.md
 docs/UsersApi.md
 docs/ValidationError.md
+docs/ValuesValue.md
 index.ts
 models/BacklogTaskBulkCreate.ts
 models/BacklogTaskDraftCreate.ts
@@ -54,6 +60,11 @@ models/ProjectColumnRead.ts
 models/ProjectColumnReorder.ts
 models/ProjectColumnUpdate.ts
 models/ProjectCreate.ts
+models/ProjectDashboardCardEmptyStateRead.ts
+models/ProjectDashboardCardEntryRead.ts
+models/ProjectDashboardCardRead.ts
+models/ProjectDashboardRead.ts
+models/ProjectDashboardSeriesRead.ts
 models/ProjectDoneColumnRead.ts
 models/ProjectDoneColumnUpdate.ts
 models/ProjectMemberCreate.ts
@@ -76,5 +87,6 @@ models/UserCreate.ts
 models/UserRead.ts
 models/UserUpdate.ts
 models/ValidationError.ts
+models/ValuesValue.ts
 models/index.ts
 runtime.ts

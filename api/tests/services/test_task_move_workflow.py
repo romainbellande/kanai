@@ -6,10 +6,17 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 from fastapi import HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel
 
-from app.models.project import Project, ProjectColumn, ProjectMember, ProjectOwner
+from app.models.project import (
+    Project,
+    ProjectColumn,
+    ProjectMember,
+    ProjectOwner,
+    ProjectTaskChangeEvent,
+)
 from app.models.task import Task
 from app.models.user import User
 from app.schemas.task import TaskDestination
@@ -93,6 +100,16 @@ async def test_move_task_persists_cross_column_top_placement(
         assert persisted is not None
         assert persisted.column_id == done_column.id
         assert persisted.rank == updated.rank
+        event = await session.scalar(select(ProjectTaskChangeEvent))
+        assert event is not None
+        assert event.event_type == "workflow_column_changed"
+        assert event.task_id == moved.id
+        assert event.previous_column_id == todo_column.id
+        assert event.previous_column_name == "todo"
+        assert event.previous_column_position == 0
+        assert event.new_column_id == done_column.id
+        assert event.new_column_name == "done"
+        assert event.new_column_position == 1
 
 
 @pytest.mark.asyncio

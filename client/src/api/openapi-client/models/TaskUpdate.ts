@@ -26,6 +26,8 @@ import { mapValues } from '../runtime';
  *     description: Optional replacement task details.
  *     acceptance_criteria: Optional replacement completion criteria.
  *     tag: Optional replacement task tag.
+ *     is_blocked: Optional explicit Blocked Project Task marker.
+ *     blocked_reason: Optional replacement blocked reason. Explicit null clears it.
  * @export
  * @interface TaskUpdate
  */
@@ -80,6 +82,18 @@ export interface TaskUpdate {
     tag?: string | null;
     /**
      * 
+     * @type {boolean}
+     * @memberof TaskUpdate
+     */
+    isBlocked?: boolean | null;
+    /**
+     * 
+     * @type {string}
+     * @memberof TaskUpdate
+     */
+    blockedReason?: string | null;
+    /**
+     * 
      * @type {Array<string>}
      * @memberof TaskUpdate
      */
@@ -111,6 +125,8 @@ export function TaskUpdateFromJSONTyped(json: any, ignoreDiscriminator: boolean)
         'description': json['description'] == null ? undefined : json['description'],
         'acceptanceCriteria': json['acceptance_criteria'] == null ? undefined : json['acceptance_criteria'],
         'tag': json['tag'] == null ? undefined : json['tag'],
+        'isBlocked': json['is_blocked'] == null ? undefined : json['is_blocked'],
+        'blockedReason': json['blocked_reason'] == null ? undefined : json['blocked_reason'],
         'prerequisiteTaskIds': json['prerequisite_task_ids'] == null ? undefined : json['prerequisite_task_ids'],
     };
 }
@@ -134,6 +150,8 @@ export function TaskUpdateToJSONTyped(value?: TaskUpdate | null, ignoreDiscrimin
         'description': value['description'],
         'acceptance_criteria': value['acceptanceCriteria'],
         'tag': value['tag'],
+        'is_blocked': value['isBlocked'],
+        'blocked_reason': value['blockedReason'],
         'prerequisite_task_ids': value['prerequisiteTaskIds'],
     };
 }

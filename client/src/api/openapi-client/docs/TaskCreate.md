@@ -1,7 +1,7 @@
 
 # TaskCreate
 
-Request payload for creating a project task.  Parameters:     title: Task title.     column_id: Optional workflow column ID. Defaults to the first project column.     include_in_active_sprint: Whether the new task belongs to the active sprint.     priority: Optional priority level for the task.     story_points: Optional Story Points estimate.     assignee_id: Optional user ID assigned to the task.     description: Optional task details.     acceptance_criteria: Optional criteria required to complete the task.     tag: Optional task tag.
+Request payload for creating a project task.  Parameters:     title: Task title.     column_id: Optional workflow column ID. Defaults to the first project column.     include_in_active_sprint: Whether the new task belongs to the active sprint.     priority: Optional priority level for the task.     story_points: Optional Story Points estimate.     assignee_id: Optional user ID assigned to the task.     description: Optional task details.     acceptance_criteria: Optional criteria required to complete the task.     tag: Optional task tag.     is_blocked: Whether the task is explicitly marked as a Blocked Project Task.     blocked_reason: Optional explanation for why the task is blocked.
 
 ## Properties
 
@@ -17,6 +17,8 @@ Name | Type
 `acceptanceCriteria` | string
 `tag` | string
 `prerequisiteTaskIds` | Array&lt;string&gt;
+`isBlocked` | boolean
+`blockedReason` | string
 
 ## Example
 
@@ -35,6 +37,8 @@ const example = {
   "acceptanceCriteria": null,
   "tag": null,
   "prerequisiteTaskIds": null,
+  "isBlocked": null,
+  "blockedReason": null,
 } satisfies TaskCreate
 
 console.log(example)

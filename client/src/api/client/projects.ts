@@ -105,6 +105,35 @@ export type UpdateProjectDoneColumnInput = {
 	doneColumnId: string;
 };
 
+export type ProjectDashboardEmptyState = {
+	reason: string;
+	message: string;
+};
+
+export type ProjectDashboardEntry = {
+	label: string;
+	values: Record<string, number | string | null>;
+};
+
+export type ProjectDashboardSeries = {
+	name: string;
+	entries: ProjectDashboardEntry[];
+};
+
+export type ProjectDashboardChart = {
+	key: string;
+	title: string;
+	series: ProjectDashboardSeries[];
+	entries: ProjectDashboardEntry[];
+	emptyState: ProjectDashboardEmptyState | null;
+};
+
+export type ProjectDashboard = {
+	projectId: string;
+	generatedAt: Date;
+	charts: ProjectDashboardChart[];
+};
+
 export class ProjectColumnRequestError extends Error {
 	readonly status: number;
 	readonly detail: string | null;
@@ -193,6 +222,33 @@ type ProjectDoneColumnJson = {
 	requires_designation: boolean;
 };
 
+type ProjectDashboardEntryJson = {
+	label: string;
+	values?: Record<string, number | string | null>;
+};
+
+type ProjectDashboardSeriesJson = {
+	name: string;
+	entries?: ProjectDashboardEntryJson[];
+};
+
+type ProjectDashboardChartJson = {
+	key: string;
+	title: string;
+	series?: ProjectDashboardSeriesJson[];
+	entries?: ProjectDashboardEntryJson[];
+	empty_state?: {
+		reason: string;
+		message: string;
+	} | null;
+};
+
+type ProjectDashboardJson = {
+	project_id: string;
+	generated_at: string;
+	charts: ProjectDashboardChartJson[];
+};
+
 export const projectsQueryKey = ["projects"] as const;
 
 export function projectQueryKey(projectId: string) {
@@ -213,6 +269,10 @@ export function projectSprintHistoryQueryKey(projectId: string) {
 
 export function projectDoneColumnQueryKey(projectId: string) {
 	return [...projectQueryKey(projectId), "done-column"] as const;
+}
+
+export function projectDashboardQueryKey(projectId: string) {
+	return [...projectQueryKey(projectId), "dashboard"] as const;
 }
 
 function createProjectsApi(): ProjectsApi {
@@ -352,6 +412,39 @@ function mapProjectDoneColumn(
 		projectId: doneColumn.project_id,
 		doneColumnId: doneColumn.done_column_id,
 		requiresDesignation: doneColumn.requires_designation,
+	};
+}
+
+function mapProjectDashboardEntry(
+	entry: ProjectDashboardEntryJson,
+): ProjectDashboardEntry {
+	return {
+		label: entry.label,
+		values: entry.values ?? {},
+	};
+}
+
+function mapProjectDashboard(
+	dashboard: ProjectDashboardJson,
+): ProjectDashboard {
+	return {
+		projectId: dashboard.project_id,
+		generatedAt: new Date(dashboard.generated_at),
+		charts: dashboard.charts.map((chart) => ({
+			key: chart.key,
+			title: chart.title,
+			series: (chart.series ?? []).map((series) => ({
+				name: series.name,
+				entries: (series.entries ?? []).map(mapProjectDashboardEntry),
+			})),
+			entries: (chart.entries ?? []).map(mapProjectDashboardEntry),
+			emptyState: chart.empty_state
+				? {
+						reason: chart.empty_state.reason,
+						message: chart.empty_state.message,
+					}
+				: null,
+		})),
 	};
 }
 
@@ -590,6 +683,17 @@ export async function updateProjectDoneColumn(
 	return mapProjectDoneColumn(doneColumn);
 }
 
+export async function getProjectDashboard(
+	projectId: string,
+): Promise<ProjectDashboard> {
+	const dashboard = await requestProjectSprints<ProjectDashboardJson>(
+		`/projects/${projectId}/dashboard`,
+		{ method: "GET" },
+	);
+
+	return mapProjectDashboard(dashboard);
+}
+
 export function projectsQueryOptions() {
 	return queryOptions({
 		queryKey: projectsQueryKey,
@@ -629,6 +733,13 @@ export function projectDoneColumnQueryOptions(projectId: string) {
 	return queryOptions({
 		queryKey: projectDoneColumnQueryKey(projectId),
 		queryFn: () => getProjectDoneColumn(projectId),
+	});
+}
+
+export function projectDashboardQueryOptions(projectId: string) {
+	return queryOptions({
+		queryKey: projectDashboardQueryKey(projectId),
+		queryFn: () => getProjectDashboard(projectId),
 	});
 }
 

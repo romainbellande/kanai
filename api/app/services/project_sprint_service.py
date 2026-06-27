@@ -9,11 +9,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.project import (
     ProjectSprint,
     ProjectSprintTaskSnapshot,
+    ProjectTaskChangeEvent,
     SprintLifecycleState,
     SprintTaskOutcome,
 )
 from app.models.task import Task
 from app.repositories.project_repository import ProjectRepository
+from app.repositories.project_task_change_event_repository import (
+    ProjectTaskChangeEventRepository,
+)
 from app.repositories.task_repository import TaskRepository
 from app.schemas.project import (
     ProjectSprintClosePreviewRead,
@@ -42,6 +46,7 @@ class ProjectSprintService:
         self._repository = ProjectRepository(session)
         self._task_repository = TaskRepository(session)
         self._access = ProjectAccess(session)
+        self._events = ProjectTaskChangeEventRepository(session)
 
     async def get_active(
         self,
@@ -114,6 +119,17 @@ class ProjectSprintService:
             )
             task.sprint_id = sprint.id
             task.backlog_rank = None
+            self._events.add(
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=task_id,
+                    event_type="sprint_scope_added",
+                    sprint_id=sprint.id,
+                    new_sprint_id=sprint.id,
+                    new_story_points=task.story_points,
+                    occurred_at=datetime.now(UTC),
+                )
+            )
         await self._repository.commit()
         await self._repository.refresh_sprint(sprint)
         return sprint_to_read(sprint)
@@ -142,6 +158,17 @@ class ProjectSprintService:
         )
         task.sprint_id = sprint.id
         task.backlog_rank = None
+        self._events.add(
+            ProjectTaskChangeEvent(
+                project_id=project_id,
+                task_id=payload.task_id,
+                event_type="sprint_scope_added",
+                sprint_id=sprint.id,
+                new_sprint_id=sprint.id,
+                new_story_points=task.story_points,
+                occurred_at=datetime.now(UTC),
+            )
+        )
         return await self._task_to_read_with_prerequisites(
             project_id,
             await self._task_repository.update(task),
@@ -198,6 +225,17 @@ class ProjectSprintService:
             rank_between(None, first_backlog_task.backlog_rank)
             if first_backlog_task and first_backlog_task.backlog_rank
             else DEFAULT_TASK_RANK
+        )
+        self._events.add(
+            ProjectTaskChangeEvent(
+                project_id=project_id,
+                task_id=task_id,
+                event_type="sprint_scope_removed",
+                sprint_id=sprint.id,
+                previous_sprint_id=sprint.id,
+                previous_story_points=task.story_points,
+                occurred_at=datetime.now(UTC),
+            )
         )
         return await self._task_to_read_with_prerequisites(
             project_id,
@@ -287,7 +325,21 @@ class ProjectSprintService:
             task.backlog_rank = f"!{index:06d}"
 
         sprint.lifecycle_state = SprintLifecycleState.CLOSED
-        sprint.closed_at = datetime.now(UTC)
+        closed_at = datetime.now(UTC)
+        sprint.closed_at = closed_at
+        for task in finished_tasks:
+            if task.id is None:
+                continue
+            self._events.add(
+                ProjectTaskChangeEvent(
+                    project_id=project_id,
+                    task_id=task.id,
+                    event_type="sprint_task_finished",
+                    sprint_id=sprint_id,
+                    new_story_points=task.story_points,
+                    occurred_at=closed_at,
+                )
+            )
         await self._repository.commit()
         await self._repository.refresh_sprint(sprint)
         for task in unfinished_tasks:

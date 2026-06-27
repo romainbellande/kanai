@@ -453,6 +453,158 @@ describe("TaskDetailPage", () => {
 		).toBe("Updated Task");
 	});
 
+	it("saves explicit blocked marker and reason from task details", async () => {
+		const { TaskDetailPage } = await import(
+			"#/domains/workspace/ui/TaskDetailPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project(),
+		);
+		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
+			task(),
+		]);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column(),
+		]);
+		const updatedTaskJson = {
+			id: "task-1",
+			project_id: "project-1",
+			title: "Original Task",
+			column_id: "todo",
+			priority: "medium",
+			story_points: 3,
+			rank: "U",
+			assignee_id: null,
+			description: "Original notes",
+			acceptance_criteria: "Original criteria",
+			tag: "Feature",
+			is_blocked: true,
+			blocked_reason: "Waiting on vendor access",
+			created_at: null,
+			updated_at: null,
+		};
+		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(JSON.stringify(updatedTaskJson), {
+				headers: { "content-type": "application/json" },
+				status: 200,
+			}),
+		);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		renderTaskDetailPage(<TaskDetailPage />, queryClient);
+		expect(
+			screen.getByLabelText<HTMLTextAreaElement>("Blocked Reason").disabled,
+		).toBe(true);
+
+		fireEvent.click(
+			screen.getByRole("checkbox", { name: /Blocked Project Task/ }),
+		);
+		fireEvent.change(screen.getByLabelText("Blocked Reason"), {
+			target: { value: "Waiting on vendor access" },
+		});
+		fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+
+		await screen.findByText("Task changes saved.");
+		expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toEqual({
+			column_id: "todo",
+			acceptance_criteria: "Original criteria",
+			blocked_reason: "Waiting on vendor access",
+			description: "Original notes",
+			is_blocked: true,
+			priority: "medium",
+			story_points: 3,
+			tag: "Feature",
+			title: "Original Task",
+		});
+		expect(
+			queryClient.getQueryData<Task[]>(
+				projectTasksQueryOptions("project-1").queryKey,
+			)?.[0],
+		).toMatchObject({
+			isBlocked: true,
+			blockedReason: "Waiting on vendor access",
+		});
+	});
+
+	it("clears explicit blocked marker and reason from task details", async () => {
+		const { TaskDetailPage } = await import(
+			"#/domains/workspace/ui/TaskDetailPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project(),
+		);
+		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
+			task({
+				isBlocked: true,
+				blockedReason: "Waiting on vendor access",
+			}),
+		]);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column(),
+		]);
+		const updatedTaskJson = {
+			id: "task-1",
+			project_id: "project-1",
+			title: "Original Task",
+			column_id: "todo",
+			priority: "medium",
+			story_points: 3,
+			rank: "U",
+			assignee_id: null,
+			description: "Original notes",
+			acceptance_criteria: "Original criteria",
+			tag: "Feature",
+			is_blocked: false,
+			blocked_reason: null,
+			created_at: null,
+			updated_at: null,
+		};
+		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(JSON.stringify(updatedTaskJson), {
+				headers: { "content-type": "application/json" },
+				status: 200,
+			}),
+		);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		renderTaskDetailPage(<TaskDetailPage />, queryClient);
+		const blockedMarker = screen.getByRole<HTMLInputElement>("checkbox", {
+			name: /Blocked Project Task/,
+		});
+		expect(blockedMarker.checked).toBe(true);
+		expect(
+			screen.getByLabelText<HTMLTextAreaElement>("Blocked Reason").disabled,
+		).toBe(false);
+
+		fireEvent.click(blockedMarker);
+		fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+
+		await screen.findByText("Task changes saved.");
+		expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toEqual({
+			column_id: "todo",
+			acceptance_criteria: "Original criteria",
+			blocked_reason: null,
+			description: "Original notes",
+			is_blocked: false,
+			priority: "medium",
+			story_points: 3,
+			tag: "Feature",
+			title: "Original Task",
+		});
+		expect(
+			queryClient.getQueryData<Task[]>(
+				projectTasksQueryOptions("project-1").queryKey,
+			)?.[0],
+		).toMatchObject({
+			isBlocked: false,
+			blockedReason: null,
+		});
+	});
+
 	it("shows legacy urgent priority as critical and can clear it", async () => {
 		const { TaskDetailPage } = await import(
 			"#/domains/workspace/ui/TaskDetailPage"
