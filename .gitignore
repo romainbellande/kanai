@@ -6,6 +6,8 @@ opencode.json
 !.opencode
 !opencode.json
 issues/
+!.af/epics/**/issues/
+!.af/epics/**/*.issue.md
 
 # Beads / Dolt files (added by br init)
 .dolt/
@@ -16,3 +18,4 @@ issues/
 tasks/
 ralph-prompt.hbs
 !.ralph-tui/worktrees/
+.af

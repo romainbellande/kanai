@@ -1530,4 +1530,32 @@ describe("TaskDetailPage", () => {
 		).toBe(true);
 		expect(fetchSpy).not.toHaveBeenCalled();
 	});
+
+	it("does not apply the slow entry animation to the task form shell", async () => {
+		const { TaskDetailPage } = await import(
+			"#/domains/workspace/ui/TaskDetailPage"
+		);
+		const queryClient = createTestQueryClient();
+		queryClient.setQueryData(
+			projectQueryOptions("project-1").queryKey,
+			project(),
+		);
+		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
+			task(),
+		]);
+		queryClient.setQueryData(projectColumnsQueryOptions("project-1").queryKey, [
+			column(),
+		]);
+
+		const { container } = renderTaskDetailPage(<TaskDetailPage />, queryClient);
+		const shell = container.querySelector(
+			'section[class*="bg-[var(--surface-container-lowest)]"]',
+		);
+
+		if (!shell) {
+			throw new Error("Task form shell was not rendered.");
+		}
+
+		expect(shell.className).not.toContain("rise-in");
+	});
 });

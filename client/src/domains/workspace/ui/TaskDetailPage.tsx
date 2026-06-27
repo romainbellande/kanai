@@ -3,7 +3,11 @@ import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { Save } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 
-import { ProjectTaskRequestError, useKanaiApi } from "#/api/client";
+import {
+	getUserDisplayLabel,
+	ProjectTaskRequestError,
+	useKanaiApi,
+} from "#/api/client";
 import { ResponseError } from "#/api/openapi-client/runtime";
 import { Button } from "#/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "#/components/ui/field";
@@ -39,6 +43,21 @@ export function TaskDetailPage({
 	const navigate = useNavigate();
 	const api = useKanaiApi();
 	const projectQuery = useQuery(api.projects.get(projectId));
+	const projectAccessUserIds = projectQuery.data
+		? [
+				...new Set([
+					...projectQuery.data.ownerIds,
+					...projectQuery.data.memberIds,
+				]),
+			]
+		: [];
+	const projectAccessUsersQuery = useQuery(
+		api.users.projectAccess(
+			projectId,
+			projectAccessUserIds,
+			Boolean(projectQuery.data),
+		),
+	);
 	const columnsQuery = useQuery(api.projectColumns.list(projectId));
 	const tasksQuery = useQuery(api.tasks.list(projectId));
 	const task = tasksQuery.data?.find((item) => item.id === taskId) ?? null;
@@ -120,7 +139,7 @@ export function TaskDetailPage({
 			pageTitle={task?.title ?? "Task Details"}
 			sectionClassName="lg:min-h-screen"
 		>
-			<section className="rise-in rounded-[1.75rem] border border-[color:color-mix(in_srgb,var(--outline-variant)_50%,transparent)] bg-[var(--surface-container-lowest)] p-6 shadow-[0_18px_42px_rgba(25,28,30,0.04)] sm:p-10">
+			<section className="rounded-[1.75rem] border border-[color:color-mix(in_srgb,var(--outline-variant)_50%,transparent)] bg-[var(--surface-container-lowest)] p-6 shadow-[0_18px_42px_rgba(25,28,30,0.04)] sm:p-10">
 				{projectQuery.isError ? (
 					<p className="mb-6 rounded-xl border border-[var(--outline-variant)] bg-[var(--surface-container-low)] px-4 py-3 text-sm text-[var(--on-surface-variant)]">
 						Project details could not be loaded, but you can still edit this
@@ -229,6 +248,33 @@ export function TaskDetailPage({
 										{workflowMessage}
 									</FieldDescription>
 								) : null}
+							</Field>
+
+							<Field>
+								<FieldLabel
+									className="text-sm font-semibold text-[var(--on-surface)]"
+									htmlFor="taskAssignee"
+								>
+									Assignee
+								</FieldLabel>
+								<NativeSelect
+									id="taskAssignee"
+									name="taskAssignee"
+									value={form.values.assigneeId}
+									onChange={(event) =>
+										updateField("assigneeId", event.target.value)
+									}
+								>
+									<NativeSelectOption value="">No assignee</NativeSelectOption>
+									{projectAccessUsersQuery.data?.map((user) => (
+										<NativeSelectOption key={user.id} value={user.id}>
+											{getUserDisplayLabel(user)}
+										</NativeSelectOption>
+									))}
+								</NativeSelect>
+								<FieldDescription className="text-sm font-medium text-[var(--on-surface-variant)]">
+									Project Owners and Project Members can be assigned here.
+								</FieldDescription>
 							</Field>
 
 							<Field>

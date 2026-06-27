@@ -298,6 +298,7 @@ describe("getStaleTaskShapingDraftFields", () => {
 		description: "Source description",
 		acceptanceCriteria: "Source criteria",
 		tag: "",
+		assigneeId: "",
 		isBlocked: false,
 		blockedReason: "",
 		prerequisiteTaskIds: [],
@@ -316,7 +317,7 @@ describe("getStaleTaskShapingDraftFields", () => {
 					description: "Source description",
 					acceptanceCriteria: "Source criteria",
 				},
-				values: { ...values, title: "Edited title" },
+				values: { ...values, assigneeId: "", title: "Edited title" },
 			}),
 		).toEqual(["title"]);
 	});
@@ -332,7 +333,7 @@ describe("getStaleTaskShapingDraftFields", () => {
 					description: "Source description",
 					acceptanceCriteria: "Source criteria",
 				},
-				values: { ...values, title: "Edited title" },
+				values: { ...values, assigneeId: "", title: "Edited title" },
 			}),
 		).toEqual([]);
 	});
@@ -342,7 +343,11 @@ describe("getStaleTaskShapingDraftFields", () => {
 			getStaleTaskShapingDraftFields({
 				drafts: { acceptanceCriteria: "Draft criteria" },
 				sources: { acceptanceCriteria: "Source criteria" },
-				values: { ...values, acceptanceCriteria: "Draft criteria" },
+				values: {
+					...values,
+					assigneeId: "",
+					acceptanceCriteria: "Draft criteria",
+				},
 			}),
 		).toEqual([]);
 	});
@@ -382,6 +387,7 @@ describe("useTaskForm create mode", () => {
 			description: "",
 			acceptanceCriteria: "",
 			tag: "",
+			assigneeId: "",
 			isBlocked: false,
 			blockedReason: "",
 			prerequisiteTaskIds: [],
@@ -508,6 +514,42 @@ describe("useTaskForm create mode", () => {
 		expect(onSaved).toHaveBeenCalledWith(
 			expect.objectContaining({ id: "task-1", title: "Created task" }),
 		);
+	});
+
+	it("includes a selected assignee on create submit", async () => {
+		const queryClient = createTestQueryClient();
+		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(JSON.stringify(createdTask({ assignee_id: "user-1" })), {
+				headers: { "content-type": "application/json" },
+				status: 200,
+			}),
+		);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		const { result } = renderHook(
+			() =>
+				useTaskForm({
+					projectId: "project-1",
+					mode: "create",
+					workflowColumns: [{ id: "column-todo", name: "To Do" }],
+				}),
+			{ wrapper: createWrapper(queryClient) },
+		);
+
+		act(() => {
+			result.current.setField("title", "Assigned task");
+			result.current.setField("assigneeId", "user-1");
+		});
+
+		await act(async () => {
+			await result.current.submit();
+		});
+
+		expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toEqual({
+			title: "Assigned task",
+			column_id: "column-todo",
+			assignee_id: "user-1",
+		});
 	});
 
 	it("submits supported story point options on create", async () => {
@@ -863,7 +905,7 @@ describe("useTaskForm edit mode", () => {
 
 	it("starts edit mode from the task and updates fields", () => {
 		const queryClient = createTestQueryClient();
-		const existingTask = task();
+		const existingTask = task({ assigneeId: "user-1" });
 
 		const { result } = renderHook(
 			() =>
@@ -885,6 +927,7 @@ describe("useTaskForm edit mode", () => {
 			description: "Current notes",
 			acceptanceCriteria: "Current criteria",
 			tag: "frontend",
+			assigneeId: "user-1",
 			isBlocked: false,
 			blockedReason: "",
 			prerequisiteTaskIds: [],
@@ -966,6 +1009,48 @@ describe("useTaskForm edit mode", () => {
 			expect.objectContaining({ id: "task-1", title: "Updated task" }),
 		);
 		expect(result.current.isDirty).toBe(false);
+	});
+
+	it("clears a selected assignee on edit submit", async () => {
+		const queryClient = createTestQueryClient();
+		const existingTask = task({ assigneeId: "user-1" });
+		const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(
+				JSON.stringify(
+					createdTask({
+						title: "Existing task",
+						column_id: "in-progress",
+						assignee_id: null,
+					}),
+				),
+				{ headers: { "content-type": "application/json" }, status: 200 },
+			),
+		);
+		vi.stubGlobal("fetch", fetchSpy);
+
+		const { result } = renderHook(
+			() =>
+				useTaskForm({
+					projectId: "project-1",
+					mode: "edit",
+					taskId: "task-1",
+					task: existingTask,
+					workflowColumns: [{ id: "in-progress", name: "In Progress" }],
+				}),
+			{ wrapper: createWrapper(queryClient) },
+		);
+
+		act(() => {
+			result.current.setField("assigneeId", "");
+		});
+
+		await act(async () => {
+			await result.current.submit();
+		});
+
+		expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toEqual(
+			expect.objectContaining({ assignee_id: null }),
+		);
 	});
 
 	it("normalizes legacy urgent task priority to critical", () => {

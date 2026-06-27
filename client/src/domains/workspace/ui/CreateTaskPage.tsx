@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { CirclePlus } from "lucide-react";
 import type { FormEvent } from "react";
 
-import { useKanaiApi } from "#/api/client";
+import { getUserDisplayLabel, useKanaiApi } from "#/api/client";
 import { Button } from "#/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
@@ -33,6 +33,21 @@ export function CreateTaskPage({
 	const navigate = useNavigate();
 	const api = useKanaiApi();
 	const projectQuery = useQuery(api.projects.get(projectId));
+	const projectAccessUserIds = projectQuery.data
+		? [
+				...new Set([
+					...projectQuery.data.ownerIds,
+					...projectQuery.data.memberIds,
+				]),
+			]
+		: [];
+	const projectAccessUsersQuery = useQuery(
+		api.users.projectAccess(
+			projectId,
+			projectAccessUserIds,
+			Boolean(projectQuery.data),
+		),
+	);
 	const columnsQuery = useQuery(api.projectColumns.list(projectId));
 	const doneColumnQuery = useQuery(api.doneColumn.get(projectId));
 	const needsNonDoneDefaultColumn = createInBacklog || includeInActiveSprint;
@@ -97,7 +112,7 @@ export function CreateTaskPage({
 			pageTitle={pageTitle}
 			sectionClassName="lg:min-h-screen"
 		>
-			<section className="rise-in rounded-[1.75rem] border border-[color:color-mix(in_srgb,var(--outline-variant)_50%,transparent)] bg-[var(--surface-container-lowest)] p-6 shadow-[0_18px_42px_rgba(25,28,30,0.04)] sm:p-10">
+			<section className="rounded-[1.75rem] border border-[color:color-mix(in_srgb,var(--outline-variant)_50%,transparent)] bg-[var(--surface-container-lowest)] p-6 shadow-[0_18px_42px_rgba(25,28,30,0.04)] sm:p-10">
 				{projectQuery.isError ? (
 					<p className="mb-6 rounded-xl border border-[var(--outline-variant)] bg-[var(--surface-container-low)] px-4 py-3 text-sm text-[var(--on-surface-variant)]">
 						Project details could not be loaded, but you can still create a task
@@ -197,6 +212,33 @@ export function CreateTaskPage({
 							<Field>
 								<FieldLabel
 									className="text-sm font-semibold text-[var(--on-surface)]"
+									htmlFor="taskAssignee"
+								>
+									Assignee
+								</FieldLabel>
+								<NativeSelect
+									id="taskAssignee"
+									name="taskAssignee"
+									value={form.values.assigneeId}
+									onChange={(event) =>
+										form.setField("assigneeId", event.target.value)
+									}
+								>
+									<NativeSelectOption value="">No assignee</NativeSelectOption>
+									{projectAccessUsersQuery.data?.map((user) => (
+										<NativeSelectOption key={user.id} value={user.id}>
+											{getUserDisplayLabel(user)}
+										</NativeSelectOption>
+									))}
+								</NativeSelect>
+								<FieldDescription className="text-sm font-medium text-[var(--on-surface-variant)]">
+									Project Owners and Project Members can be assigned here.
+								</FieldDescription>
+							</Field>
+
+							<Field>
+								<FieldLabel
+									className="text-sm font-semibold text-[var(--on-surface)]"
 									htmlFor="taskPriority"
 								>
 									Priority
@@ -268,11 +310,6 @@ export function CreateTaskPage({
 								projectId={projectId}
 								selectedTaskIds={form.values.prerequisiteTaskIds}
 							/>
-
-							<div className="sm:col-span-2 rounded-2xl border border-dashed border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-4 text-sm leading-6 text-[var(--on-surface-variant)]">
-								Assignees are not editable until the user directory API is
-								available. This task will be created without an assignee.
-							</div>
 						</section>
 
 						<section className="grid grid-cols-1 gap-5">

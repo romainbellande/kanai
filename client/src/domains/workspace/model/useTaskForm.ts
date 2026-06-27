@@ -25,6 +25,7 @@ export type TaskFormValues = {
 	description: string;
 	acceptanceCriteria: string;
 	tag: string;
+	assigneeId: string;
 	prerequisiteTaskIds: string[];
 	isBlocked: boolean;
 	blockedReason: string;
@@ -182,6 +183,7 @@ function createInitialValues(
 		description: "",
 		acceptanceCriteria: "",
 		tag: "",
+		assigneeId: "",
 		prerequisiteTaskIds: [],
 		isBlocked: false,
 		blockedReason: "",
@@ -197,6 +199,7 @@ function editInitialValues(task: Task | null | undefined): TaskFormValues {
 		description: task?.description ?? "",
 		acceptanceCriteria: task?.acceptanceCriteria ?? "",
 		tag: task?.tag ?? "",
+		assigneeId: task?.assigneeId ?? "",
 		prerequisiteTaskIds: task?.prerequisiteTaskIds ?? [],
 		isBlocked: task?.isBlocked ?? false,
 		blockedReason: task?.blockedReason ?? "",
@@ -486,6 +489,9 @@ export function useTaskForm(input: UseTaskFormInput) {
 						columnId: values.status,
 						priority: priority || null,
 						storyPoints: storyPoints ?? null,
+						...(values.assigneeId !== (editTask?.assigneeId ?? "")
+							? { assigneeId: values.assigneeId || null }
+							: {}),
 						description: description || null,
 						acceptanceCriteria: acceptanceCriteria || null,
 						tag: tag || null,
@@ -517,6 +523,7 @@ export function useTaskForm(input: UseTaskFormInput) {
 					: {}),
 				priority: priority || undefined,
 				storyPoints: storyPoints ?? undefined,
+				...(values.assigneeId ? { assigneeId: values.assigneeId } : {}),
 				description: description || undefined,
 				acceptanceCriteria: acceptanceCriteria || undefined,
 				tag: tag || undefined,

@@ -296,6 +296,21 @@ function StoryPointBadge({
 	);
 }
 
+function TaskAssigneeBadge({ assignee }: { assignee: UserProfile }) {
+	const label = getUserDisplayLabel(assignee);
+
+	return (
+		<span
+			aria-label={label}
+			className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-[var(--secondary-container)] text-xs font-bold text-[var(--on-secondary-container)]"
+			role="img"
+			title={label}
+		>
+			{getUserInitials(assignee)}
+		</span>
+	);
+}
+
 function normalizeBoardPriority(priority: string | null): string | null {
 	const normalizedPriority = priority?.trim().toLowerCase() ?? "";
 	if (!normalizedPriority) {
@@ -476,6 +491,7 @@ function isTaskInBoardColumns(task: Task, columns: BoardColumn[]): boolean {
 
 function BoardTaskCard({
 	card,
+	assignee,
 	columnId,
 	isDragging,
 	isDragDisabled,
@@ -485,6 +501,7 @@ function BoardTaskCard({
 	onRemoveFromSprint,
 }: {
 	card: Task;
+	assignee: UserProfile | null;
 	columnId: ColumnId;
 	isDragging: boolean;
 	isDragDisabled: boolean;
@@ -594,12 +611,13 @@ function BoardTaskCard({
 					</p>
 				) : null}
 			</div>
-			<div className="relative z-20 mt-3 flex justify-end">
+			<div className="relative z-20 mt-3 flex items-center gap-3">
+				{assignee ? <TaskAssigneeBadge assignee={assignee} /> : null}
 				<button
 					type="button"
 					disabled={isDragDisabled || isRemovingFromSprint}
 					onClick={() => onRemoveFromSprint(card.id)}
-					className="pointer-events-auto rounded-xl border border-[var(--outline-variant)] bg-[var(--surface-container)] px-3 py-1.5 text-xs font-bold text-[var(--on-surface-variant)] transition hover:bg-[var(--surface-container-high)] disabled:cursor-not-allowed disabled:opacity-45"
+					className="pointer-events-auto ml-auto rounded-xl border border-[var(--outline-variant)] bg-[var(--surface-container)] px-3 py-1.5 text-xs font-bold text-[var(--on-surface-variant)] transition hover:bg-[var(--surface-container-high)] disabled:cursor-not-allowed disabled:opacity-45"
 				>
 					{isRemovingFromSprint ? "Removing..." : "Backlog"}
 				</button>
@@ -2653,6 +2671,9 @@ export function ProjectBoardContent({
 	const accessUsersQuery = useQuery(
 		api.users.projectAccess(projectId, accessUserIds, accessUserIds.length > 0),
 	);
+	const accessUsersById = new Map(
+		(accessUsersQuery.data ?? []).map((user) => [user.id, user]),
+	);
 	const { columns, invalidTasks } = board;
 	const isProjectOwner = Boolean(
 		currentUser && projectQuery.data?.ownerIds.includes(currentUser.id),
@@ -3188,12 +3209,6 @@ export function ProjectBoardContent({
 							{sidebarItems.map((item) => (
 								<SidebarNavItem key={item.label} {...item} />
 							))}
-							<SidebarNavItem
-								label="Dashboard"
-								icon={TrendingUp}
-								to="/projects/$projectId/dashboard"
-								params={{ projectId }}
-							/>
 						</nav>
 
 						<div className="mt-8 border-t border-[var(--outline-variant)] pt-6 lg:mt-auto">
@@ -3310,6 +3325,14 @@ export function ProjectBoardContent({
 										<MessageCircle className="h-4 w-4" />
 										Chat
 									</button>
+									<Link
+										to="/projects/$projectId/dashboard"
+										params={{ projectId }}
+										className="inline-flex items-center gap-1.5 rounded-full border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-3 py-1.5 text-sm font-semibold text-[var(--on-surface-variant)] no-underline hover:bg-[var(--surface-bright)]"
+									>
+										<TrendingUp className="h-4 w-4" />
+										Dashboard
+									</Link>
 									<ProjectMemberAvatarStack
 										project={projectQuery.data}
 										users={accessUsersQuery.data ?? []}
@@ -3721,6 +3744,11 @@ export function ProjectBoardContent({
 												<BoardTaskCard
 													key={card.id}
 													card={card}
+													assignee={
+														card.assigneeId
+															? (accessUsersById.get(card.assigneeId) ?? null)
+															: null
+													}
 													columnId={column.id}
 													isDragging={draggingTaskId === card.id}
 													isDragDisabled={isBoardMutationPending}

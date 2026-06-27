@@ -8,6 +8,7 @@ import {
 	render,
 	screen,
 	waitFor,
+	within,
 } from "@testing-library/react";
 import type { AnchorHTMLAttributes, ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -494,7 +495,16 @@ describe("ProjectBoardPage", () => {
 		});
 		queryClient.setQueryData(
 			projectQueryOptions("project-1").queryKey,
-			project({ name: "API Board" }),
+			project({ name: "API Board", memberIds: ["assignee-1"] }),
+		);
+		queryClient.setQueryData(
+			projectAccessUsersQueryKey("project-1", ["assignee-1"]),
+			[
+				userProfile({
+					display_name: "Maya Member",
+					id: "assignee-1",
+				}),
+			],
 		);
 		queryClient.setQueryData(projectTasksQueryOptions("project-1").queryKey, [
 			task({
@@ -502,6 +512,7 @@ describe("ProjectBoardPage", () => {
 				title: "API Todo",
 				columnId: "column-todo",
 				storyPoints: 3,
+				assigneeId: "assignee-1",
 			}),
 			task({ id: "doing-task", title: "API Doing", columnId: "column-doing" }),
 			task({ id: "done-task", title: "API Done", columnId: "column-done" }),
@@ -527,6 +538,22 @@ describe("ProjectBoardPage", () => {
 
 		expect(screen.getByText("Main Board: API Board")).toBeTruthy();
 		expect(screen.getByText("API Todo")).toBeTruthy();
+		const assignedCard = screen.getByText("API Todo").closest("article");
+		expect(assignedCard).not.toBeNull();
+		expect(
+			within(assignedCard as HTMLElement).getByRole("img", {
+				name: "Maya Member",
+			}),
+		).toBeTruthy();
+		expect(within(assignedCard as HTMLElement).getByText("MM")).toBeTruthy();
+		const unassignedCard = screen.getByText("API Doing").closest("article");
+		expect(unassignedCard).not.toBeNull();
+		expect(
+			within(unassignedCard as HTMLElement).queryByRole("img", {
+				name: "Maya Member",
+			}),
+		).toBeNull();
+		expect(within(unassignedCard as HTMLElement).queryByText("MM")).toBeNull();
 		expect(
 			(screen.getByRole("link", { name: /API Todo/i }) as HTMLAnchorElement)
 				.href,
@@ -1116,6 +1143,11 @@ describe("ProjectBoardPage", () => {
 		).toBeTruthy();
 		expect(screen.queryByText(/%/)).toBeNull();
 		expect(screen.queryByLabelText("Sprint burndown chart")).toBeNull();
+		expect(
+			within(screen.getByRole("complementary")).queryByRole("link", {
+				name: "Dashboard",
+			}),
+		).toBeNull();
 		expect(screen.getByRole("link", { name: "Dashboard" })).toHaveProperty(
 			"href",
 			expect.stringContaining("/projects/project-1/dashboard"),

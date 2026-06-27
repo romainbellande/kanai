@@ -40,6 +40,10 @@ _Avoid_: Contributor, teammate
 A Kanai work item owned by a Project and managed through planning and workflow views.
 _Avoid_: A2A Task, agent task
 
+**Project Task Assignee**:
+The single Project participant, either a Project Owner or Project Member, responsible for a Project Task.
+_Avoid_: Task owner, responsible user, teammate
+
 **Project Task Title**:
 A concise, user-editable name that identifies the work represented by a Project Task.
 _Avoid_: Task name, issue title
